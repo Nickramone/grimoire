@@ -1,5 +1,6 @@
 """Content catalog package — server-wide packs, browsed through a user's schema."""
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 
 from ...auth import require_ttrpg_access
 
@@ -10,6 +11,7 @@ from ._schemas import (
     PackListResponse,
     ResolveResponse,
 )
+from .assets import get_asset
 from .core import (
     browse_content,
     reload_packs,
@@ -29,6 +31,13 @@ router = APIRouter(
 __all__ = ["router"]
 
 # Literal segments before the /{schema_id} routes, so they are not swallowed.
+router.add_api_route(
+    "/assets/{asset_path:path}",
+    get_asset,
+    methods=["GET"],
+    summary="A compendium image, for ruleset entry descriptions",
+    response_class=FileResponse,
+)
 router.add_api_route(
     "/packs",
     list_packs,
