@@ -1,3 +1,4 @@
+import EntryMarkdown from './EntryMarkdown'
 import FieldRenderer from './FieldRenderer'
 import type { FieldDefinition } from './FieldRenderer'
 
@@ -56,12 +57,18 @@ export default function ContentEntryDetail({ entry, typeDefinition }: ContentEnt
             key={name}
             style={definition.type === 'textarea' ? { gridColumn: '1 / -1' } : undefined}
           >
-            <FieldRenderer
-              name={name}
-              definition={definition}
-              value={entry.data?.[name]}
-              readOnly
-            />
+            {definition.type === 'textarea' && typeof entry.data?.[name] === 'string' ? (
+              // Long text reads as Markdown (tables, lists, images) rather than
+              // a read-only textarea showing the raw markup.
+              <EntryMarkdown label={definition.label || name} body={entry.data[name] as string} />
+            ) : (
+              <FieldRenderer
+                name={name}
+                definition={definition}
+                value={entry.data?.[name]}
+                readOnly
+              />
+            )}
           </div>
         ))}
     </div>
