@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import LazyImg from '../LazyImg'
@@ -9,8 +9,17 @@ export interface EntryMarkdownProps {
   body: string
 }
 
-function cellStyle(header: boolean): CSSProperties {
+// A cell holding one token (a die roll, a range such as 02-10, a number) stays on
+// one line: with the body's break-anywhere wrapping, the table's automatic layout
+// would otherwise shrink that column to a character or two.
+function isSingleToken(children: ReactNode): boolean {
+  return typeof children === 'string' && !/\s/.test(children.trim())
+}
+
+function cellStyle(header: boolean, children: ReactNode): CSSProperties {
   return {
+    overflowWrap: 'normal',
+    whiteSpace: isSingleToken(children) ? 'nowrap' : 'normal',
     border: '1px solid var(--border)',
     padding: '6px 10px',
     textAlign: 'left',
@@ -46,10 +55,10 @@ const components: Components = {
     )
   },
   th({ children }) {
-    return <th style={cellStyle(true)}>{children}</th>
+    return <th style={cellStyle(true, children)}>{children}</th>
   },
   td({ children }) {
-    return <td style={cellStyle(false)}>{children}</td>
+    return <td style={cellStyle(false, children)}>{children}</td>
   },
   blockquote({ children }) {
     return (

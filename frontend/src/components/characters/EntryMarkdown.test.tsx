@@ -17,6 +17,20 @@ describe('EntryMarkdown', () => {
     expect(screen.getByRole('cell', { name: 'Fire' })).toBeInTheDocument()
   })
 
+  it('keeps a die roll or a range on one line, and lets prose wrap', () => {
+    render(
+      <EntryMarkdown
+        label="Table"
+        body={'| 1d100 | Effect |\n|---|---|\n| 02-10 | A geyser erupts and spouts water. |'}
+      />
+    )
+    expect(screen.getByRole('columnheader', { name: '1d100' })).toHaveStyle({
+      whiteSpace: 'nowrap',
+    })
+    expect(screen.getByRole('cell', { name: '02-10' })).toHaveStyle({ whiteSpace: 'nowrap' })
+    expect(screen.getByRole('cell', { name: /geyser/ })).toHaveStyle({ whiteSpace: 'normal' })
+  })
+
   it('shows a linked image with its alt text', () => {
     render(
       <EntryMarkdown
