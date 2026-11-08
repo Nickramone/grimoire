@@ -36,8 +36,8 @@ def test_needs_a_signed_in_user(client, asset_dir):
     [
         "items/XDMG/missing.webp",
         "items/XDMG/evil.svg",
-        "../secret.webp",
-        "items/../../secret.webp",
+        "%2E%2E/secret.webp",
+        "items/%2E%2E/%2E%2E/secret.webp",
         "..%2Fsecret.webp",
     ],
 )
