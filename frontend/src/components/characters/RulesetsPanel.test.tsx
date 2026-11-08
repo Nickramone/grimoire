@@ -65,6 +65,13 @@ vi.mock('./InstalledPacks', () => ({
   ),
 }))
 
+// The read-only detail has its own tests; the stub shows the data it was given.
+vi.mock('./ContentEntryDetail', () => ({
+  default: ({ entry }: { entry: { data?: Record<string, unknown> } }) => (
+    <section aria-label="entry detail">{JSON.stringify(entry.data)}</section>
+  ),
+}))
+
 const renderView = () => render(<RulesetsPanel />)
 
 beforeEach(() => {
@@ -359,5 +366,53 @@ describe('RulesetsPanel — browsing content packs', () => {
     await screen.findByText('Strahd house rules')
     expect(screen.getAllByText(/D&D 5e ·/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/dnd-5e-2024/)).not.toBeInTheDocument()
+  })
+})
+
+describe('RulesetsPanel — entries', () => {
+  const openRuleset = async () => {
+    renderView()
+    await userEvent.click(await screen.findByText('Strahd house rules'))
+    return screen.findByText('Hellfire')
+  }
+
+  it('expands an entry into its full detail and collapses it again', async () => {
+    mockGetEntry.mockResolvedValue({ id: 'e1', data: { name: 'Hellfire', level: 3 } })
+    await userEvent.click(await openRuleset())
+    const detail = await screen.findByLabelText('entry detail')
+    expect(detail).toHaveTextContent('"level":3')
+    expect(mockGetEntry).toHaveBeenCalledWith('r1', 'e1')
+    expect(screen.getByRole('button', { expanded: true })).toBeInTheDocument()
+    await userEvent.click(screen.getByText('Hellfire'))
+    expect(screen.queryByLabelText('entry detail')).not.toBeInTheDocument()
+  })
+
+  it('shows an entry without data as empty rather than failing', async () => {
+    mockGetEntry.mockResolvedValue({ id: 'e1' })
+    await userEvent.click(await openRuleset())
+    expect(await screen.findByLabelText('entry detail')).toHaveTextContent('{}')
+  })
+
+  it('collapses and reports an entry that fails to load', async () => {
+    mockGetEntry.mockRejectedValue(new Error('gone'))
+    await userEvent.click(await openRuleset())
+    expect(await screen.findByRole('alert')).toHaveTextContent('gone')
+    expect(screen.queryByLabelText('entry detail')).not.toBeInTheDocument()
+  })
+
+  it('loads the full entry before opening it for editing', async () => {
+    mockGetEntry.mockResolvedValue({ id: 'e1', data: { name: 'Hellfire' } })
+    await openRuleset()
+    await userEvent.click(screen.getByLabelText(/^Edit /))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(mockGetEntry).toHaveBeenCalledWith('r1', 'e1')
+  })
+
+  it('reports an entry that fails to load for editing', async () => {
+    mockGetEntry.mockRejectedValue(new Error('nope'))
+    await openRuleset()
+    await userEvent.click(screen.getByLabelText(/^Edit /))
+    expect(await screen.findByRole('alert')).toHaveTextContent('nope')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
