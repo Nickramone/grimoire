@@ -201,6 +201,8 @@ TTRPG_GUEST_REACHABLE = {
     "/api/characters/{character_id}/portrait": "DELETE GET POST",
     # A sheet's image fields: owner-only writes, readable like the sheet.
     "/api/characters/{character_id}/images/{field}": "DELETE GET POST",
+    # Compendium images, linked from entry descriptions: readable like the entries.
+    "/api/content/assets/{asset_path:path}": "GET",
     "/api/content/packs": "GET",
     "/api/content/{schema_id}/resolve": "GET",
     "/api/content/{schema_id}/types": "GET",
