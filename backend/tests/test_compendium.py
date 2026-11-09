@@ -5,10 +5,12 @@ campaign rulesets, never someone else's personal one), that a player without
 the character sheet installed can still browse, and that search ranks a name
 match above a match in the text.
 """
+import datetime
+
 import pytest
 
 from backend.config import SessionLocal
-from backend.models import Campaign, CampaignMember, Ruleset, RulesetEntry
+from backend.models import Campaign, CampaignMember, CharacterSchema, Ruleset, RulesetEntry
 
 
 SCHEMA = {
@@ -225,3 +227,36 @@ class TestCompendiumEntry:
         for path in ("/api/content/compendium/spell/nope", "/api/content/compendium/nope/fireball"):
             resp = client.get(path, params={"schema_id": "comp-demo"}, headers=player_headers)
             assert resp.status_code == 404
+
+
+class TestCompendiumSchemaFallback:
+    def test_a_broken_copy_is_skipped_for_a_valid_one(
+        self, client, player_headers, player_id, server_rules
+    ):
+        """The player's own copy is unreadable, so the newest valid one stands in."""
+        db = SessionLocal()
+        try:
+            db.add(CharacterSchema(user_id=player_id, schema_id="comp-demo", name="Broken",
+                                   document={"broken": True},
+                                   updated_at=datetime.datetime(2999, 1, 1)))
+            db.commit()
+        finally:
+            db.close()
+        try:
+            body = _get(client, player_headers, schema_id="comp-demo", content_type="spell")
+            assert body["total"] == 3
+        finally:
+            db = SessionLocal()
+            try:
+                db.query(CharacterSchema).filter_by(user_id=player_id, schema_id="comp-demo").delete()
+                db.commit()
+            finally:
+                db.close()
+
+    def test_a_schema_nobody_installed_has_no_entries(self, client, player_headers):
+        resp = client.get(
+            "/api/content/compendium/spell/fireball",
+            params={"schema_id": "nobody-has-it"},
+            headers=player_headers,
+        )
+        assert resp.status_code == 404
