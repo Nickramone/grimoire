@@ -1454,6 +1454,7 @@
       "viewModeTokens": "Tokens",
       "viewModeAudio": "Ljud",
       "viewModeModels": "Modeller",
+      "viewModeCompendium": "Kompendium",
       "recentLimit": "Nyligen öppnade böcker",
       "recentLimitHint": "Hur många nyligen öppnade böcker som ska kommas ihåg (0–{{max}}) och visas överst i biblioteket. Sätt till 0 för att dölja nyligen öppnade böcker helt."
     },

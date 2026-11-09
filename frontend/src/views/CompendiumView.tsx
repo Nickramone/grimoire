@@ -16,6 +16,8 @@ import { typeLabel } from '../components/compendium/compendiumEntry'
 import { readEdition, saveEdition } from '../components/compendium/editionChoice'
 import type { CatalogEntry, TypeSummary } from '../components/compendium/compendiumEntry'
 import usePageTitle from '../hooks/usePageTitle'
+import useViewMode from '../hooks/useViewMode'
+import ViewModeToggle from '../components/ViewModeToggle'
 
 type CompendiumSchema = Schema<'CompendiumSchema'>
 type Facets = NonNullable<Schema<'CompendiumResponse'>['filters_available']>
@@ -51,6 +53,7 @@ export default function CompendiumView() {
   const location = useLocation()
   const { contentType: openType, entryId: openId } = useParams()
   const [params, setParams] = useSearchParams()
+  const [viewMode, cycleViewMode] = useViewMode('compendium')
 
   const schemaParam = params.get('schema') || ''
   const typeParam = params.get('type') || ''
@@ -214,12 +217,17 @@ export default function CompendiumView() {
               maxWidth: 420,
             }}
           >
-            <SearchInput
-              value={searchText}
-              onChange={setSearchText}
-              placeholder={t('compendium.searchPlaceholder')}
-              ariaLabel={t('compendium.searchPlaceholder')}
-            />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <SearchInput
+                  value={searchText}
+                  onChange={setSearchText}
+                  placeholder={t('compendium.searchPlaceholder')}
+                  ariaLabel={t('compendium.searchPlaceholder')}
+                />
+              </div>
+              <ViewModeToggle mode={viewMode} onCycle={cycleViewMode} />
+            </div>
             {schemas.length > 1 && (
               <select
                 aria-label={t('compendium.edition')}
@@ -327,8 +335,11 @@ export default function CompendiumView() {
                 padding: 0,
                 margin: 0,
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: 12,
+                gridTemplateColumns:
+                  viewMode === 'list'
+                    ? '1fr'
+                    : `repeat(auto-fill, minmax(${viewMode === 'compact' ? 200 : 260}px, 1fr))`,
+                gap: viewMode === 'list' ? 2 : viewMode === 'compact' ? 8 : 12,
               }}
             >
               {entries.map((entry) => (
@@ -338,6 +349,7 @@ export default function CompendiumView() {
                     type={typeByName.get(entry.content_type)}
                     showType={!typeParam}
                     onOpen={() => open(entry)}
+                    mode={viewMode}
                   />
                 </li>
               ))}

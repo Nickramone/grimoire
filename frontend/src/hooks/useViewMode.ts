@@ -7,14 +7,23 @@ export const VIEW_MODES: ViewMode[] = ['card', 'compact', 'list']
 
 // Content types that have an independent, remembered view mode. Each gets its
 // own default and its own persisted Settings preference.
-export type ContentType = 'system' | 'book' | 'map' | 'token' | 'audio' | 'model'
+export type ContentType = 'system' | 'book' | 'compendium' | 'map' | 'token' | 'audio' | 'model'
 
-export const CONTENT_TYPES: ContentType[] = ['system', 'book', 'map', 'token', 'audio', 'model']
+export const CONTENT_TYPES: ContentType[] = [
+  'system',
+  'book',
+  'compendium',
+  'map',
+  'token',
+  'audio',
+  'model',
+]
 
 // Per-content-type default view mode, used when the user has not chosen one.
 export const DEFAULT_VIEW_MODES: Record<ContentType, ViewMode> = {
   system: 'card',
   book: 'list',
+  compendium: 'card',
   map: 'compact',
   token: 'compact',
   audio: 'list',
