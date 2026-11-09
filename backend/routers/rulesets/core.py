@@ -120,13 +120,18 @@ def create_ruleset(
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Add a ruleset to a campaign, or to the server if you are an admin."""
-    try:
-        rs.assert_can_create(
-            db, current_user.id, data.campaign_id, is_admin=_is_admin(current_user)
+    """Add a ruleset to a campaign, to the server if you are an admin, or for yourself."""
+    if data.personal and data.campaign_id:
+        raise HTTPException(
+            status_code=400, detail="A personal ruleset cannot belong to a campaign"
         )
-    except rs.RulesetError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if not data.personal:
+        try:
+            rs.assert_can_create(
+                db, current_user.id, data.campaign_id, is_admin=_is_admin(current_user)
+            )
+        except rs.RulesetError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="A ruleset needs a name")
@@ -141,6 +146,7 @@ def create_ruleset(
 
     ruleset = Ruleset(
         campaign_id=data.campaign_id,
+        owner_id=current_user.id if data.personal else None,
         schema_id=data.schema_id,
         name=data.name.strip()[:200],
         description=data.description,
