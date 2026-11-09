@@ -206,6 +206,7 @@ TTRPG_GUEST_REACHABLE = {
     # The compendium lists what the catalog routes below already serve.
     "/api/content/compendium": "GET",
     "/api/content/compendium/{content_type}/{entry_id}": "GET",
+    "/api/content/compendium/schemas": "GET",
     "/api/content/packs": "GET",
     "/api/content/{schema_id}/resolve": "GET",
     "/api/content/{schema_id}/types": "GET",
