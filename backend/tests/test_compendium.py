@@ -23,6 +23,7 @@ SCHEMA = {
             "search_fields": ["name", "description"],
             "filter_fields": ["level"],
             "sort_default": ["level", "name"],
+            "compact_display": "{name} — level {level}",
             "fields": {
                 "name": {"type": "text", "label": "Name"},
                 "level": {"type": "number", "label": "Level"},
@@ -146,6 +147,11 @@ class TestCompendium:
         body = _get(client, admin_headers, schema_id="comp-demo", search="fire")
         # Names starting with "fire" first, then the item that mentions fire.
         assert [e["name"] for e in body["entries"]] == ["Fire Bolt", "Fireball", "Flame Tongue"]
+
+    def test_the_summary_leaves_out_the_name(self, client, admin_headers, server_rules):
+        body = _get(client, admin_headers, schema_id="comp-demo", content_type="spell",
+                    search="fireball")
+        assert body["entries"][0]["display"] == "level 3"
 
     def test_it_pages(self, client, admin_headers, server_rules):
         body = _get(client, admin_headers, schema_id="comp-demo", page=2, page_size=3)
@@ -274,6 +280,7 @@ class TestGlobalSearch:
         assert hits[0]["type_label"] == "Spell"
         assert hits[0]["schema_id"] == "comp-demo"
         assert hits[0]["schema_name"] == "Compendium Demo"
+        assert hits[0]["display"] == "level 0"
         assert resp.json()["total"] >= 3
 
     def test_it_honours_the_limit(self, client, player_headers, server_rules):
@@ -289,3 +296,15 @@ class TestGlobalSearch:
             "/api/search", params={"q": "fire", "book_id": "any"}, headers=player_headers
         )
         assert resp.json()["compendium"] == []
+
+
+@pytest.mark.parametrize("template, expected", [
+    ("{name} — {school} {level}", "evocation 3"),
+    ("{school} · {name}", "evocation"),
+    ("{name}", ""),
+    ("{school} {level}", "evocation 3"),
+])
+def test_render_summary_drops_the_name(template, expected):
+    from backend.routers.content._helpers import render_summary
+    data = {"name": "Fireball", "school": "evocation", "level": 3}
+    assert render_summary(template, data) == expected
