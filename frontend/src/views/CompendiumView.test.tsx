@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import CompendiumView from './CompendiumView'
+import { saveDefaultViewMode } from '../hooks/useViewMode'
 
 const mockBrowse = vi.fn()
 const mockEntry = vi.fn()
@@ -193,6 +194,19 @@ describe('CompendiumView', () => {
       schemaId: 'dnd-5e-2024',
       systemId: 'sys-2024',
     })
+  })
+
+  it('opens in the default view from Settings and cycles it for this tab', async () => {
+    saveDefaultViewMode('compendium', 'list')
+    renderAt()
+    await screen.findByText('Fireball')
+    const toggle = screen.getByRole('button', { name: 'Change view (currently List)' })
+    expect(screen.getByRole('list')).toHaveStyle({ gridTemplateColumns: '1fr' })
+    await userEvent.click(toggle)
+    expect(
+      screen.getByRole('button', { name: 'Change view (currently Cards)' })
+    ).toBeInTheDocument()
+    expect(sessionStorage.getItem('grimoire:view-mode:compendium')).toBe('card')
   })
 
   it('says when the compendium is empty', async () => {

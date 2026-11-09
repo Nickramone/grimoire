@@ -1478,6 +1478,7 @@
       "viewModeTokens": "Tokens",
       "viewModeAudio": "Audio",
       "viewModeModels": "Models",
+      "viewModeCompendium": "Compendium",
       "recentLimit": "Recent geopende boeken",
       "recentLimitHint": "Hoeveel recent geopende boeken onthouden moeten worden (0–{{max}}). Stel in op 0 om de sectie te verbergen."
     },

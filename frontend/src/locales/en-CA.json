@@ -1478,6 +1478,7 @@
       "viewModeTokens": "Tokens",
       "viewModeAudio": "Audio",
       "viewModeModels": "Models",
+      "viewModeCompendium": "Compendium",
       "recentLimit": "Recently opened books",
       "recentLimitHint": "How many recently opened books to remember (0–{{max}}). Set to 0 to hide the section."
     },

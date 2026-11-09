@@ -1478,6 +1478,7 @@
       "viewModeTokens": "Pions",
       "viewModeAudio": "Audio",
       "viewModeModels": "Models",
+      "viewModeCompendium": "Compendium",
       "recentLimit": "Livres récemment ouverts",
       "recentLimitHint": "Nombre de livres récemment ouverts à mémoriser (0–{{max}}). Mettre 0 pour masquer la section."
     },
