@@ -1532,6 +1532,7 @@
       "description": "Hide sections from the sidebar and mobile navigation for all users.",
       "hideLibrary": "Hide Library",
       "hideArmory": "Hide Armoury",
+      "hideCompendium": "Hide Compendium",
       "hideMaps": "Hide Maps",
       "hideTokens": "Hide Tokens",
       "hideCampaigns": "Hide Campaigns",

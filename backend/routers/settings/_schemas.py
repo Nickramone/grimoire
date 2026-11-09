@@ -18,6 +18,7 @@ class SettingsPatch(BaseModel):
     hide_tokens: Optional[bool] = None
     hide_audio: Optional[bool] = None
     hide_models: Optional[bool] = None
+    hide_compendium: Optional[bool] = None
     hide_campaigns: Optional[bool] = None
     hide_armies: Optional[bool] = None
     hide_leagues: Optional[bool] = None
@@ -115,6 +116,7 @@ class SettingsResponse(BaseModel):
     hide_tokens: bool
     hide_audio: bool
     hide_models: bool
+    hide_compendium: bool
     hide_campaigns: bool
     hide_armies: bool
     hide_leagues: bool
@@ -209,6 +211,7 @@ class UISettingsResponse(BaseModel):
     hide_tokens: bool
     hide_audio: bool
     hide_models: bool
+    hide_compendium: bool
     hide_campaigns: bool
     hide_armies: bool
     hide_leagues: bool

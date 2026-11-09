@@ -1532,6 +1532,7 @@
       "description": "Verberg secties van de zijbalk en de mobiele navigatie voor alle gebruikers.",
       "hideLibrary": "Bibliotheek verbergen",
       "hideArmory": "Wapenkamer verbergen",
+      "hideCompendium": "Compendium verbergen",
       "hideMaps": "Kaarten verbergen",
       "hideTokens": "Tokens verbergen",
       "hideCampaigns": "Campagnes verbergen",

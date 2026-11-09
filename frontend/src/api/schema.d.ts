@@ -17102,6 +17102,8 @@ export interface components {
             hide_leagues?: boolean | null;
             /** Hide Library */
             hide_library?: boolean | null;
+            /** Hide Compendium */
+            hide_compendium?: boolean | null;
             /** Hide Maps */
             hide_maps?: boolean | null;
             /** Hide Models */
@@ -17242,6 +17244,8 @@ export interface components {
              * @default false
              */
             hide_library?: boolean;
+            /** Hide Compendium */
+            hide_compendium: boolean;
             /** Hide Maps */
             hide_maps: boolean;
             /** Hide Models */
@@ -18614,6 +18618,8 @@ export interface components {
              * @default false
              */
             hide_library?: boolean;
+            /** Hide Compendium */
+            hide_compendium: boolean;
             /** Hide Maps */
             hide_maps: boolean;
             /** Hide Models */

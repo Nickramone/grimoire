@@ -155,6 +155,7 @@ _FLAGS = (
     "hide_tokens",
     "hide_audio",
     "hide_models",
+    "hide_compendium",
     "hide_campaigns",
     "hide_armies",
     "hide_leagues",

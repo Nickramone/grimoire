@@ -61,6 +61,7 @@ export default function MobileSidebar({
   const isGuest = user?.role === 'guest'
   const {
     hide_library,
+    hide_compendium,
     hide_maps,
     hide_tokens,
     hide_audio,
@@ -83,7 +84,7 @@ export default function MobileSidebar({
     '/settings',
     '/tags',
     ...(armoryInDrawer ? ['/armory'] : []),
-    '/compendium',
+    ...(!hide_compendium ? ['/compendium'] : []),
     ...(!hide_maps ? ['/maps'] : []),
     ...(!hide_tokens ? ['/tokens'] : []),
     ...(!hide_audio ? ['/audio'] : []),
@@ -223,12 +224,14 @@ export default function MobileSidebar({
                 onClick={() => setMoreOpen(false)}
               />
             )}
-            <MoreItem
-              to="/compendium"
-              Icon={LuBookOpenText}
-              label={t('nav.compendium')}
-              onClick={() => setMoreOpen(false)}
-            />
+            {!hide_compendium && (
+              <MoreItem
+                to="/compendium"
+                Icon={LuBookOpenText}
+                label={t('nav.compendium')}
+                onClick={() => setMoreOpen(false)}
+              />
+            )}
             {!hide_maps && (
               <MoreItem
                 to="/maps"

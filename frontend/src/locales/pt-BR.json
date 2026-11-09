@@ -1532,6 +1532,7 @@
       "description": "Ocultar seções da barra lateral e da navegação móvel para todos os usuários.",
       "hideLibrary": "Ocultar biblioteca",
       "hideArmory": "Ocultar arsenal",
+      "hideCompendium": "Ocultar compêndio",
       "hideMaps": "Ocultar mapas",
       "hideTokens": "Ocultar tokens",
       "hideCampaigns": "Ocultar campanhas",

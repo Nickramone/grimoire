@@ -1532,6 +1532,7 @@
       "description": "Abschnitte aus der Seitenleiste und mobilen Navigation für alle Benutzer ausblenden.",
       "hideLibrary": "Bibliothek ausblenden",
       "hideArmory": "Rüstkammer ausblenden",
+      "hideCompendium": "Kompendium ausblenden",
       "hideMaps": "Karten ausblenden",
       "hideTokens": "Tokens ausblenden",
       "hideCampaigns": "Kampagnen ausblenden",

@@ -1532,6 +1532,7 @@
       "description": "Masquer des sections de la barre latérale et de la navigation mobile pour tous les utilisateurs.",
       "hideLibrary": "Masquer la bibliothèque",
       "hideArmory": "Masquer l’armurerie",
+      "hideCompendium": "Masquer le compendium",
       "hideMaps": "Masquer les cartes",
       "hideTokens": "Masquer les pions",
       "hideCampaigns": "Masquer les campagnes",

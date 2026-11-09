@@ -1532,6 +1532,7 @@
       "description": "Dölj kategori från sidofältet och mobilnavigeringen för alla användare.",
       "hideLibrary": "Dölj bibliotek",
       "hideArmory": "Dölj rustkammare",
+      "hideCompendium": "Dölj kompendium",
       "hideMaps": "Dölj kartor",
       "hideTokens": "Dölj tokens",
       "hideCampaigns": "Dölj kampanjer",

@@ -221,6 +221,13 @@ describe('MobileSidebar — characters', () => {
     expect(screen.getByText('Audio')).toBeInTheDocument()
   })
 
+  it('hides the compendium when its setting is set', async () => {
+    renderBar({ uiSettings: { hide_compendium: true } })
+    await userEvent.click(screen.getByRole('button', { name: /more/i }))
+    expect(screen.queryByText('Compendium')).not.toBeInTheDocument()
+    expect(screen.getByText('Maps')).toBeInTheDocument()
+  })
+
   it('closes the drawer when a link in it is chosen', async () => {
     renderBar()
     await userEvent.click(screen.getByRole('button', { name: /more/i }))

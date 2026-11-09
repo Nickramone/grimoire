@@ -255,6 +255,12 @@ describe('Sidebar navigation visibility', () => {
     expect(screen.queryByText('Maps')).toBeNull()
   })
 
+  it('hides the compendium link when hide_compendium is true', () => {
+    renderSidebar({ uiSettings: { hide_compendium: true } })
+    expect(screen.queryByText('Compendium')).toBeNull()
+    expect(screen.getByText('Library')).toBeInTheDocument()
+  })
+
   it('shows the Tags link pointing at /tags (issue #235)', () => {
     renderSidebar()
     const tagsLink = screen.getByRole('link', { name: 'Tags' })

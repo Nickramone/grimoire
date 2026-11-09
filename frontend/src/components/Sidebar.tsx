@@ -103,6 +103,7 @@ export default function Sidebar({
     isAdmin: user?.role === 'admin',
   })
   const hide_library = uiSettings.hide_library
+  const hide_compendium = uiSettings.hide_compendium
   const hide_maps = uiSettings.hide_maps
   const hide_tokens = uiSettings.hide_tokens
   const hide_audio = uiSettings.hide_audio
@@ -265,6 +266,7 @@ export default function Sidebar({
           showArmory &&
           navItem('/armory', <LuSwords size={16} />, t('nav.armory'), { end: false })}
         {!isGuest &&
+          !hide_compendium &&
           navItem('/compendium', <LuBookOpenText size={16} />, t('nav.compendium'), { end: false })}
         {!isGuest && !hide_maps && navItem('/maps', <LuMap size={16} />, t('nav.maps'))}
         {!isGuest && !hide_tokens && navItem('/tokens', <LuUser size={16} />, t('nav.tokens'))}

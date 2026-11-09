@@ -1532,6 +1532,7 @@
       "description": "Nascondi sezioni dalla barra laterale e dalla navigazione mobile per tutti gli utenti.",
       "hideLibrary": "Nascondi Libreria",
       "hideArmory": "Nascondi Armeria",
+      "hideCompendium": "Nascondi Compendio",
       "hideMaps": "Nascondi Mappe",
       "hideTokens": "Nascondi Token",
       "hideCampaigns": "Nascondi Campagne",
