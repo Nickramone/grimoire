@@ -165,6 +165,36 @@ describe('CompendiumView', () => {
     expect(screen.queryByLabelText('Edition')).not.toBeInTheDocument()
   })
 
+  it('opens on the remembered edition and remembers a new choice', async () => {
+    localStorage.setItem(
+      'grimoire.compendium.edition',
+      JSON.stringify({ schemaId: 'dnd-5e-2014', systemId: 'sys-2014' })
+    )
+    mockBrowse.mockResolvedValue(
+      response({
+        schemas: [
+          {
+            schema_id: 'dnd-5e-2024',
+            name: 'D&D 5e (2024)',
+            entry_count: 3,
+            systems: [{ id: 'sys-2024', name: 'D&D 5.5e' }],
+          },
+          { schema_id: 'dnd-5e-2014', name: 'D&D 5e (2014)', entry_count: 9, systems: [] },
+        ],
+        schema_id: 'dnd-5e-2014',
+      })
+    )
+    renderAt()
+    await screen.findByText('Fireball')
+    expect(mockBrowse.mock.calls[0][0]).toMatchObject({ schema_id: 'dnd-5e-2014' })
+
+    await userEvent.selectOptions(screen.getByLabelText('Edition'), 'dnd-5e-2024')
+    expect(JSON.parse(localStorage.getItem('grimoire.compendium.edition') || '{}')).toEqual({
+      schemaId: 'dnd-5e-2024',
+      systemId: 'sys-2024',
+    })
+  })
+
   it('says when the compendium is empty', async () => {
     mockBrowse.mockResolvedValue(
       response({ schemas: [], schema_id: null, content_types: [], entries: [], total: 0 })

@@ -31,8 +31,11 @@ vi.mock('./MetadataFetchDialog', () => ({
   ),
 }))
 
+const compendiumSchemas = vi.hoisted(() => vi.fn())
+
 vi.mock('../../api', () => ({
   default: { patch: vi.fn(), get: vi.fn(), post: vi.fn(), delete: vi.fn() },
+  compendium: { schemas: compendiumSchemas },
   tags: { list: () => Promise.resolve({ tags: [] }) },
   mediaUrl: (p: string) => `http://localhost${p}`,
   bookThumbUrl: (id: string, v?: string | null) =>
@@ -57,6 +60,7 @@ beforeEach(() => {
     Promise.resolve(path.includes('genres') ? { genres: [] } : { families: [] })
   )
   mockApi.post.mockResolvedValue({})
+  compendiumSchemas.mockResolvedValue([])
 })
 
 const system = (over: Record<string, unknown> = {}): EditableSystem =>
@@ -74,6 +78,32 @@ const system = (over: Record<string, unknown> = {}): EditableSystem =>
   }) as unknown as EditableSystem
 
 describe('SystemEditor', () => {
+  it('links the system to a compendium schema', async () => {
+    compendiumSchemas.mockResolvedValue([
+      { schema_id: 'dnd-5e-2024', name: 'D&D 5e (2024)', entry_count: 3, systems: [] },
+    ])
+    render(<SystemEditor system={system()} onSave={vi.fn()} />)
+    const select = await screen.findByRole('combobox', { name: /compendium/i })
+    await userEvent.selectOptions(select, 'dnd-5e-2024')
+    await userEvent.click(screen.getByText(/save changes/i))
+    await waitFor(() => expect(api.patch).toHaveBeenCalled())
+    expect(mockApi.patch.mock.calls[0][1].compendium_schema_id).toBe('dnd-5e-2024')
+  })
+
+  it('hides the compendium field on a server without compendium content', async () => {
+    render(<SystemEditor system={system()} onSave={vi.fn()} />)
+    await waitFor(() => expect(compendiumSchemas).toHaveBeenCalled())
+    expect(screen.queryByRole('combobox', { name: /compendium/i })).toBeNull()
+  })
+
+  it('keeps a link to a schema that is not installed', async () => {
+    render(
+      <SystemEditor system={system({ compendium_schema_id: 'gone-schema' })} onSave={vi.fn()} />
+    )
+    const select = await screen.findByRole('combobox', { name: /compendium/i })
+    expect((select as HTMLSelectElement).value).toBe('gone-schema')
+  })
+
   it('saves the patched fields and calls onSave', async () => {
     const onSave = vi.fn()
     render(<SystemEditor system={system({ genres: ['Fantasy'] })} onSave={onSave} />)

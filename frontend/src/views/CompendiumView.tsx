@@ -13,6 +13,7 @@ import { fieldInput, fieldLabel } from '../components/characters/characterStyles
 import EntryCard from '../components/compendium/EntryCard'
 import EntryDialog from '../components/compendium/EntryDialog'
 import { typeLabel } from '../components/compendium/compendiumEntry'
+import { readEdition, saveEdition } from '../components/compendium/editionChoice'
 import type { CatalogEntry, TypeSummary } from '../components/compendium/compendiumEntry'
 import usePageTitle from '../hooks/usePageTitle'
 
@@ -105,7 +106,8 @@ export default function CompendiumView() {
       setLoading(true)
       try {
         const result = await compendiumApi.browse({
-          schema_id: schemaParam || undefined,
+          // Without one in the URL, the edition last chosen here or in the search.
+          schema_id: schemaParam || readEdition().schemaId || undefined,
           content_type: typeParam || undefined,
           search: searchParam || undefined,
           page: pageToLoad,
@@ -223,6 +225,11 @@ export default function CompendiumView() {
                 aria-label={t('compendium.edition')}
                 value={schemaId || ''}
                 onChange={(event) => {
+                  const chosen = schemas.find((s) => s.schema_id === event.target.value)
+                  saveEdition({
+                    schemaId: event.target.value,
+                    systemId: chosen?.systems?.[0]?.id ?? '',
+                  })
                   setFacets({})
                   const changes: Record<string, string | null> = {
                     schema: event.target.value,

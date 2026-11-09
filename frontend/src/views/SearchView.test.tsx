@@ -315,6 +315,77 @@ describe('SearchView', () => {
     expect(screen.queryByRole('combobox', { name: /game system/i })).not.toBeInTheDocument()
   })
 
+  it('the system filter narrows the compendium to the schema linked to it', async () => {
+    const spell = (name: string, schema: string, systems: { id: string; name: string }[]) => ({
+      entry_id: name.toLowerCase(),
+      name,
+      content_type: 'spell',
+      type_label: 'Spell',
+      schema_id: schema,
+      schema_name: schema,
+      display: '',
+      game_systems: systems,
+    })
+    mockGet.mockResolvedValue({
+      ...makeResponse([makeBookResult({ id: 'b1', title: 'PHB', game_system_id: 'sys-1' })]),
+      compendium: [
+        spell('Fireball', 'dnd-5e-2024', [{ id: 'sys-2024', name: 'D&D 5.5e' }]),
+        spell('Fire Bolt', 'dnd-5e-2014', [{ id: 'sys-1', name: 'D&D 5e' }]),
+      ],
+    })
+    renderView()
+    await userEvent.type(screen.getByRole('textbox'), 'fi')
+    await screen.findByRole('link', { name: 'Fireball' })
+
+    const select = screen.getByRole('combobox', { name: /game system/i })
+    await userEvent.selectOptions(select, 'sys-2024')
+
+    expect(screen.getByRole('link', { name: 'Fireball' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Fire Bolt' })).not.toBeInTheDocument()
+    expect(screen.queryByText('PHB')).not.toBeInTheDocument()
+    // Remembered for the next search and for the Compendium page.
+    expect(JSON.parse(localStorage.getItem('grimoire.compendium.edition') || '{}')).toEqual({
+      systemId: 'sys-2024',
+      schemaId: 'dnd-5e-2024',
+    })
+  })
+
+  it('starts on the remembered system when the results include it', async () => {
+    localStorage.setItem('grimoire.compendium.edition', JSON.stringify({ systemId: 'sys-2' }))
+    mockGet.mockResolvedValue(
+      makeResponse([
+        makeBookResult({ id: 'b1', title: 'PHB', game_system: 'D&D 5e', game_system_id: 'sys-1' }),
+        makeBookResult({
+          id: 'b2',
+          title: 'Core Rules',
+          game_system: 'Pathfinder',
+          game_system_id: 'sys-2',
+        }),
+      ])
+    )
+    renderView()
+    await userEvent.type(screen.getByRole('textbox'), 'fi')
+
+    await waitFor(() => expect(screen.getByText('Core Rules')).toBeInTheDocument())
+    expect(screen.queryByText('PHB')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /game system/i })).toHaveValue('sys-2')
+  })
+
+  it('ignores a remembered system the results do not include', async () => {
+    localStorage.setItem('grimoire.compendium.edition', JSON.stringify({ systemId: 'gone' }))
+    mockGet.mockResolvedValue(
+      makeResponse([
+        makeBookResult({ id: 'b1', title: 'PHB', game_system_id: 'sys-1' }),
+        makeBookResult({ id: 'b2', title: 'Core Rules', game_system_id: 'sys-2' }),
+      ])
+    )
+    renderView()
+    await userEvent.type(screen.getByRole('textbox'), 'fi')
+
+    await waitFor(() => expect(screen.getByText('PHB')).toBeInTheDocument())
+    expect(screen.getByText('Core Rules')).toBeInTheDocument()
+  })
+
   it('system filter hides books from other systems', async () => {
     mockGet.mockResolvedValue(
       makeResponse([
