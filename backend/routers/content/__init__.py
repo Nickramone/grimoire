@@ -7,11 +7,14 @@ from ...auth import require_ttrpg_access
 from ._schemas import (
     CatalogEntry,
     CatalogResponse,
+    CompendiumEntryResponse,
+    CompendiumResponse,
     ContentTypeListResponse,
     PackListResponse,
     ResolveResponse,
 )
 from .assets import get_asset
+from .compendium import browse_compendium, get_compendium_entry
 from .core import (
     browse_content,
     reload_packs,
@@ -37,6 +40,22 @@ router.add_api_route(
     methods=["GET"],
     summary="A compendium image, for ruleset entry descriptions",
     response_class=FileResponse,
+)
+router.add_api_route(
+    "/compendium",
+    browse_compendium,
+    methods=["GET"],
+    summary="Browse every readable entry of a schema, across content types",
+    response_model=CompendiumResponse,
+)
+# Three segments, like /{schema_id}/{content_type}/{entry_id}: registered first
+# so "compendium" is never read as a schema id.
+router.add_api_route(
+    "/compendium/{content_type}/{entry_id}",
+    get_compendium_entry,
+    methods=["GET"],
+    summary="One compendium entry, readable without a character sheet",
+    response_model=CompendiumEntryResponse,
 )
 router.add_api_route(
     "/packs",

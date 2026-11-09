@@ -203,6 +203,9 @@ TTRPG_GUEST_REACHABLE = {
     "/api/characters/{character_id}/images/{field}": "DELETE GET POST",
     # Compendium images, linked from entry descriptions: readable like the entries.
     "/api/content/assets/{asset_path:path}": "GET",
+    # The compendium lists what the catalog routes below already serve.
+    "/api/content/compendium": "GET",
+    "/api/content/compendium/{content_type}/{entry_id}": "GET",
     "/api/content/packs": "GET",
     "/api/content/{schema_id}/resolve": "GET",
     "/api/content/{schema_id}/types": "GET",

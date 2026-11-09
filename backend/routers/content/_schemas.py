@@ -98,3 +98,37 @@ class ResolvedEntry(BaseModel):
 
 class ResolveResponse(BaseModel):
     entries: dict[str, ResolvedEntry]
+
+
+class CompendiumSchema(BaseModel):
+    """A game system with compendium content the caller can read."""
+
+    schema_id: str
+    name: str = ""
+    entry_count: int = 0
+
+
+class CompendiumResponse(BaseModel):
+    """The compendium: every readable catalog entry of one schema, across types.
+
+    ``content_types`` carries each type's chrome with the number of entries the
+    caller can see, so one request builds the category chips and the list.
+    ``filters_available`` is filled only when the request names a content type,
+    because facets are declared per type.
+    """
+
+    schemas: list[CompendiumSchema]
+    schema_id: Optional[str] = None
+    content_types: list[ContentTypeSummary] = Field(default_factory=list)
+    entries: list[CatalogEntry] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 0
+    filters_available: dict[str, list[FilterOption]] = Field(default_factory=dict)
+
+
+class CompendiumEntryResponse(BaseModel):
+    """One compendium entry and the type that describes its fields."""
+
+    entry: CatalogEntry
+    content_type: ContentTypeSummary
