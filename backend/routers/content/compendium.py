@@ -194,3 +194,37 @@ def get_compendium_entry(
         "entry": helpers.serialize_entry(rows[0], definition),
         "content_type": _type_summary(content_type, definition, 1),
     }
+
+
+def search_compendium(db: Session, user_id: str, query: str, limit: int) -> list[dict]:
+    """Compendium entries matching a global search, every readable schema.
+
+    For the global search page's Compendium section: the same matching as the
+    compendium itself, a name match ranked above a match in the text, then by
+    name. Each hit carries what a result row shows and links to.
+    """
+    if not re.findall(r"[\w']+", query):
+        return []
+    hits = []
+    for schema in _readable_schemas(db, user_id):
+        schema_id = schema["schema_id"]
+        document = compendium_schema_document(db, user_id, schema_id) or {}
+        for name, definition in sorted((document.get("content_types") or {}).items()):
+            fields = definition.get("search_fields") or []
+            for row in _catalog_rows(db, user_id, schema_id, name, include_rulesets=True):
+                if helpers.matches_text(row, query, fields):
+                    hits.append((not _name_match(row, query), (row.name or "").lower(),
+                                 row, definition, schema))
+    hits.sort(key=lambda hit: (hit[0], hit[1]))
+    return [
+        {
+            "entry_id": row.entry_id,
+            "name": row.name,
+            "content_type": row.content_type,
+            "type_label": definition.get("label", row.content_type),
+            "schema_id": schema["schema_id"],
+            "schema_name": schema["name"],
+            "display": helpers.render_display(definition.get("compact_display", ""), row.data or {}),
+        }
+        for _, _, row, definition, schema in hits[:limit]
+    ]

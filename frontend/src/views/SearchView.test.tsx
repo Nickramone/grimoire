@@ -162,6 +162,37 @@ describe('SearchView', () => {
     expect(screen.getByText(/search through every page/i)).toBeInTheDocument()
   })
 
+  it('lists compendium entries linking to the entry and to the compendium', async () => {
+    mockGet.mockResolvedValue({
+      ...makeResponse(),
+      total: 1,
+      compendium: [
+        {
+          entry_id: 'fireball-xphb',
+          name: 'Fireball',
+          content_type: 'spell',
+          type_label: 'Spell',
+          schema_id: 'dnd-5e-2024',
+          schema_name: 'D&D 5e (2024)',
+          display: 'Level 3 Evocation',
+        },
+      ],
+    })
+    renderView()
+    await userEvent.type(screen.getByRole('textbox'), 'fi')
+
+    const entry = await screen.findByRole('link', { name: 'Fireball' })
+    expect(entry).toHaveAttribute(
+      'href',
+      '/compendium/spell/fireball-xphb?schema=dnd-5e-2024&q=fireball'
+    )
+    expect(screen.getByText('Spell · Level 3 Evocation · D&D 5e (2024)')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Show all in the Compendium' })).toHaveAttribute(
+      'href',
+      '/compendium?q=fireball'
+    )
+  })
+
   it('shows book results grouped by book after a search', async () => {
     mockGet.mockResolvedValue(
       makeResponse([

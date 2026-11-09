@@ -393,6 +393,8 @@
     "results_one": "{{count}} Ergebnis für \"{{query}}\"",
     "results_other": "{{count}} Ergebnisse für \"{{query}}\"",
     "books": "Bücher",
+    "compendium": "Kompendium",
+    "compendiumAll": "Alle im Kompendium anzeigen",
     "maps": "Karten",
     "tokens": "Tokens",
     "noResults": "Keine Ergebnisse gefunden. Andere Suchbegriffe versuchen oder sicherstellen, dass die Bücher indiziert sind.",
