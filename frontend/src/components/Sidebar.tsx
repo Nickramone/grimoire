@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LuLibrary,
+  LuBookOpenText,
   LuMap,
   LuMusic,
   LuBox,
@@ -233,6 +234,8 @@ export default function Sidebar({
       <nav aria-label={t('a11y.mainNavigation')} style={{ padding: '12px 8px', flex: 1 }}>
         {/* Group 1: library content (Library, Maps, Tokens, Audio) */}
         {!isGuest && navItem('/library', <LuLibrary size={16} />, t('nav.library'), { end: false })}
+        {!isGuest &&
+          navItem('/compendium', <LuBookOpenText size={16} />, t('nav.compendium'), { end: false })}
         {!isGuest && !hide_maps && navItem('/maps', <LuMap size={16} />, t('nav.maps'))}
         {!isGuest && !hide_tokens && navItem('/tokens', <LuUser size={16} />, t('nav.tokens'))}
         {!isGuest && !hide_audio && navItem('/audio', <LuMusic size={16} />, t('nav.audio'))}

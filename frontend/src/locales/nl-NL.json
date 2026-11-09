@@ -8,6 +8,7 @@
   },
   "nav": {
     "library": "Bibliotheek",
+    "compendium": "Compendium",
     "maps": "Kaarten",
     "tokens": "Tokens",
     "search": "Zoeken",
@@ -1033,6 +1034,22 @@
       "editTags": "Edit",
       "noTags": "None"
     }
+  },
+  "compendium": {
+    "title": "Compendium",
+    "subtitle_one": "{{count}} item in het compendium",
+    "subtitle_other": "{{count}} items in het compendium",
+    "subtitleFiltered_one": "{{count}} van {{total}} items",
+    "subtitleFiltered_other": "{{count}} van {{total}} items",
+    "searchPlaceholder": "Zoek spreuken, voorwerpen, feats…",
+    "edition": "Editie",
+    "categories": "Categorieën",
+    "all": "Alle",
+    "filters": "Filters",
+    "any": "Alle",
+    "empty": "Het compendium is leeg: importeer een regelset om het te vullen.",
+    "noMatches": "Geen overeenkomende items.",
+    "loadFailed": "Het compendium kon niet worden geladen."
   },
   "settings": {
     "title": "Instellingen",

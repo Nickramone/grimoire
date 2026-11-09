@@ -3504,6 +3504,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/content/compendium": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse every readable entry of a schema, across content types
+         * @description Browse the compendium: one schema, all or one content type, searchable.
+         *
+         *     Without ``schema_id`` the schema with the most readable entries is used.
+         *     Filters arrive as ``filter[field]=value`` and apply only with a content type.
+         *     A search ranks entries whose name matches above those matching elsewhere.
+         */
+        get: operations["browse_compendium_api_content_compendium_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/content/compendium/{content_type}/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One compendium entry, readable without a character sheet
+         * @description One compendium entry with its type, for a link that opens it directly.
+         *
+         *     Unlike ``/content/{schema_id}/{content_type}/{entry_id}`` this needs no
+         *     character sheet installed, the same as the compendium list. When a pack and
+         *     a ruleset both carry the id, the ruleset's copy wins: it is the one the
+         *     server or the table chose to publish.
+         */
+        get: operations["get_compendium_entry_api_content_compendium__content_type___entry_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/content/packs": {
         parameters: {
             query?: never;
@@ -10054,6 +10103,70 @@ export interface components {
             resource_type: "book" | "map" | "token" | "audio" | "model";
             /** Suggested Parent Id */
             suggested_parent_id?: string | null;
+        };
+        /**
+         * CompendiumEntryResponse
+         * @description One compendium entry and the type that describes its fields.
+         */
+        CompendiumEntryResponse: {
+            content_type: components["schemas"]["ContentTypeSummary"];
+            entry: components["schemas"]["CatalogEntry"];
+        };
+        /**
+         * CompendiumResponse
+         * @description The compendium: every readable catalog entry of one schema, across types.
+         *
+         *     ``content_types`` carries each type's chrome with the number of entries the
+         *     caller can see, so one request builds the category chips and the list.
+         *     ``filters_available`` is filled only when the request names a content type,
+         *     because facets are declared per type.
+         */
+        CompendiumResponse: {
+            /** Content Types */
+            content_types?: components["schemas"]["ContentTypeSummary"][];
+            /** Entries */
+            entries?: components["schemas"]["CatalogEntry"][];
+            /** Filters Available */
+            filters_available?: {
+                [key: string]: components["schemas"]["FilterOption"][];
+            };
+            /**
+             * Page
+             * @default 1
+             */
+            page?: number;
+            /**
+             * Page Size
+             * @default 0
+             */
+            page_size?: number;
+            /** Schema Id */
+            schema_id?: string | null;
+            /** Schemas */
+            schemas: components["schemas"]["CompendiumSchema"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total?: number;
+        };
+        /**
+         * CompendiumSchema
+         * @description A game system with compendium content the caller can read.
+         */
+        CompendiumSchema: {
+            /**
+             * Entry Count
+             * @default 0
+             */
+            entry_count?: number;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Schema Id */
+            schema_id: string;
         };
         /** ContentTypeListResponse */
         ContentTypeListResponse: {
@@ -25340,6 +25453,85 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_compendium_api_content_compendium_get: {
+        parameters: {
+            query?: {
+                schema_id?: string | null;
+                content_type?: string | null;
+                search?: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompendiumResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_compendium_entry_api_content_compendium__content_type___entry_id__get: {
+        parameters: {
+            query: {
+                schema_id: string;
+            };
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                content_type: string;
+                entry_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompendiumEntryResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

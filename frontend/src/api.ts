@@ -36,6 +36,6 @@ export { bulk, files, imageSources, naming, tags, tokenFrames } from './api/libr
 export type { BulkType, FolderTagType } from './api/library'
 export { addons, backups, duplicates, maintenance, sidecars } from './api/maintenance'
 export type { DuplicateType } from './api/maintenance'
-export { characters, content, contentAdmin, rulesets } from './api/characters'
+export { characters, compendium, content, contentAdmin, rulesets } from './api/characters'
 export { default } from './api/client'
 export { getAccessToken, setAccessToken } from './api/accessToken'

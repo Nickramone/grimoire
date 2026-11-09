@@ -8,6 +8,7 @@
   },
   "nav": {
     "library": "Bibliotek",
+    "compendium": "Kompendium",
     "maps": "Kartor",
     "tokens": "Tokens",
     "search": "Sök",
@@ -1033,6 +1034,22 @@
       "editTags": "Redigera",
       "noTags": "Inga"
     }
+  },
+  "compendium": {
+    "title": "Kompendium",
+    "subtitle_one": "{{count}} post i kompendiet",
+    "subtitle_other": "{{count}} poster i kompendiet",
+    "subtitleFiltered_one": "Visar {{count}} av {{total}} poster",
+    "subtitleFiltered_other": "Visar {{count}} av {{total}} poster",
+    "searchPlaceholder": "Sök besvärjelser, föremål, feats…",
+    "edition": "Utgåva",
+    "categories": "Kategorier",
+    "all": "Alla",
+    "filters": "Filter",
+    "any": "Valfri",
+    "empty": "Kompendiet är tomt: importera en regeluppsättning för att fylla det.",
+    "noMatches": "Inga poster matchar.",
+    "loadFailed": "Kunde inte läsa in kompendiet."
   },
   "settings": {
     "title": "Inställningar",
