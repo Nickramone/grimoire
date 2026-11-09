@@ -27,9 +27,9 @@ const SEARCH_DELAY_MS = 250
 const chipStyle = (active: boolean): CSSProperties => ({
   padding: '6px 12px',
   borderRadius: 999,
-  border: `1px solid ${active ? 'var(--gold)' : 'var(--border)'}`,
-  background: active ? 'var(--gold-dim, var(--bg-panel))' : 'var(--bg-panel)',
-  color: active ? 'var(--gold)' : 'var(--text)',
+  border: `1px solid ${active ? 'var(--gold-dim)' : 'var(--border)'}`,
+  background: active ? 'var(--gold-dim)' : 'var(--bg-panel)',
+  color: active ? 'var(--bg-deep)' : 'var(--text)',
   cursor: 'pointer',
   font: 'inherit',
   fontSize: 13,
