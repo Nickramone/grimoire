@@ -10,6 +10,7 @@
     "library": "Bibliothèque",
     "armory": "Armurerie",
     "compendium": "Compendium",
+    "bestiary": "Bestiaire",
     "maps": "Cartes",
     "tokens": "Pions",
     "search": "Rechercher",
@@ -1076,6 +1077,11 @@
     "empty": "Le compendium est vide : importez un jeu de règles pour le remplir.",
     "noMatches": "Aucune entrée ne correspond.",
     "loadFailed": "Impossible de charger le compendium."
+  },
+  "bestiary": {
+    "title": "Bestiaire",
+    "searchPlaceholder": "Rechercher des monstres…",
+    "empty": "Le bestiaire est vide : importez vos monstres comme jeu de règles personnel d'un schéma ne déclarant que des monstres."
   },
   "settings": {
     "title": "Paramètres",

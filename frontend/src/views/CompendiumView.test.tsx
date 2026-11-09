@@ -77,6 +77,8 @@ const renderAt = (path = '/compendium') =>
       <Routes>
         <Route path="/compendium" element={<CompendiumView />} />
         <Route path="/compendium/:contentType/:entryId" element={<CompendiumView />} />
+        <Route path="/bestiary" element={<CompendiumView bestiary />} />
+        <Route path="/bestiary/:contentType/:entryId" element={<CompendiumView bestiary />} />
       </Routes>
       <Location />
     </MemoryRouter>
@@ -207,6 +209,34 @@ describe('CompendiumView', () => {
       screen.getByRole('button', { name: 'Change view (currently Cards)' })
     ).toBeInTheDocument()
     expect(sessionStorage.getItem('grimoire:view-mode:compendium')).toBe('card')
+  })
+
+  it('as the bestiary, asks for bestiaries and opens monsters under /bestiary', async () => {
+    const goblin = { ...FIREBALL, entry_id: 'goblin-xmm', name: 'Goblin', content_type: 'monster' }
+    mockBrowse.mockResolvedValue(
+      response({
+        schemas: [
+          { schema_id: 'dnd-5e-2024-bestiary', name: 'Bestiary 2024', entry_count: 1, systems: [] },
+          { schema_id: 'dnd-5e-2014-bestiary', name: 'Bestiary 2014', entry_count: 1, systems: [] },
+        ],
+        schema_id: 'dnd-5e-2024-bestiary',
+        content_types: [
+          { ...ITEM_TYPE, name: 'monster', label: 'Monster', label_plural: 'Monsters' },
+        ],
+        entries: [goblin],
+        total: 1,
+      })
+    )
+    renderAt('/bestiary')
+    expect(await screen.findByRole('heading', { name: 'Bestiary' })).toBeInTheDocument()
+    expect(mockBrowse.mock.calls[0][0]).toMatchObject({ bestiary: true })
+    // A bestiary choice is remembered as its rules edition, for the compendium too.
+    await userEvent.selectOptions(screen.getByLabelText('Edition'), 'dnd-5e-2014-bestiary')
+    expect(JSON.parse(localStorage.getItem('grimoire.compendium.edition') || '{}')).toMatchObject({
+      schemaId: 'dnd-5e-2014',
+    })
+    await userEvent.click(screen.getByText('Goblin'))
+    expect(screen.getByTestId('location')).toHaveTextContent('/bestiary/monster/goblin-xmm')
   })
 
   it('says when the compendium is empty', async () => {

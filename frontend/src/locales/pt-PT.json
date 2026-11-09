@@ -10,6 +10,7 @@
     "library": "Biblioteca",
     "armory": "Arsenal",
     "compendium": "Compêndio",
+    "bestiary": "Bestiário",
     "maps": "Mapas",
     "tokens": "Tokens",
     "search": "Pesquisar",
@@ -1076,6 +1077,11 @@
     "empty": "O compêndio está vazio: importe um conjunto de regras para o preencher.",
     "noMatches": "Nenhuma entrada corresponde.",
     "loadFailed": "Não foi possível carregar o compêndio."
+  },
+  "bestiary": {
+    "title": "Bestiário",
+    "searchPlaceholder": "Pesquisar monstros…",
+    "empty": "O bestiário está vazio: importe os seus monstros como conjunto de regras pessoal de um esquema só com monstros."
   },
   "settings": {
     "title": "Definições",

@@ -10,6 +10,7 @@
     "library": "Bibliotek",
     "armory": "Rustkammare",
     "compendium": "Kompendium",
+    "bestiary": "Bestiarium",
     "maps": "Kartor",
     "tokens": "Tokens",
     "search": "Sök",
@@ -1076,6 +1077,11 @@
     "empty": "Kompendiet är tomt: importera en regeluppsättning för att fylla det.",
     "noMatches": "Inga poster matchar.",
     "loadFailed": "Kunde inte läsa in kompendiet."
+  },
+  "bestiary": {
+    "title": "Bestiarium",
+    "searchPlaceholder": "Sök monster…",
+    "empty": "Bestiariet är tomt: importera dina monster som en personlig regeluppsättning för ett schema med bara monster."
   },
   "settings": {
     "title": "Inställningar",

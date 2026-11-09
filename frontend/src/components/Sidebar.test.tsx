@@ -261,6 +261,19 @@ describe('Sidebar navigation visibility', () => {
     expect(screen.getByText('Library')).toBeInTheDocument()
   })
 
+  it('shows the bestiary to a GM or admin only, and hides it with the compendium', () => {
+    const { unmount } = renderSidebar({ user: { ...baseUser, role: 'gm' } })
+    expect(screen.getByRole('link', { name: 'Bestiary' })).toHaveAttribute('href', '/bestiary')
+    unmount()
+    renderSidebar({ user: { ...baseUser, role: 'player' } })
+    expect(screen.queryByText('Bestiary')).toBeNull()
+  })
+
+  it('hides the bestiary when hide_compendium is true', () => {
+    renderSidebar({ user: { ...baseUser, role: 'admin' }, uiSettings: { hide_compendium: true } })
+    expect(screen.queryByText('Bestiary')).toBeNull()
+  })
+
   it('shows the Tags link pointing at /tags (issue #235)', () => {
     renderSidebar()
     const tagsLink = screen.getByRole('link', { name: 'Tags' })

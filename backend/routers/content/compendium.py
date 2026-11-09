@@ -24,6 +24,20 @@ from .core import _catalog_rows
 
 DEFAULT_PAGE_SIZE = 60
 
+#: The suffix that ties a bestiary schema to the rules schema of its edition:
+#: ``dnd-5e-2024-bestiary`` follows the library systems linked to ``dnd-5e-2024``.
+BESTIARY_SUFFIX = "-bestiary"
+
+
+def is_bestiary(document: dict) -> bool:
+    """Whether a schema is a bestiary: it declares monsters and nothing else.
+
+    A bestiary is the GM's reference, kept apart from the rules everyone reads:
+    it has its own page and its entries live in a personal ruleset, so only the
+    GM who imported them can read them.
+    """
+    return set(document.get("content_types") or {}) == {"monster"}
+
 
 def _linked_systems(db: Session, user) -> dict[str, list[dict]]:
     """The library systems each schema is linked to, those the user can see.
@@ -44,7 +58,8 @@ def _linked_systems(db: Session, user) -> dict[str, list[dict]]:
 def _readable_schemas(db: Session, user) -> list[dict]:
     """Schemas with content this user can read, the largest first.
 
-    Each carries the library systems linked to it, see ``_linked_systems``.
+    Each carries the library systems linked to it, see ``_linked_systems``,
+    and whether it is a bestiary, see ``is_bestiary``.
     """
     user_id = user.id
     counts: dict[str, int] = {}
@@ -70,15 +85,20 @@ def _readable_schemas(db: Session, user) -> list[dict]:
         .all()
     }
     linked = _linked_systems(db, user)
-    schemas = [
-        {
-            "schema_id": schema_id,
-            "name": names.get(schema_id, schema_id),
-            "entry_count": count,
-            "systems": linked.get(schema_id, []),
-        }
-        for schema_id, count in counts.items()
-    ]
+    schemas = []
+    for schema_id, count in counts.items():
+        bestiary = is_bestiary(compendium_schema_document(db, user_id, schema_id) or {})
+        # A bestiary follows the edition of its rules schema, see BESTIARY_SUFFIX.
+        edition = schema_id.removesuffix(BESTIARY_SUFFIX) if bestiary else schema_id
+        schemas.append(
+            {
+                "schema_id": schema_id,
+                "name": names.get(schema_id, schema_id),
+                "entry_count": count,
+                "systems": linked.get(edition, []),
+                "bestiary": bestiary,
+            }
+        )
     return sorted(schemas, key=lambda s: (-s["entry_count"], s["schema_id"]))
 
 
@@ -112,17 +132,27 @@ def browse_compendium(
     search: str = "",
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
+    bestiary: bool = False,
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Browse the compendium: one schema, all or one content type, searchable.
 
+    The compendium page lists the rules schemas, the bestiary page (``bestiary``)
+    the bestiaries. A rules ``schema_id`` asked of the bestiary opens the
+    bestiary of that edition, so both pages follow one edition choice.
     Without ``schema_id`` the schema with the most readable entries is used.
     Filters arrive as ``filter[field]=value`` and apply only with a content type.
     A search ranks entries whose name matches above those matching elsewhere.
     """
-    schemas = _readable_schemas(db, access_control.load_user(db, current_user))
+    schemas = [
+        s
+        for s in _readable_schemas(db, access_control.load_user(db, current_user))
+        if s["bestiary"] == bestiary
+    ]
     known = {s["schema_id"] for s in schemas}
+    if bestiary and schema_id not in known and f"{schema_id}{BESTIARY_SUFFIX}" in known:
+        schema_id = f"{schema_id}{BESTIARY_SUFFIX}"
     if schema_id not in known:
         schema_id = schemas[0]["schema_id"] if schemas else None
     empty = {"schemas": schemas, "schema_id": schema_id, "page": 1, "page_size": page_size}
@@ -227,8 +257,15 @@ def list_compendium_schemas(
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """The schemas with compendium content, for choosing a system's edition."""
-    return _readable_schemas(db, access_control.load_user(db, current_user))
+    """The rules schemas with compendium content, for choosing a system's edition.
+
+    Bestiaries are left out: one follows its rules schema, see BESTIARY_SUFFIX.
+    """
+    return [
+        s
+        for s in _readable_schemas(db, access_control.load_user(db, current_user))
+        if not s["bestiary"]
+    ]
 
 
 def search_compendium(
@@ -240,6 +277,7 @@ def search_compendium(
     compendium itself, a name match ranked above a match in the text, then by
     name. Each hit carries what a result row shows and links to, and the
     library systems of its schema, so the page's system filter applies to it.
+    Bestiary entries come too, flagged, for the reader who can see them.
     With ``system_id`` only the schemas linked to that system are searched.
     """
     if not re.findall(r"[\w']+", query):
@@ -267,6 +305,7 @@ def search_compendium(
             "schema_id": schema["schema_id"],
             "schema_name": schema["name"],
             "game_systems": schema["systems"],
+            "bestiary": schema["bestiary"],
             "display": helpers.render_summary(definition.get("compact_display", ""), row.data or {}),
         }
         for _, _, row, definition, schema in hits[:limit]

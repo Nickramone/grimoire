@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   LuLibrary,
   LuBookOpenText,
+  LuSkull,
   LuMap,
   LuMusic,
   LuBox,
@@ -80,11 +81,14 @@ export default function MobileSidebar({
   const armoryOnBar = hide_library && showArmory
   const armoryInDrawer = showArmory && !armoryOnBar
   const showWargaming = !hide_armies || !hide_leagues
+  // The bestiary is the GM's, see Sidebar.
+  const showBestiary = (user?.role === 'admin' || user?.role === 'gm') && !hide_compendium
   const moreRoutes = [
     '/settings',
     '/tags',
     ...(armoryInDrawer ? ['/armory'] : []),
     ...(!hide_compendium ? ['/compendium'] : []),
+    ...(showBestiary ? ['/bestiary'] : []),
     ...(!hide_maps ? ['/maps'] : []),
     ...(!hide_tokens ? ['/tokens'] : []),
     ...(!hide_audio ? ['/audio'] : []),
@@ -229,6 +233,14 @@ export default function MobileSidebar({
                 to="/compendium"
                 Icon={LuBookOpenText}
                 label={t('nav.compendium')}
+                onClick={() => setMoreOpen(false)}
+              />
+            )}
+            {showBestiary && (
+              <MoreItem
+                to="/bestiary"
+                Icon={LuSkull}
+                label={t('nav.bestiary')}
                 onClick={() => setMoreOpen(false)}
               />
             )}

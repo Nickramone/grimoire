@@ -10,6 +10,7 @@
     "library": "Library",
     "armory": "Armory",
     "compendium": "Compendium",
+    "bestiary": "Bestiary",
     "maps": "Maps",
     "tokens": "Tokens",
     "search": "Search",
@@ -1076,6 +1077,11 @@
     "empty": "The compendium is empty: import a ruleset to fill it.",
     "noMatches": "No entries match.",
     "loadFailed": "Could not load the compendium."
+  },
+  "bestiary": {
+    "title": "Bestiary",
+    "searchPlaceholder": "Search monsters…",
+    "empty": "The bestiary is empty: import your monsters as a personal ruleset of a monsters-only schema."
   },
   "settings": {
     "title": "Settings",
