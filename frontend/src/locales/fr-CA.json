@@ -9,6 +9,7 @@
   "nav": {
     "library": "Bibliothèque",
     "armory": "Armurerie",
+    "compendium": "Compendium",
     "maps": "Cartes",
     "tokens": "Pions",
     "search": "Rechercher",
@@ -1057,6 +1058,22 @@
       "editTags": "Edit",
       "noTags": "None"
     }
+  },
+  "compendium": {
+    "title": "Compendium",
+    "subtitle_one": "{{count}} entrée dans le compendium",
+    "subtitle_other": "{{count}} entrées dans le compendium",
+    "subtitleFiltered_one": "{{count}} sur {{total}} entrées",
+    "subtitleFiltered_other": "{{count}} sur {{total}} entrées",
+    "searchPlaceholder": "Rechercher sorts, objets, dons…",
+    "edition": "Édition",
+    "categories": "Catégories",
+    "all": "Toutes",
+    "filters": "Filtres",
+    "any": "Toutes",
+    "empty": "Le compendium est vide : importez un jeu de règles pour le remplir.",
+    "noMatches": "Aucune entrée ne correspond.",
+    "loadFailed": "Impossible de charger le compendium."
   },
   "settings": {
     "title": "Paramètres",

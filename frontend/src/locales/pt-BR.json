@@ -9,6 +9,7 @@
   "nav": {
     "library": "Biblioteca",
     "armory": "Arsenal",
+    "compendium": "Compêndio",
     "maps": "Mapas",
     "tokens": "Tokens",
     "search": "Buscar",
@@ -1057,6 +1058,22 @@
       "editTags": "Edit",
       "noTags": "None"
     }
+  },
+  "compendium": {
+    "title": "Compêndio",
+    "subtitle_one": "{{count}} entrada no compêndio",
+    "subtitle_other": "{{count}} entradas no compêndio",
+    "subtitleFiltered_one": "Mostrando {{count}} de {{total}} entradas",
+    "subtitleFiltered_other": "Mostrando {{count}} de {{total}} entradas",
+    "searchPlaceholder": "Pesquisar magias, itens, talentos…",
+    "edition": "Edição",
+    "categories": "Categorias",
+    "all": "Todas",
+    "filters": "Filtros",
+    "any": "Qualquer",
+    "empty": "O compêndio está vazio: importe um conjunto de regras para preenchê-lo.",
+    "noMatches": "Nenhuma entrada corresponde.",
+    "loadFailed": "Não foi possível carregar o compêndio."
   },
   "settings": {
     "title": "Configurações",

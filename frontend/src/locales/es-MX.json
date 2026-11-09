@@ -9,6 +9,7 @@
   "nav": {
     "library": "Biblioteca",
     "armory": "Armería",
+    "compendium": "Compendio",
     "maps": "Mapas",
     "tokens": "Fichas",
     "search": "Buscar",
@@ -1057,6 +1058,22 @@
       "editTags": "Edit",
       "noTags": "None"
     }
+  },
+  "compendium": {
+    "title": "Compendio",
+    "subtitle_one": "{{count}} entrada en el compendio",
+    "subtitle_other": "{{count}} entradas en el compendio",
+    "subtitleFiltered_one": "Mostrando {{count}} de {{total}} entradas",
+    "subtitleFiltered_other": "Mostrando {{count}} de {{total}} entradas",
+    "searchPlaceholder": "Buscar conjuros, objetos, dotes…",
+    "edition": "Edición",
+    "categories": "Categorías",
+    "all": "Todas",
+    "filters": "Filtros",
+    "any": "Cualquiera",
+    "empty": "El compendio está vacío: importa un conjunto de reglas para llenarlo.",
+    "noMatches": "Ninguna entrada coincide.",
+    "loadFailed": "No se pudo cargar el compendio."
   },
   "settings": {
     "title": "Configuración",

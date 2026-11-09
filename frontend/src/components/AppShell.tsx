@@ -19,6 +19,7 @@ import {
   BookReader,
   LibraryView,
   SystemDetailView,
+  CompendiumView,
   MapsView,
   MapDetailView,
   VttEditorView,
@@ -275,6 +276,8 @@ export default function AppShell() {
                   <Route path="/armory" element={<LibraryView key="armory" gameType="wargame" />} />
                   <Route path="/armory/system/:systemId" element={<SystemDetailView />} />
                   <Route path="/library/book/:bookId" element={<BookReader />} />
+                  <Route path="/compendium" element={<CompendiumView />} />
+                  <Route path="/compendium/:contentType/:entryId" element={<CompendiumView />} />
                   <Route path="/maps" element={<MapsView />} />
                   <Route path="/maps/:mapId" element={<MapDetailView />} />
                   {/* Full-page: the Universal VTT editor needs the whole width for

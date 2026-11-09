@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import LazyImg from '../LazyImg'
+import EntryLink from './EntryLink'
 import { fieldLabel } from './characterStyles'
 
 export interface EntryMarkdownProps {
@@ -59,6 +60,9 @@ const components: Components = {
   },
   td({ children }) {
     return <td style={cellStyle(false, children)}>{children}</td>
+  },
+  a({ href, children }) {
+    return <EntryLink href={href}>{children}</EntryLink>
   },
   blockquote({ children }) {
     return (

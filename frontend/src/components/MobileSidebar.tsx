@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LuLibrary,
+  LuBookOpenText,
   LuMap,
   LuMusic,
   LuBox,
@@ -82,6 +83,7 @@ export default function MobileSidebar({
     '/settings',
     '/tags',
     ...(armoryInDrawer ? ['/armory'] : []),
+    '/compendium',
     ...(!hide_maps ? ['/maps'] : []),
     ...(!hide_tokens ? ['/tokens'] : []),
     ...(!hide_audio ? ['/audio'] : []),
@@ -221,6 +223,12 @@ export default function MobileSidebar({
                 onClick={() => setMoreOpen(false)}
               />
             )}
+            <MoreItem
+              to="/compendium"
+              Icon={LuBookOpenText}
+              label={t('nav.compendium')}
+              onClick={() => setMoreOpen(false)}
+            />
             {!hide_maps && (
               <MoreItem
                 to="/maps"

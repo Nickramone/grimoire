@@ -9,6 +9,7 @@
   "nav": {
     "library": "Libreria",
     "armory": "Armeria",
+    "compendium": "Compendio",
     "maps": "Mappe",
     "tokens": "Token",
     "search": "Cerca",
@@ -1057,6 +1058,22 @@
       "editTags": "Modifica",
       "noTags": "Nessuno"
     }
+  },
+  "compendium": {
+    "title": "Compendio",
+    "subtitle_one": "{{count}} voce nel compendio",
+    "subtitle_other": "{{count}} voci nel compendio",
+    "subtitleFiltered_one": "{{count}} di {{total}} voci",
+    "subtitleFiltered_other": "{{count}} di {{total}} voci",
+    "searchPlaceholder": "Cerca incantesimi, oggetti, talenti…",
+    "edition": "Edizione",
+    "categories": "Categorie",
+    "all": "Tutte",
+    "filters": "Filtri",
+    "any": "Qualsiasi",
+    "empty": "Il compendio è vuoto: importa un ruleset per riempirlo.",
+    "noMatches": "Nessuna voce corrisponde.",
+    "loadFailed": "Impossibile caricare il compendio."
   },
   "settings": {
     "title": "Impostazioni",

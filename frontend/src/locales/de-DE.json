@@ -9,6 +9,7 @@
   "nav": {
     "library": "Bibliothek",
     "armory": "Rüstkammer",
+    "compendium": "Kompendium",
     "maps": "Karten",
     "tokens": "Tokens",
     "search": "Suche",
@@ -1057,6 +1058,22 @@
       "editTags": "Edit",
       "noTags": "None"
     }
+  },
+  "compendium": {
+    "title": "Kompendium",
+    "subtitle_one": "{{count}} Eintrag im Kompendium",
+    "subtitle_other": "{{count}} Einträge im Kompendium",
+    "subtitleFiltered_one": "{{count}} von {{total}} Einträgen",
+    "subtitleFiltered_other": "{{count}} von {{total}} Einträgen",
+    "searchPlaceholder": "Zauber, Gegenstände, Talente suchen…",
+    "edition": "Edition",
+    "categories": "Kategorien",
+    "all": "Alle",
+    "filters": "Filter",
+    "any": "Beliebig",
+    "empty": "Das Kompendium ist leer: Importiere ein Regelwerk, um es zu füllen.",
+    "noMatches": "Keine passenden Einträge.",
+    "loadFailed": "Das Kompendium konnte nicht geladen werden."
   },
   "settings": {
     "title": "Einstellungen",

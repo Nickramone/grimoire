@@ -9,6 +9,7 @@
   "nav": {
     "library": "Library",
     "armory": "Armoury",
+    "compendium": "Compendium",
     "maps": "Maps",
     "tokens": "Tokens",
     "search": "Search",
@@ -1057,6 +1058,22 @@
       "editTags": "Edit",
       "noTags": "None"
     }
+  },
+  "compendium": {
+    "title": "Compendium",
+    "subtitle_one": "{{count}} entry in the compendium",
+    "subtitle_other": "{{count}} entries in the compendium",
+    "subtitleFiltered_one": "Displaying {{count}} of {{total}} entries",
+    "subtitleFiltered_other": "Displaying {{count}} of {{total}} entries",
+    "searchPlaceholder": "Search spells, items, feats…",
+    "edition": "Edition",
+    "categories": "Categories",
+    "all": "All",
+    "filters": "Filters",
+    "any": "Any",
+    "empty": "The compendium is empty: import a ruleset to fill it.",
+    "noMatches": "No entries match.",
+    "loadFailed": "Could not load the compendium."
   },
   "settings": {
     "title": "Settings",
