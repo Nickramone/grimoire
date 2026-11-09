@@ -9,7 +9,7 @@ from ...auth import CurrentUser, get_current_user, require_gm_or_admin
 from ...codex import collection as codex_collection
 from ...config import get_db
 from ...models import Book, BookFolder, GameSystem, User
-from ...services import access_control, book_links, bulk_service, tag_service, variants
+from ...services import access_control, book_links, bulk_service, compendium_links, tag_service, variants
 from ...sql_paths import path_under
 from .._bulk_schemas import BulkAddTags
 from ...services.books.access import enforce_campaign_visibility, pop_access_level
@@ -20,7 +20,7 @@ from ...services.systems import (
     resolve_cover_book_id,
     visible_cover_id,
 )
-from ._schemas import BookFolderUpdate, GameSystemBulkUpdate, GameSystemUpdate
+from ._schemas import BookFolderUpdate, GameSystemBulkUpdate, GameSystemPatch
 from ._serializers import serialize_book, serialize_system_summary
 
 # Sort keys accepted by list_systems. Value is the summary dict key to sort on.
@@ -246,6 +246,7 @@ def get_system(
         summary["books"] = []
         summary["children"] = children
         summary["scope_path"] = _scope_path(db, system, summary["category_depth"])
+        summary["compendium_schema_id"] = compendium_links.schema_for(db, system.id)
         return summary
 
     books = book_q.all()
@@ -297,6 +298,7 @@ def get_system(
     ]
     summary["children"] = children
     summary["scope_path"] = _scope_path(db, system, summary["category_depth"])
+    summary["compendium_schema_id"] = compendium_links.schema_for(db, system.id)
     return summary
 
 
@@ -484,7 +486,7 @@ def delete_book_folder(
 
 def update_system(
     system_id: str,
-    data: GameSystemUpdate,
+    data: GameSystemPatch,
     current_user: CurrentUser = Depends(require_gm_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -495,6 +497,8 @@ def update_system(
     # Removed before apply_updates' blind setattr so the admin-only rule is
     # actually enforced. A system has no "inherit" state — it is the fallback.
     has_access, access_level = pop_access_level(payload, current_user, allow_inherit=False)
+    # Not a column: kept in an app setting, see services.compendium_links.
+    compendium_schema_id = payload.pop("compendium_schema_id", None)
     links = {system.id: system.codex_id} if "codex_id" in payload else {}
     try:
         _apply_rename(db, system, payload)
@@ -506,6 +510,8 @@ def update_system(
     if has_access:
         system.access_level = access_level
         _enforce_system_campaign_visibility(db, system)
+    if compendium_schema_id is not None:
+        compendium_links.link(db, system.id, compendium_schema_id)
     db.commit()
     codex_collection.push_link_changes(db, "system", links)
     return {"status": "ok"}

@@ -4101,6 +4101,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/content/compendium/schemas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The schemas with compendium content, with their linked library systems
+         * @description The schemas with compendium content, for choosing a system's edition.
+         */
+        get: operations["list_compendium_schemas_api_content_compendium_schemas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/content/compendium/{content_type}/{entry_id}": {
         parameters: {
             query?: never;
@@ -11562,6 +11582,21 @@ export interface components {
             name?: string;
             /** Schema Id */
             schema_id: string;
+            /** Systems */
+            systems?: components["schemas"]["CompendiumSystem"][];
+        };
+        /**
+         * CompendiumSystem
+         * @description A library system linked to a compendium schema.
+         */
+        CompendiumSystem: {
+            /** Id */
+            id: string;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
         };
         /** ContentTypeListResponse */
         ContentTypeListResponse: {
@@ -12584,8 +12619,11 @@ export interface components {
             /** Items */
             items: components["schemas"]["GameSystemBulkItem"][];
         };
-        /** GameSystemUpdate */
-        GameSystemUpdate: {
+        /**
+         * GameSystemPatch
+         * @description One system's update: also its compendium schema, which a batch does not set.
+         */
+        GameSystemPatch: {
             /** Access Level */
             access_level?: string | null;
             /** Character Builder Url */
@@ -12594,6 +12632,8 @@ export interface components {
             character_builder_urls?: components["schemas"]["LinkEntry"][] | null;
             /** Codex Id */
             codex_id?: string | null;
+            /** Compendium Schema Id */
+            compendium_schema_id?: string | null;
             /** Cover Book Id */
             cover_book_id?: string | null;
             /** Description */
@@ -16750,6 +16790,11 @@ export interface components {
             display?: string;
             /** Entry Id */
             entry_id: string;
+            /**
+             * Game Systems
+             * @default []
+             */
+            game_systems?: components["schemas"]["SearchCompendiumSystem"][];
             /** Name */
             name: string;
             /** Schema Id */
@@ -16764,6 +16809,16 @@ export interface components {
              * @default
              */
             type_label?: string;
+        };
+        /** SearchCompendiumSystem */
+        SearchCompendiumSystem: {
+            /** Id */
+            id: string;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
         };
         /**
          * SearchField
@@ -17813,6 +17868,11 @@ export interface components {
             children: components["schemas"]["SystemSummary"][];
             /** Codex Id */
             codex_id?: string | null;
+            /**
+             * Compendium Schema Id
+             * @default
+             */
+            compendium_schema_id?: string;
             /** Container Kind */
             container_kind: string;
             /** Cover Book Id */
@@ -29512,6 +29572,40 @@ export interface operations {
             };
         };
     };
+    list_compendium_schemas_api_content_compendium_schemas_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompendiumSchema"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_compendium_entry_api_content_compendium__content_type___entry_id__get: {
         parameters: {
             query: {
@@ -36338,7 +36432,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["GameSystemUpdate"];
+                "application/json": components["schemas"]["GameSystemPatch"];
             };
         };
         responses: {

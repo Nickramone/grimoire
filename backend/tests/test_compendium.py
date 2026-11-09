@@ -10,7 +10,15 @@ import datetime
 import pytest
 
 from backend.config import SessionLocal
-from backend.models import Campaign, CampaignMember, CharacterSchema, Ruleset, RulesetEntry
+from backend.models import (
+    AppSetting,
+    Campaign,
+    CampaignMember,
+    CharacterSchema,
+    GameSystem,
+    Ruleset,
+    RulesetEntry,
+)
 
 
 SCHEMA = {
@@ -125,9 +133,12 @@ class TestCompendium:
     def test_it_defaults_to_the_schema_with_content(self, client, admin_headers, server_rules):
         body = _get(client, admin_headers)
         assert body["schema_id"] == "comp-demo"
-        assert {"schema_id": "comp-demo", "name": "Compendium Demo", "entry_count": 4} in body[
-            "schemas"
-        ]
+        assert {
+            "schema_id": "comp-demo",
+            "name": "Compendium Demo",
+            "entry_count": 4,
+            "systems": [],
+        } in body["schemas"]
 
     def test_one_type_sorts_by_its_default_and_offers_facets(
         self, client, admin_headers, server_rules
@@ -308,3 +319,103 @@ def test_render_summary_drops_the_name(template, expected):
     from backend.routers.content._helpers import render_summary
     data = {"name": "Fireball", "school": "evocation", "level": 3}
     assert render_summary(template, data) == expected
+
+
+@pytest.fixture
+def linked_systems():
+    """An open and an admin-only system linked to the schema, one unlinked."""
+    from backend.tests.conftest import make_game_system
+
+    from backend.services import compendium_links
+
+    made = {
+        "open": make_game_system(name="Demo 2024"),
+        "hidden": make_game_system(name="Demo Restricted", access_level="admin"),
+        "other": make_game_system(name="Other Game"),
+    }
+    db = SessionLocal()
+    try:
+        compendium_links.link(db, made["open"].id, "comp-demo")
+        compendium_links.link(db, made["hidden"].id, "comp-demo")
+        db.commit()
+    finally:
+        db.close()
+    yield {key: system.id for key, system in made.items()}
+    db = SessionLocal()
+    try:
+        db.query(AppSetting).filter_by(key=compendium_links.KEY).delete()
+        db.query(GameSystem).filter(GameSystem.id.in_([s.id for s in made.values()])).delete(
+            synchronize_session=False
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+class TestLinkedSystems:
+    def test_a_schema_lists_the_systems_the_caller_can_see(
+        self, client, player_headers, admin_headers, server_rules, linked_systems
+    ):
+        player = _get(client, player_headers)["schemas"][0]["systems"]
+        assert player == [{"id": linked_systems["open"], "name": "Demo 2024"}]
+        admin = _get(client, admin_headers)["schemas"][0]["systems"]
+        assert [s["name"] for s in admin] == ["Demo 2024", "Demo Restricted"]
+
+    def test_the_schema_list_carries_them_too(
+        self, client, player_headers, server_rules, linked_systems
+    ):
+        resp = client.get("/api/content/compendium/schemas", headers=player_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()[0]["schema_id"] == "comp-demo"
+        assert resp.json()[0]["systems"][0]["id"] == linked_systems["open"]
+
+    def test_search_hits_carry_the_systems(
+        self, client, player_headers, server_rules, linked_systems
+    ):
+        hits = client.get("/api/search", params={"q": "fire"}, headers=player_headers).json()
+        assert hits["compendium"][0]["game_systems"] == [
+            {"id": linked_systems["open"], "name": "Demo 2024"}
+        ]
+
+    def test_a_system_filter_keeps_only_its_schema(
+        self, client, player_headers, server_rules, linked_systems
+    ):
+        def search(system_id):
+            resp = client.get(
+                "/api/search", params={"q": "fire", "system_id": system_id}, headers=player_headers
+            )
+            return resp.json()["compendium"]
+
+        assert len(search(linked_systems["open"])) == 3
+        assert search(linked_systems["other"]) == []
+
+    def test_a_gm_links_a_system_to_a_schema(self, client, gm_headers, linked_systems):
+        system_id = linked_systems["other"]
+        resp = client.patch(
+            f"/api/systems/{system_id}", json={"compendium_schema_id": "comp-demo"}, headers=gm_headers
+        )
+        assert resp.status_code == 200, resp.text
+        assert client.get(f"/api/systems/{system_id}", headers=gm_headers).json()[
+            "compendium_schema_id"
+        ] == "comp-demo"
+        client.patch(f"/api/systems/{system_id}", json={"compendium_schema_id": ""}, headers=gm_headers)
+        assert client.get(f"/api/systems/{system_id}", headers=gm_headers).json()[
+            "compendium_schema_id"
+        ] == ""
+
+
+def test_a_malformed_link_setting_is_ignored():
+    from backend.services import compendium_links
+
+    db = SessionLocal()
+    try:
+        for value in ("not json", "[1, 2]", '{"sys": 3}'):
+            compendium_links.set_raw(db, compendium_links.KEY, value)
+            assert compendium_links.schema_by_system(db) == {}
+        compendium_links.link(db, "sys", "comp-demo")
+        assert compendium_links.schema_for(db, "sys") == "comp-demo"
+        compendium_links.link(db, "sys", "")
+        assert compendium_links.schema_for(db, "sys") == ""
+    finally:
+        db.rollback()
+        db.close()

@@ -9,12 +9,13 @@ from ._schemas import (
     CatalogResponse,
     CompendiumEntryResponse,
     CompendiumResponse,
+    CompendiumSchema,
     ContentTypeListResponse,
     PackListResponse,
     ResolveResponse,
 )
 from .assets import get_asset
-from .compendium import browse_compendium, get_compendium_entry
+from .compendium import browse_compendium, get_compendium_entry, list_compendium_schemas
 from .core import (
     browse_content,
     reload_packs,
@@ -47,6 +48,14 @@ router.add_api_route(
     methods=["GET"],
     summary="Browse every readable entry of a schema, across content types",
     response_model=CompendiumResponse,
+)
+# Two segments, like /{schema_id}/{content_type}: registered first for the same reason.
+router.add_api_route(
+    "/compendium/schemas",
+    list_compendium_schemas,
+    methods=["GET"],
+    summary="The schemas with compendium content, with their linked library systems",
+    response_model=list[CompendiumSchema],
 )
 # Three segments, like /{schema_id}/{content_type}/{entry_id}: registered first
 # so "compendium" is never read as a schema id.
