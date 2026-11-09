@@ -174,11 +174,13 @@ def search_library(
         audio = _search_audio(db, parsed)
         models = _search_models(db, parsed, hide_explicit=hide_explicit)
 
-    # The compendium is not a library system, so the system filter does not
-    # narrow it; a book-scoped or metadata (`title:`) search is not about rules.
+    # A system filter keeps the compendium schemas linked to that system; a
+    # book-scoped or metadata (`title:`) search is not about rules.
     compendium = []
     if not book_id and not parsed.filters:
-        compendium = search_compendium(db, current_user.id, " ".join(parsed.free_terms), limit)
+        compendium = search_compendium(
+            db, user, " ".join(parsed.free_terms), limit, system_id=system_id
+        )
 
     return {
         "query": q,

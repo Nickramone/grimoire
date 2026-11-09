@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional, Union
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from ...services import tag_service
 from .._bulk_schemas import bulk_update_model
@@ -142,6 +142,13 @@ class GameSystemUpdate(BaseModel):
 
 # Batch form of GameSystemUpdate: {"items": [{"id": ..., ...GameSystemUpdate fields}]}.
 GameSystemBulkUpdate = bulk_update_model(GameSystemUpdate, "GameSystem")
+
+
+class GameSystemPatch(GameSystemUpdate):
+    """One system's update: also its compendium schema, which a batch does not set."""
+
+    # The compendium schema of this system (e.g. "dnd-5e-2024"); "" unlinks it.
+    compendium_schema_id: Optional[str] = Field(default=None, max_length=100)
 
 
 # --- Response models ---------------------------------------------------------
@@ -294,6 +301,8 @@ class SystemDetail(SystemSummary):
     # The system's own folder, library-relative ("books/{System}"), for a
     # rescan scoped to it; null for a system with no books.
     scope_path: Optional[str] = None
+    # The compendium schema whose entries belong to this system; "" when none.
+    compendium_schema_id: str = ""
 
 
 class SystemBooksPage(BaseModel):

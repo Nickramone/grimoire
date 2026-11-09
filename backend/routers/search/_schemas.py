@@ -84,6 +84,11 @@ class SearchAudioHit(BaseModel):
     tags: list[str]
 
 
+class SearchCompendiumSystem(BaseModel):
+    id: str
+    name: str = ""
+
+
 class SearchCompendiumHit(BaseModel):
     """A compendium entry (spell, item, feat...) matching the search."""
 
@@ -95,6 +100,8 @@ class SearchCompendiumHit(BaseModel):
     schema_name: str = ""
     # The entry's one-line summary from its type's `compact_display`.
     display: str = ""
+    # The library systems linked to the entry's schema, for the system filter.
+    game_systems: list[SearchCompendiumSystem] = []
 
 
 class SearchField(BaseModel):

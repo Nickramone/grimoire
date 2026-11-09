@@ -100,12 +100,21 @@ class ResolveResponse(BaseModel):
     entries: dict[str, ResolvedEntry]
 
 
+class CompendiumSystem(BaseModel):
+    """A library system linked to a compendium schema."""
+
+    id: str
+    name: str = ""
+
+
 class CompendiumSchema(BaseModel):
     """A game system with compendium content the caller can read."""
 
     schema_id: str
     name: str = ""
     entry_count: int = 0
+    # The library systems (editions) whose compendium this schema is.
+    systems: list[CompendiumSystem] = Field(default_factory=list)
 
 
 class CompendiumResponse(BaseModel):

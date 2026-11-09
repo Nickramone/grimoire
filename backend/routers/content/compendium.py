@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from ...auth import CurrentUser, get_current_user
 from ...config import get_db
-from ...models import CharacterSchema, ContentEntry, Ruleset, RulesetEntry
+from ...models import CharacterSchema, ContentEntry, GameSystem, Ruleset, RulesetEntry
+from ...services import access_control, compendium_links
 from ...services.characters import rulesets as rs
 from ...services.characters.user_schemas import compendium_schema_document
 from . import _helpers as helpers
@@ -24,8 +25,28 @@ from .core import _catalog_rows
 DEFAULT_PAGE_SIZE = 60
 
 
-def _readable_schemas(db: Session, user_id: str) -> list[dict]:
-    """Schemas with content this user can read, the largest first."""
+def _linked_systems(db: Session, user) -> dict[str, list[dict]]:
+    """The library systems each schema is linked to, those the user can see.
+
+    A system names its compendium schema (see ``services.compendium_links``), so
+    the edition chosen in the library or in the search can narrow the compendium.
+    """
+    schema_of = compendium_links.schema_by_system(db)
+    if not schema_of:
+        return {}
+    query = db.query(GameSystem.id, GameSystem.name).filter(GameSystem.id.in_(list(schema_of)))
+    linked: dict[str, list[dict]] = {}
+    for system_id, name in access_control.visible_systems(db, query, user).order_by(GameSystem.name):
+        linked.setdefault(schema_of[system_id], []).append({"id": system_id, "name": name})
+    return linked
+
+
+def _readable_schemas(db: Session, user) -> list[dict]:
+    """Schemas with content this user can read, the largest first.
+
+    Each carries the library systems linked to it, see ``_linked_systems``.
+    """
+    user_id = user.id
     counts: dict[str, int] = {}
     for schema_id, count in (
         db.query(ContentEntry.schema_id, func.count(ContentEntry.id))
@@ -48,8 +69,14 @@ def _readable_schemas(db: Session, user_id: str) -> list[dict]:
         .filter(CharacterSchema.schema_id.in_(list(counts)))
         .all()
     }
+    linked = _linked_systems(db, user)
     schemas = [
-        {"schema_id": schema_id, "name": names.get(schema_id, schema_id), "entry_count": count}
+        {
+            "schema_id": schema_id,
+            "name": names.get(schema_id, schema_id),
+            "entry_count": count,
+            "systems": linked.get(schema_id, []),
+        }
         for schema_id, count in counts.items()
     ]
     return sorted(schemas, key=lambda s: (-s["entry_count"], s["schema_id"]))
@@ -94,7 +121,7 @@ def browse_compendium(
     Filters arrive as ``filter[field]=value`` and apply only with a content type.
     A search ranks entries whose name matches above those matching elsewhere.
     """
-    schemas = _readable_schemas(db, current_user.id)
+    schemas = _readable_schemas(db, access_control.load_user(db, current_user))
     known = {s["schema_id"] for s in schemas}
     if schema_id not in known:
         schema_id = schemas[0]["schema_id"] if schemas else None
@@ -196,17 +223,32 @@ def get_compendium_entry(
     }
 
 
-def search_compendium(db: Session, user_id: str, query: str, limit: int) -> list[dict]:
+def list_compendium_schemas(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The schemas with compendium content, for choosing a system's edition."""
+    return _readable_schemas(db, access_control.load_user(db, current_user))
+
+
+def search_compendium(
+    db: Session, user, query: str, limit: int, system_id: Optional[str] = None
+) -> list[dict]:
     """Compendium entries matching a global search, every readable schema.
 
     For the global search page's Compendium section: the same matching as the
     compendium itself, a name match ranked above a match in the text, then by
-    name. Each hit carries what a result row shows and links to.
+    name. Each hit carries what a result row shows and links to, and the
+    library systems of its schema, so the page's system filter applies to it.
+    With ``system_id`` only the schemas linked to that system are searched.
     """
     if not re.findall(r"[\w']+", query):
         return []
+    user_id = user.id
     hits = []
-    for schema in _readable_schemas(db, user_id):
+    for schema in _readable_schemas(db, user):
+        if system_id and not any(s["id"] == system_id for s in schema["systems"]):
+            continue
         schema_id = schema["schema_id"]
         document = compendium_schema_document(db, user_id, schema_id) or {}
         for name, definition in sorted((document.get("content_types") or {}).items()):
@@ -224,6 +266,7 @@ def search_compendium(db: Session, user_id: str, query: str, limit: int) -> list
             "type_label": definition.get("label", row.content_type),
             "schema_id": schema["schema_id"],
             "schema_name": schema["name"],
+            "game_systems": schema["systems"],
             "display": helpers.render_summary(definition.get("compact_display", ""), row.data or {}),
         }
         for _, _, row, definition, schema in hits[:limit]
