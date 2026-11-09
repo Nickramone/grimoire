@@ -375,6 +375,8 @@
     "results_one": "{{count}} resultado para \"{{query}}\"",
     "results_other": "{{count}} resultados para \"{{query}}\"",
     "books": "Libros",
+    "compendium": "Compendio",
+    "compendiumAll": "Ver todo en el Compendio",
     "maps": "Mapas",
     "tokens": "Fichas",
     "noResults": "No se han encontrado resultados. Prueba con otras palabras clave o asegúrate de que tus libros estén indexados.",

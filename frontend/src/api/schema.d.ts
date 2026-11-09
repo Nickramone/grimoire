@@ -14388,6 +14388,35 @@ export interface components {
             year?: number | null;
         };
         /**
+         * SearchCompendiumHit
+         * @description A compendium entry (spell, item, feat...) matching the search.
+         */
+        SearchCompendiumHit: {
+            /** Content Type */
+            content_type: string;
+            /**
+             * Display
+             * @default
+             */
+            display?: string;
+            /** Entry Id */
+            entry_id: string;
+            /** Name */
+            name: string;
+            /** Schema Id */
+            schema_id: string;
+            /**
+             * Schema Name
+             * @default
+             */
+            schema_name?: string;
+            /**
+             * Type Label
+             * @default
+             */
+            type_label?: string;
+        };
+        /**
          * SearchField
          * @description One documented `field:` prefix, for the in-app help popover.
          */
@@ -14469,6 +14498,11 @@ export interface components {
              * @default []
              */
             book_matches?: components["schemas"]["SearchBookMatch"][];
+            /**
+             * Compendium
+             * @default []
+             */
+            compendium?: components["schemas"]["SearchCompendiumHit"][];
             /**
              * Fields
              * @default []

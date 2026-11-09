@@ -375,6 +375,8 @@
     "results_one": "{{count}} resultat för \"{{query}}\"",
     "results_other": "{{count}} resultat för \"{{query}}\"",
     "books": "Böcker",
+    "compendium": "Kompendium",
+    "compendiumAll": "Visa alla i kompendiet",
     "maps": "Kartor",
     "tokens": "Tokens",
     "noResults": "Inga resultat hittades. Prova andra sökord, eller kontrollera att dina böcker är indexerade.",

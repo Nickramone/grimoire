@@ -375,6 +375,8 @@
     "results_one": "{{count}} result for \"{{query}}\"",
     "results_other": "{{count}} results for \"{{query}}\"",
     "books": "Books",
+    "compendium": "Compendium",
+    "compendiumAll": "Show all in the Compendium",
     "maps": "Maps",
     "tokens": "Tokens",
     "noResults": "No results found. Try different keywords, or make sure your books are indexed.",

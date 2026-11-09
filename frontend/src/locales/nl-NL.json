@@ -375,6 +375,8 @@
     "results_one": "{{count}} resultaat voor \"{{query}}\"",
     "results_other": "{{count}} resultaten voor \"{{query}}\"",
     "books": "Boeken",
+    "compendium": "Compendium",
+    "compendiumAll": "Alles tonen in het Compendium",
     "maps": "Kaarten",
     "tokens": "Tokens",
     "noResults": "Geen resultaten gevonden. Probeer andere zoekwoorden of controleer of je boeken zijn geïndexeerd.",

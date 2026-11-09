@@ -260,3 +260,32 @@ class TestCompendiumSchemaFallback:
             headers=player_headers,
         )
         assert resp.status_code == 404
+
+
+class TestGlobalSearch:
+    def test_the_search_page_lists_compendium_entries(
+        self, client, player_headers, server_rules
+    ):
+        resp = client.get("/api/search", params={"q": "fire"}, headers=player_headers)
+        assert resp.status_code == 200, resp.text
+        hits = resp.json()["compendium"]
+        assert [h["name"] for h in hits] == ["Fire Bolt", "Fireball", "Flame Tongue"]
+        assert hits[0]["content_type"] == "spell"
+        assert hits[0]["type_label"] == "Spell"
+        assert hits[0]["schema_id"] == "comp-demo"
+        assert hits[0]["schema_name"] == "Compendium Demo"
+        assert resp.json()["total"] >= 3
+
+    def test_it_honours_the_limit(self, client, player_headers, server_rules):
+        resp = client.get("/api/search", params={"q": "fire", "limit": 2}, headers=player_headers)
+        assert len(resp.json()["compendium"]) == 2
+
+    def test_a_metadata_search_leaves_it_out(self, client, player_headers, server_rules):
+        resp = client.get("/api/search", params={"q": "title:fire"}, headers=player_headers)
+        assert resp.json()["compendium"] == []
+
+    def test_a_book_scoped_search_leaves_it_out(self, client, player_headers, server_rules):
+        resp = client.get(
+            "/api/search", params={"q": "fire", "book_id": "any"}, headers=player_headers
+        )
+        assert resp.json()["compendium"] == []

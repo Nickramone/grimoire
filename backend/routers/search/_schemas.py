@@ -84,6 +84,19 @@ class SearchAudioHit(BaseModel):
     tags: list[str]
 
 
+class SearchCompendiumHit(BaseModel):
+    """A compendium entry (spell, item, feat...) matching the search."""
+
+    entry_id: str
+    name: str
+    content_type: str
+    type_label: str = ""
+    schema_id: str
+    schema_name: str = ""
+    # The entry's one-line summary from its type's `compact_display`.
+    display: str = ""
+
+
 class SearchField(BaseModel):
     """One documented `field:` prefix, for the in-app help popover."""
 
@@ -109,5 +122,7 @@ class SearchResponse(BaseModel):
     tokens: list[SearchTokenHit]
     audio: list[SearchAudioHit]
     models: list[SearchModelHit] = []
+    # Rules entries from the compendium; empty for a book-scoped or `field:` search.
+    compendium: list[SearchCompendiumHit] = []
     # Canonical names of the `field:` filters recognised in `query`.
     fields: list[str] = []

@@ -7,7 +7,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LuSearch,
@@ -16,6 +16,7 @@ import {
   LuBox,
   LuUser,
   LuBookOpen,
+  LuBookOpenText,
   LuChevronDown,
   LuChevronRight,
   LuInfo,
@@ -182,7 +183,8 @@ export default function SearchView() {
     groupedBooks.reduce((s, g) => s + g.pages.length, 0) +
     (results?.maps?.length ?? 0) +
     (results?.tokens?.length ?? 0) +
-    (results?.audio?.length ?? 0)
+    (results?.audio?.length ?? 0) +
+    (results?.compendium?.length ?? 0)
 
   // A long result list starts with its sections and book groups collapsed, so
   // the headers (with their counts) are the overview; anything the user has
@@ -194,12 +196,14 @@ export default function SearchView() {
     results?.tokens?.length ?? 0,
     results?.audio?.length ?? 0,
     results?.models?.length ?? 0,
+    results?.compendium?.length ?? 0,
   ].filter((n) => n > 0)
   const resultCount =
     matchedBookCount + pageHitCount + sectionCounts.slice(1).reduce((n, c) => n + c, 0)
   const autoCollapsed: Record<string, boolean> = {}
   if (shouldAutoCollapse(resultCount, sectionCounts.length)) {
-    for (const key of ['books', 'maps', 'tokens', 'audio', 'models']) autoCollapsed[key] = true
+    for (const key of ['books', 'compendium', 'maps', 'tokens', 'audio', 'models'])
+      autoCollapsed[key] = true
   }
   if (shouldAutoCollapse(pageHitCount, groupedBooks.length)) {
     for (const g of groupedBooks) autoCollapsed[`book-${g.id}`] = true
@@ -303,6 +307,7 @@ export default function SearchView() {
           const tokens = results.tokens ?? []
           const audio = results.audio ?? []
           const models = results.models ?? []
+          const compendium = results.compendium ?? []
           // Title matches respect the system dropdown like the page hits do,
           // so filtering to one system doesn't leave foreign books pinned on top.
           const bookMatches = systemFilter
@@ -406,6 +411,57 @@ export default function SearchView() {
                         )
                       )}
                     </ul>
+                  )}
+                </section>
+              )}
+
+              {compendium.length > 0 && (
+                <section style={{ marginBottom: 24 }}>
+                  <h2 style={plainHeading}>
+                    <button
+                      onClick={() => toggleSection('compendium')}
+                      aria-expanded={!shownCollapsed.compendium}
+                      style={sectionHeadStyle}
+                    >
+                      {shownCollapsed.compendium ? (
+                        <LuChevronRight size={14} />
+                      ) : (
+                        <LuChevronDown size={14} />
+                      )}
+                      <LuBookOpenText size={14} /> {t('search.compendium')}
+                      <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 400 }}>
+                        {compendium.length}
+                      </span>
+                    </button>
+                  </h2>
+                  {!shownCollapsed.compendium && (
+                    <>
+                      <ul role="list" className="card-list">
+                        {compendium.map((hit) => {
+                          const search = new URLSearchParams({
+                            schema: hit.schema_id,
+                            q: results.query,
+                          })
+                          return (
+                            <li key={`${hit.schema_id}:${hit.content_type}:${hit.entry_id}`}>
+                              <ResultCard
+                                to={`/compendium/${encodeURIComponent(hit.content_type)}/${encodeURIComponent(hit.entry_id)}?${search}`}
+                                title={hit.name}
+                                subtitle={[hit.type_label, hit.display, hit.schema_name]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              />
+                            </li>
+                          )
+                        })}
+                      </ul>
+                      <Link
+                        to={`/compendium?${new URLSearchParams({ q: results.query })}`}
+                        style={{ display: 'inline-block', marginTop: 8, fontSize: 14 }}
+                      >
+                        {t('search.compendiumAll')}
+                      </Link>
+                    </>
                   )}
                 </section>
               )}
