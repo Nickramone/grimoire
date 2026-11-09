@@ -180,6 +180,8 @@ export const compendium = {
           .map(([field, wanted]): [string, string] => [`filter[${field}]`, String(wanted)])
       )
     ) as Promise<ResponseOf<'/content/compendium', 'get'>>,
+  /** The schemas with compendium content, each with its linked library systems. */
+  schemas: () => client.get('/content/compendium/schemas'),
   entry: (schemaId: string, contentType: string, entryId: string) =>
     client.get('/content/compendium/{content_type}/{entry_id}', {
       path: { content_type: contentType, entry_id: entryId },

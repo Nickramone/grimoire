@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import AccessLevelPicker from '../metadata/AccessLevelPicker'
 import { useAuth } from '../../context/AuthContext'
 import { useTranslation } from 'react-i18next'
 import { LuDownload, LuX, LuPlus } from 'react-icons/lu'
-import api from '../../api'
+import api, { compendium as compendiumApi } from '../../api'
 import type { Schema } from '../../api'
 import type { CoverChange } from './CoverUpload'
 import CoverPicker from './CoverPicker'
@@ -52,6 +52,7 @@ interface SystemForm {
   cover_book_id: string | null
   is_explicit: boolean
   access_level: string
+  compendium_schema_id: string
 }
 
 /** What is PATCHed: the form with the year parsed and empty links dropped. */
@@ -96,7 +97,29 @@ export default function SystemEditor({
     cover_book_id: system.cover_book_id || null,
     is_explicit: system.is_explicit || false,
     access_level: system.access_level || '',
+    compendium_schema_id: system.compendium_schema_id || '',
   })
+  // The schemas with compendium content, for linking this system to one. The
+  // field stays hidden on a server without any, unless a link is already set.
+  const [compendiumSchemas, setCompendiumSchemas] = useState<Schema<'CompendiumSchema'>[]>([])
+  useEffect(() => {
+    let live = true
+    compendiumApi
+      .schemas()
+      .then((list) => live && setCompendiumSchemas(list ?? []))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+  const compendiumOptions = compendiumSchemas.some((s) => s.schema_id === form.compendium_schema_id)
+    ? compendiumSchemas
+    : form.compendium_schema_id
+      ? [
+          ...compendiumSchemas,
+          { schema_id: form.compendium_schema_id, name: form.compendium_schema_id },
+        ]
+      : compendiumSchemas
   // "Fetch metadata" only appears when a source is actually available, so the
   // button never promises something the server cannot do. Cached per kind, so
   // reopening an editor doesn't re-ask and the button doesn't pop in late.
@@ -336,6 +359,29 @@ export default function SystemEditor({
               )}
             </div>
           </div>
+          {compendiumOptions.length > 0 &&
+            labeledBlock(
+              t('systemEditor.compendiumSchema'),
+              <>
+                <select
+                  id="system-compendium-schema"
+                  aria-label={t('systemEditor.compendiumSchema')}
+                  value={form.compendium_schema_id}
+                  onChange={(e) => setForm((f) => ({ ...f, compendium_schema_id: e.target.value }))}
+                  style={{ width: '100%' }}
+                >
+                  <option value="">{t('systemEditor.compendiumNone')}</option>
+                  {compendiumOptions.map((s) => (
+                    <option key={s.schema_id} value={s.schema_id}>
+                      {s.name || s.schema_id}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+                  {t('systemEditor.compendiumHint')}
+                </div>
+              </>
+            )}
           {/* License + Year sit above Publishers. */}
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
