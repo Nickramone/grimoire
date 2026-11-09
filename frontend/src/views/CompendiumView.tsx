@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { LuBookOpenText } from 'react-icons/lu'
+import { LuBookOpenText, LuSkull } from 'react-icons/lu'
 import { compendium as compendiumApi } from '../api'
 import type { Schema } from '../api'
 import Spinner from '../components/Spinner'
@@ -45,10 +45,16 @@ const chipStyle = (active: boolean): CSSProperties => ({
  * The list state (edition, category, search, facet filters) lives in the URL
  * so a filtered view can be bookmarked; an open entry is its own route,
  * `/compendium/<type>/<id>`, so a link can point straight at it.
+ *
+ * With `bestiary` the same page lists the GM's monsters (schemas declaring only
+ * monsters) under `/bestiary`. A bestiary follows the compendium's edition: the
+ * choice is saved as the rules schema, which the server maps to its bestiary.
  */
-export default function CompendiumView() {
+export default function CompendiumView({ bestiary = false }: { bestiary?: boolean }) {
   const { t } = useTranslation()
-  usePageTitle(t('compendium.title'))
+  const base = bestiary ? '/bestiary' : '/compendium'
+  const title = t(bestiary ? 'bestiary.title' : 'compendium.title')
+  usePageTitle(title)
   const navigate = useNavigate()
   const location = useLocation()
   const { contentType: openType, entryId: openId } = useParams()
@@ -111,6 +117,7 @@ export default function CompendiumView() {
         const result = await compendiumApi.browse({
           // Without one in the URL, the edition last chosen here or in the search.
           schema_id: schemaParam || readEdition().schemaId || undefined,
+          bestiary: bestiary || undefined,
           content_type: typeParam || undefined,
           search: searchParam || undefined,
           page: pageToLoad,
@@ -135,7 +142,7 @@ export default function CompendiumView() {
         if (id === requestId.current) setLoading(false)
       }
     },
-    [schemaParam, typeParam, searchParam, filtersKey, t]
+    [schemaParam, typeParam, searchParam, filtersKey, bestiary, t]
   )
 
   useEffect(() => {
@@ -157,9 +164,9 @@ export default function CompendiumView() {
 
   const open = (entry: CatalogEntry) =>
     navigate(
-      `/compendium/${encodeURIComponent(entry.content_type)}/${encodeURIComponent(entry.entry_id)}${location.search}`
+      `${base}/${encodeURIComponent(entry.content_type)}/${encodeURIComponent(entry.entry_id)}${location.search}`
     )
-  const close = () => navigate(`/compendium${location.search}`)
+  const close = () => navigate(`${base}${location.search}`)
 
   const subtitle =
     searchParam || typeParam || Object.keys(filters).length
@@ -192,7 +199,7 @@ export default function CompendiumView() {
           }}
         >
           <div>
-            <h1 style={{ fontSize: 28, marginTop: 0, marginBottom: 8 }}>{t('compendium.title')}</h1>
+            <h1 style={{ fontSize: 28, marginTop: 0, marginBottom: 8 }}>{title}</h1>
             <p
               aria-live="polite"
               aria-atomic="true"
@@ -222,8 +229,12 @@ export default function CompendiumView() {
                 <SearchInput
                   value={searchText}
                   onChange={setSearchText}
-                  placeholder={t('compendium.searchPlaceholder')}
-                  ariaLabel={t('compendium.searchPlaceholder')}
+                  placeholder={t(
+                    bestiary ? 'bestiary.searchPlaceholder' : 'compendium.searchPlaceholder'
+                  )}
+                  ariaLabel={t(
+                    bestiary ? 'bestiary.searchPlaceholder' : 'compendium.searchPlaceholder'
+                  )}
                 />
               </div>
               <ViewModeToggle mode={viewMode} onCycle={cycleViewMode} />
@@ -235,7 +246,11 @@ export default function CompendiumView() {
                 onChange={(event) => {
                   const chosen = schemas.find((s) => s.schema_id === event.target.value)
                   saveEdition({
-                    schemaId: event.target.value,
+                    // A bestiary is remembered as its rules schema, so the
+                    // compendium opens on the same edition.
+                    schemaId: bestiary
+                      ? event.target.value.replace(/-bestiary$/, '')
+                      : event.target.value,
                     systemId: chosen?.systems?.[0]?.id ?? '',
                   })
                   setFacets({})
@@ -371,9 +386,15 @@ export default function CompendiumView() {
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
-            <LuBookOpenText size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
+            {bestiary ? (
+              <LuSkull size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
+            ) : (
+              <LuBookOpenText size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
+            )}
             <p>
-              {grandTotal === 0 && !searchParam ? t('compendium.empty') : t('compendium.noMatches')}
+              {grandTotal === 0 && !searchParam
+                ? t(bestiary ? 'bestiary.empty' : 'compendium.empty')
+                : t('compendium.noMatches')}
             </p>
           </div>
         )}

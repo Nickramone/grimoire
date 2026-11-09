@@ -9,6 +9,7 @@
   "nav": {
     "library": "Biblioteca",
     "compendium": "Compendio",
+    "bestiary": "Bestiario",
     "maps": "Mapas",
     "tokens": "Fichas",
     "search": "Buscar",
@@ -1052,6 +1053,11 @@
     "empty": "El compendio está vacío: importa un conjunto de reglas para llenarlo.",
     "noMatches": "Ninguna entrada coincide.",
     "loadFailed": "No se pudo cargar el compendio."
+  },
+  "bestiary": {
+    "title": "Bestiario",
+    "searchPlaceholder": "Buscar monstruos…",
+    "empty": "El bestiario está vacío: importa tus monstruos como reglamento personal de un esquema que solo declare monstruos."
   },
   "settings": {
     "title": "Configuración",

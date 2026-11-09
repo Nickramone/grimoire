@@ -115,6 +115,8 @@ class CompendiumSchema(BaseModel):
     entry_count: int = 0
     # The library systems (editions) whose compendium this schema is.
     systems: list[CompendiumSystem] = Field(default_factory=list)
+    # A bestiary (monsters only) is browsed on its own page, not the compendium.
+    bestiary: bool = False
 
 
 class CompendiumResponse(BaseModel):

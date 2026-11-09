@@ -9,6 +9,7 @@
   "nav": {
     "library": "Libreria",
     "compendium": "Compendio",
+    "bestiary": "Bestiario",
     "maps": "Mappe",
     "tokens": "Token",
     "search": "Cerca",
@@ -1052,6 +1053,11 @@
     "empty": "Il compendio è vuoto: importa un ruleset per riempirlo.",
     "noMatches": "Nessuna voce corrisponde.",
     "loadFailed": "Impossibile caricare il compendio."
+  },
+  "bestiary": {
+    "title": "Bestiario",
+    "searchPlaceholder": "Cerca mostri…",
+    "empty": "Il bestiario è vuoto: importa i mostri come ruleset personale di uno schema che dichiara solo mostri."
   },
   "settings": {
     "title": "Impostazioni",

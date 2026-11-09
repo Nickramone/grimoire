@@ -138,6 +138,7 @@ class TestCompendium:
             "name": "Compendium Demo",
             "entry_count": 4,
             "systems": [],
+            "bestiary": False,
         } in body["schemas"]
 
     def test_one_type_sorts_by_its_default_and_offers_facets(
@@ -419,3 +420,80 @@ def test_a_malformed_link_setting_is_ignored():
     finally:
         db.rollback()
         db.close()
+
+
+BESTIARY = {
+    "id": "comp-demo-bestiary",
+    "name": "Demo Bestiary",
+    "content_types": {
+        "monster": {
+            "label": "Monster",
+            "identity_field": "name",
+            "search_fields": ["name"],
+            "fields": {"name": {"type": "text", "label": "Name"}},
+        }
+    },
+    "fields": {},
+}
+
+
+@pytest.fixture
+def gm_bestiary(client, gm_headers, server_rules):
+    """The GM's monsters, in a personal ruleset of a monsters-only schema."""
+    client.post("/api/characters/schemas", json={"document": BESTIARY}, headers=gm_headers)
+    resp = client.post(
+        "/api/rulesets",
+        json={"schema_id": "comp-demo-bestiary", "name": "Monsters", "personal": True},
+        headers=gm_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    _entry(client, gm_headers, resp.json()["id"], "monster", name="Fire Giant")
+    _entry(client, gm_headers, resp.json()["id"], "monster", name="Goblin")
+    yield
+    client.delete("/api/characters/schemas/comp-demo-bestiary", headers=gm_headers)
+
+
+class TestBestiary:
+    def test_the_bestiary_page_lists_only_bestiaries(self, client, gm_headers, gm_bestiary):
+        body = _get(client, gm_headers, bestiary="true")
+        assert [s["schema_id"] for s in body["schemas"]] == ["comp-demo-bestiary"]
+        assert body["schemas"][0]["bestiary"] is True
+        assert [e["name"] for e in body["entries"]] == ["Fire Giant", "Goblin"]
+
+    def test_the_compendium_leaves_them_out(self, client, gm_headers, gm_bestiary):
+        body = _get(client, gm_headers)
+        assert [s["schema_id"] for s in body["schemas"]] == ["comp-demo"]
+        assert _get(client, gm_headers, schema_id="comp-demo-bestiary")["schema_id"] == "comp-demo"
+        schemas = client.get("/api/content/compendium/schemas", headers=gm_headers).json()
+        assert [s["schema_id"] for s in schemas] == ["comp-demo"]
+
+    def test_a_rules_edition_opens_its_bestiary(self, client, gm_headers, gm_bestiary):
+        body = _get(client, gm_headers, bestiary="true", schema_id="comp-demo")
+        assert body["schema_id"] == "comp-demo-bestiary"
+
+    def test_it_follows_the_systems_of_its_rules_schema(
+        self, client, gm_headers, gm_bestiary, linked_systems
+    ):
+        body = _get(client, gm_headers, bestiary="true")
+        assert [s["name"] for s in body["schemas"][0]["systems"]] == ["Demo 2024"]
+
+    def test_players_and_admins_see_no_bestiary(
+        self, client, player_headers, admin_headers, gm_bestiary
+    ):
+        for headers in (player_headers, admin_headers):
+            assert _get(client, headers, bestiary="true")["schemas"] == []
+            resp = client.get(
+                "/api/content/compendium/monster/goblin",
+                params={"schema_id": "comp-demo-bestiary"},
+                headers=headers,
+            )
+            assert resp.status_code == 404
+            hits = client.get("/api/search", params={"q": "giant"}, headers=headers).json()
+            assert hits["compendium"] == []
+
+    def test_the_gm_finds_monsters_in_the_global_search(self, client, gm_headers, gm_bestiary):
+        hits = client.get("/api/search", params={"q": "fire"}, headers=gm_headers).json()["compendium"]
+        giant = next(h for h in hits if h["name"] == "Fire Giant")
+        assert giant["bestiary"] is True
+        assert giant["schema_id"] == "comp-demo-bestiary"
+        assert all(not h["bestiary"] for h in hits if h["name"] != "Fire Giant")

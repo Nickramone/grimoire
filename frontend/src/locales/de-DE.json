@@ -9,6 +9,7 @@
   "nav": {
     "library": "Bibliothek",
     "compendium": "Kompendium",
+    "bestiary": "Bestiarium",
     "maps": "Karten",
     "tokens": "Tokens",
     "search": "Suche",
@@ -1052,6 +1053,11 @@
     "empty": "Das Kompendium ist leer: Importiere ein Regelwerk, um es zu füllen.",
     "noMatches": "Keine passenden Einträge.",
     "loadFailed": "Das Kompendium konnte nicht geladen werden."
+  },
+  "bestiary": {
+    "title": "Bestiarium",
+    "searchPlaceholder": "Monster suchen…",
+    "empty": "Das Bestiarium ist leer: Importiere deine Monster als persönliches Regelwerk eines Schemas, das nur Monster enthält."
   },
   "settings": {
     "title": "Einstellungen",

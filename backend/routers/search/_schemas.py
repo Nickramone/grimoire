@@ -102,6 +102,8 @@ class SearchCompendiumHit(BaseModel):
     display: str = ""
     # The library systems linked to the entry's schema, for the system filter.
     game_systems: list[SearchCompendiumSystem] = []
+    # A bestiary entry opens on the bestiary page rather than the compendium.
+    bestiary: bool = False
 
 
 class SearchField(BaseModel):

@@ -176,6 +176,16 @@ describe('SearchView', () => {
           schema_name: 'D&D 5e (2024)',
           display: 'Level 3 Evocation',
         },
+        {
+          entry_id: 'fire-giant-xmm',
+          name: 'Fire Giant',
+          content_type: 'monster',
+          type_label: 'Monster',
+          schema_id: 'dnd-5e-2024-bestiary',
+          schema_name: 'Bestiary 2024',
+          display: '',
+          bestiary: true,
+        },
       ],
     })
     renderView()
@@ -185,6 +195,11 @@ describe('SearchView', () => {
     expect(entry).toHaveAttribute(
       'href',
       '/compendium/spell/fireball-xphb?schema=dnd-5e-2024&q=fireball'
+    )
+    // A GM's monster opens on the bestiary page.
+    expect(screen.getByRole('link', { name: 'Fire Giant' })).toHaveAttribute(
+      'href',
+      '/bestiary/monster/fire-giant-xmm?schema=dnd-5e-2024-bestiary&q=fireball'
     )
     expect(screen.getByText('Spell · Level 3 Evocation · D&D 5e (2024)')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Show all in the Compendium' })).toHaveAttribute(

@@ -34,6 +34,7 @@ export const CharacterDetailView = lazyWithPreload(() => import('../views/Charac
 const LANDING_VIEWS: Record<string, { preload: () => Promise<unknown> }> = {
   library: LibraryView,
   compendium: CompendiumView,
+  bestiary: CompendiumView,
   maps: MapsView,
   tokens: TokensView,
   audio: AudioView,

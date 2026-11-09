@@ -9,6 +9,7 @@
   "nav": {
     "library": "Bibliotheek",
     "compendium": "Compendium",
+    "bestiary": "Bestiarium",
     "maps": "Kaarten",
     "tokens": "Tokens",
     "search": "Zoeken",
@@ -1052,6 +1053,11 @@
     "empty": "Het compendium is leeg: importeer een regelset om het te vullen.",
     "noMatches": "Geen overeenkomende items.",
     "loadFailed": "Het compendium kon niet worden geladen."
+  },
+  "bestiary": {
+    "title": "Bestiarium",
+    "searchPlaceholder": "Monsters zoeken…",
+    "empty": "Het bestiarium is leeg: importeer je monsters als persoonlijke regelset van een schema met alleen monsters."
   },
   "settings": {
     "title": "Instellingen",

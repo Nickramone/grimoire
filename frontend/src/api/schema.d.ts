@@ -3515,6 +3515,9 @@ export interface paths {
          * Browse every readable entry of a schema, across content types
          * @description Browse the compendium: one schema, all or one content type, searchable.
          *
+         *     The compendium page lists the rules schemas, the bestiary page (``bestiary``)
+         *     the bestiaries. A rules ``schema_id`` asked of the bestiary opens the
+         *     bestiary of that edition, so both pages follow one edition choice.
          *     Without ``schema_id`` the schema with the most readable entries is used.
          *     Filters arrive as ``filter[field]=value`` and apply only with a content type.
          *     A search ranks entries whose name matches above those matching elsewhere.
@@ -3537,7 +3540,9 @@ export interface paths {
         };
         /**
          * The schemas with compendium content, with their linked library systems
-         * @description The schemas with compendium content, for choosing a system's edition.
+         * @description The rules schemas with compendium content, for choosing a system's edition.
+         *
+         *     Bestiaries are left out: one follows its rules schema, see BESTIARY_SUFFIX.
          */
         get: operations["list_compendium_schemas_api_content_compendium_schemas_get"];
         put?: never;
@@ -5371,7 +5376,7 @@ export interface paths {
         put?: never;
         /**
          * Create a ruleset for a campaign, or for the server
-         * @description Add a ruleset to a campaign, or to the server if you are an admin.
+         * @description Add a ruleset to a campaign, to the server if you are an admin, or for yourself.
          */
         post: operations["create_ruleset_api_rulesets_post"];
         delete?: never;
@@ -10176,6 +10181,11 @@ export interface components {
          */
         CompendiumSchema: {
             /**
+             * Bestiary
+             * @default false
+             */
+            bestiary?: boolean;
+            /**
              * Entry Count
              * @default 0
              */
@@ -13716,6 +13726,11 @@ export interface components {
             license_url?: string;
             /** Name */
             name: string;
+            /**
+             * Personal
+             * @default false
+             */
+            personal?: boolean;
             /** Schema Id */
             schema_id: string;
         };
@@ -14432,6 +14447,11 @@ export interface components {
          * @description A compendium entry (spell, item, feat...) matching the search.
          */
         SearchCompendiumHit: {
+            /**
+             * Bestiary
+             * @default false
+             */
+            bestiary?: boolean;
             /** Content Type */
             content_type: string;
             /**
@@ -25573,6 +25593,7 @@ export interface operations {
                 search?: string;
                 page?: number;
                 page_size?: number;
+                bestiary?: boolean;
             };
             header?: {
                 /** @description An API key, for external integrations (instead of a session). */

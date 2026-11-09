@@ -472,7 +472,7 @@ export default function SearchView() {
                           return (
                             <li key={`${hit.schema_id}:${hit.content_type}:${hit.entry_id}`}>
                               <ResultCard
-                                to={`/compendium/${encodeURIComponent(hit.content_type)}/${encodeURIComponent(hit.entry_id)}?${search}`}
+                                to={`/${hit.bestiary ? 'bestiary' : 'compendium'}/${encodeURIComponent(hit.content_type)}/${encodeURIComponent(hit.entry_id)}?${search}`}
                                 title={hit.name}
                                 subtitle={[hit.type_label, hit.display, hit.schema_name]
                                   .filter(Boolean)
