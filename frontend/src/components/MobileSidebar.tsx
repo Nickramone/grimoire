@@ -46,11 +46,12 @@ export default function MobileSidebar({ user, onLogout, uiSettings = {} }: Mobil
     return () => document.removeEventListener('keydown', onKey)
   }, [moreOpen])
   const isGuest = user?.role === 'guest'
-  const { hide_maps, hide_tokens, hide_audio, hide_models, hide_campaigns } = uiSettings
+  const { hide_compendium, hide_maps, hide_tokens, hide_audio, hide_models, hide_campaigns } =
+    uiSettings
   const moreRoutes = [
     '/settings',
     '/tags',
-    '/compendium',
+    ...(!hide_compendium ? ['/compendium'] : []),
     ...(!hide_maps ? ['/maps'] : []),
     ...(!hide_tokens ? ['/tokens'] : []),
     ...(!hide_audio ? ['/audio'] : []),
@@ -158,12 +159,14 @@ export default function MobileSidebar({ user, onLogout, uiSettings = {} }: Mobil
               padding: '8px 0',
             }}
           >
-            <MoreItem
-              to="/compendium"
-              Icon={LuBookOpenText}
-              label={t('nav.compendium')}
-              onClick={() => setMoreOpen(false)}
-            />
+            {!hide_compendium && (
+              <MoreItem
+                to="/compendium"
+                Icon={LuBookOpenText}
+                label={t('nav.compendium')}
+                onClick={() => setMoreOpen(false)}
+              />
+            )}
             {!hide_maps && (
               <MoreItem
                 to="/maps"

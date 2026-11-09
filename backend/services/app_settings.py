@@ -39,6 +39,7 @@ _DEFAULTS = {
     "hide_tokens": "false",
     "hide_audio": "false",
     "hide_models": "false",
+    "hide_compendium": "false",
     "hide_campaigns": "false",
     # Category → access-level map restricting whole categories app-wide (issue
     # #258), as a JSON object. "{}" means nothing is restricted by category.
@@ -197,6 +198,7 @@ def to_typed(raw: dict) -> dict:
         "hide_tokens": raw["hide_tokens"] == "true",
         "hide_audio": raw["hide_audio"] == "true",
         "hide_models": raw["hide_models"] == "true",
+        "hide_compendium": raw["hide_compendium"] == "true",
         "hide_campaigns": raw["hide_campaigns"] == "true",
         "restricted_categories": _restricted_categories_to_typed(raw),
         "show_stat_systems": raw["show_stat_systems"] == "true",

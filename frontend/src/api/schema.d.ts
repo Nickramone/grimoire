@@ -14745,6 +14745,8 @@ export interface components {
             hide_audio?: boolean | null;
             /** Hide Campaigns */
             hide_campaigns?: boolean | null;
+            /** Hide Compendium */
+            hide_compendium?: boolean | null;
             /** Hide Maps */
             hide_maps?: boolean | null;
             /** Hide Models */
@@ -14871,6 +14873,8 @@ export interface components {
             hide_audio: boolean;
             /** Hide Campaigns */
             hide_campaigns: boolean;
+            /** Hide Compendium */
+            hide_compendium: boolean;
             /** Hide Maps */
             hide_maps: boolean;
             /** Hide Models */
@@ -16200,6 +16204,8 @@ export interface components {
             hide_audio: boolean;
             /** Hide Campaigns */
             hide_campaigns: boolean;
+            /** Hide Compendium */
+            hide_compendium: boolean;
             /** Hide Maps */
             hide_maps: boolean;
             /** Hide Models */

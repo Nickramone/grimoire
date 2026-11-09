@@ -153,6 +153,7 @@ _FLAGS = (
     "hide_tokens",
     "hide_audio",
     "hide_models",
+    "hide_compendium",
     "hide_campaigns",
     "show_stat_systems",
     "show_stat_books",

@@ -6,6 +6,7 @@ const DEFAULT_UI_SETTINGS: UISettings = {
   hide_tokens: false,
   hide_audio: false,
   hide_models: false,
+  hide_compendium: false,
   hide_campaigns: false,
   campaign_uploads_disabled: false,
   campaign_upload_max_file_mb: 0,

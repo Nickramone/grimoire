@@ -85,6 +85,7 @@ export default function Sidebar({
   // Guests only see their campaign(s) — no library, maps, tokens, search,
   // favorites, or settings.
   const isGuest = user?.role === 'guest'
+  const hide_compendium = uiSettings.hide_compendium
   const hide_maps = uiSettings.hide_maps
   const hide_tokens = uiSettings.hide_tokens
   const hide_audio = uiSettings.hide_audio
@@ -235,6 +236,7 @@ export default function Sidebar({
         {/* Group 1: library content (Library, Maps, Tokens, Audio) */}
         {!isGuest && navItem('/library', <LuLibrary size={16} />, t('nav.library'), { end: false })}
         {!isGuest &&
+          !hide_compendium &&
           navItem('/compendium', <LuBookOpenText size={16} />, t('nav.compendium'), { end: false })}
         {!isGuest && !hide_maps && navItem('/maps', <LuMap size={16} />, t('nav.maps'))}
         {!isGuest && !hide_tokens && navItem('/tokens', <LuUser size={16} />, t('nav.tokens'))}
