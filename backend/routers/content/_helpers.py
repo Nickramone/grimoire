@@ -10,6 +10,10 @@ from ...models import ContentEntry
 #: `{name}` placeholders in a content type's compact_display template.
 _DISPLAY_TOKENS = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
+#: The `{name}` token with the separator that joins it to the rest of the
+#: template, on either side: "{name} — {school}" or "{school} · {name}".
+_NAME_TOKEN = re.compile(r"\{name\}\s*[—–\-·:,|]?\s*|\s*[—–\-·:,|]?\s*\{name\}")
+
 #: A filter facet lists the values actually present. Past this many distinct
 #: values a facet stops being a filter and becomes a second search box, so it is
 #: omitted rather than rendered unusable.
@@ -29,6 +33,15 @@ def render_display(template: str, data: dict) -> str:
     if not template:
         return ""
     return _DISPLAY_TOKENS.sub(lambda m: _as_text(data.get(m.group(1))), template).strip()
+
+
+def render_summary(template: str, data: dict) -> str:
+    """`render_display` without the entry's own name.
+
+    Wherever the name is already shown as the entry's title, a template that
+    starts with `{name}` would print it twice ("Fireball / Fireball — evocation 3").
+    """
+    return render_display(_NAME_TOKEN.sub("", template or "", count=1), data)
 
 
 def _as_text(value: Any) -> str:
@@ -145,16 +158,21 @@ def sort_entries(entries: list[ContentEntry], sort_fields: list[str]) -> list[Co
     return sorted(entries, key=key)
 
 
-def serialize_entry(entry, type_definition: dict) -> dict:
-    """Shape a catalog row for the API, pack or ruleset alike."""
+def serialize_entry(entry, type_definition: dict, *, omit_name: bool = False) -> dict:
+    """Shape a catalog row for the API, pack or ruleset alike.
+
+    `omit_name` drops the name from `display`, for views that title each entry
+    with its name.
+    """
     data = entry.data if isinstance(entry.data, dict) else {}
+    render = render_summary if omit_name else render_display
     return {
         "entry_id": entry.entry_id,
         "source": entry.source,
         "name": entry.name,
         "content_type": entry.content_type,
         "data": data,
-        "display": render_display(type_definition.get("compact_display", ""), data),
+        "display": render(type_definition.get("compact_display", ""), data),
         # The browser labels a ruleset row with the ruleset it came from, so
         # "Fireball (SRD)" and "Fireball (Strahd house rules)" are told apart.
         "ruleset": bool(getattr(entry, "ruleset", False)),

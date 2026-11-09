@@ -155,7 +155,7 @@ def browse_compendium(
         "schema_id": schema_id,
         "content_types": types,
         "entries": [
-            helpers.serialize_entry(entry, definitions[entry.content_type]) for entry in window
+            helpers.serialize_entry(entry, definitions[entry.content_type], omit_name=True) for entry in window
         ],
         "total": total,
         "page": current,
@@ -191,7 +191,7 @@ def get_compendium_entry(
         raise HTTPException(status_code=404, detail="Entry not found")
     rows.sort(key=lambda row: not row.ruleset)
     return {
-        "entry": helpers.serialize_entry(rows[0], definition),
+        "entry": helpers.serialize_entry(rows[0], definition, omit_name=True),
         "content_type": _type_summary(content_type, definition, 1),
     }
 
@@ -224,7 +224,7 @@ def search_compendium(db: Session, user_id: str, query: str, limit: int) -> list
             "type_label": definition.get("label", row.content_type),
             "schema_id": schema["schema_id"],
             "schema_name": schema["name"],
-            "display": helpers.render_display(definition.get("compact_display", ""), row.data or {}),
+            "display": helpers.render_summary(definition.get("compact_display", ""), row.data or {}),
         }
         for _, _, row, definition, schema in hits[:limit]
     ]
