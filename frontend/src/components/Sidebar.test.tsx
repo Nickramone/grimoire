@@ -149,7 +149,8 @@ describe('Sidebar navigation visibility', () => {
     renderSidebar({ stats: { ...baseStats, armory_books: 4 } })
     const links = screen.getAllByRole('link').map((l) => l.getAttribute('href'))
     expect(links.indexOf('/armory')).toBe(links.indexOf('/library') + 1)
-    expect(links.indexOf('/maps')).toBe(links.indexOf('/armory') + 1)
+    // The fork's Compendium (and the GM's Bestiary) sit between the Armory and Maps.
+    expect(links.indexOf('/maps')).toBeGreaterThan(links.indexOf('/armory'))
   })
 
   it('leaves an empty Armory to admins, and a hidden one to no one', () => {
