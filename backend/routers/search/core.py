@@ -15,6 +15,7 @@ from ...services.book_search import search_book_metadata
 from ...services.search_query import FIELD_ALIASES, MAX_QUERY_LENGTH, parse_query
 from ...services.systems import visible_book_system
 from ...services.media.access import allow_explicit
+from ..content.compendium import search_compendium
 from ._helpers import (
     EXPLICIT_BOOKS_CLAUSE,
     _search_models,
@@ -146,19 +147,28 @@ def search_library(
         audio = _search_audio(db, parsed)
         models = _search_models(db, parsed, hide_explicit=hide_explicit)
 
+    # A system filter keeps the compendium schemas linked to that system; a
+    # book-scoped or metadata (`title:`) search is not about rules.
+    compendium = []
+    if not book_id and not parsed.filters:
+        compendium = search_compendium(
+            db, user, " ".join(parsed.free_terms), limit, system_id=system_id
+        )
+
     return {
         "query": q,
         # Counts every distinct thing shown. A book matching by title *and* by
         # page text is one row in book_matches plus its page hits; both are
         # displayed, so both are counted.
         "total": len(enriched) + len(book_matches) + len(maps) + len(tokens) + len(audio)
-        + len(models),
+        + len(models) + len(compendium),
         "results": enriched,
         "book_matches": book_matches,
         "maps": maps,
         "tokens": tokens,
         "audio": audio,
         "models": models,
+        "compendium": compendium,
         # Echoed back so the client can show what it understood and, when a
         # filter is active, explain why the content section is empty.
         "fields": sorted(parsed.filters.keys()),

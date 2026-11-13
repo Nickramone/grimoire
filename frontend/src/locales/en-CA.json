@@ -9,6 +9,8 @@
   "nav": {
     "library": "Library",
     "armory": "Armoury",
+    "compendium": "Compendium",
+    "bestiary": "Bestiary",
     "maps": "Maps",
     "tokens": "Tokens",
     "search": "Search",
@@ -392,6 +394,8 @@
     "results_one": "{{count}} result for \"{{query}}\"",
     "results_other": "{{count}} results for \"{{query}}\"",
     "books": "Books",
+    "compendium": "Compendium",
+    "compendiumAll": "Show all in the Compendium",
     "maps": "Maps",
     "tokens": "Tokens",
     "noResults": "No results found. Try different keywords, or make sure your books are indexed.",
@@ -1058,6 +1062,27 @@
       "noTags": "None"
     }
   },
+  "compendium": {
+    "title": "Compendium",
+    "subtitle_one": "{{count}} entry in the compendium",
+    "subtitle_other": "{{count}} entries in the compendium",
+    "subtitleFiltered_one": "Displaying {{count}} of {{total}} entries",
+    "subtitleFiltered_other": "Displaying {{count}} of {{total}} entries",
+    "searchPlaceholder": "Search spells, items, feats…",
+    "edition": "Edition",
+    "categories": "Categories",
+    "all": "All",
+    "filters": "Filters",
+    "any": "Any",
+    "empty": "The compendium is empty: import a ruleset to fill it.",
+    "noMatches": "No entries match.",
+    "loadFailed": "Could not load the compendium."
+  },
+  "bestiary": {
+    "title": "Bestiary",
+    "searchPlaceholder": "Search monsters…",
+    "empty": "The bestiary is empty: import your monsters as a personal ruleset of a monsters-only schema."
+  },
   "settings": {
     "title": "Settings",
     "quickActions": {
@@ -1459,6 +1484,7 @@
       "viewModeTokens": "Tokens",
       "viewModeAudio": "Audio",
       "viewModeModels": "Models",
+      "viewModeCompendium": "Compendium",
       "recentLimit": "Recently opened books",
       "recentLimitHint": "How many recently opened books to remember (0–{{max}}). Set to 0 to hide the section."
     },
@@ -1513,6 +1539,7 @@
       "description": "Hide sections from the sidebar and mobile navigation for all users.",
       "hideLibrary": "Hide Library",
       "hideArmory": "Hide Armoury",
+      "hideCompendium": "Hide Compendium",
       "hideMaps": "Hide Maps",
       "hideTokens": "Hide Tokens",
       "hideCampaigns": "Hide Campaigns",
@@ -2641,6 +2668,9 @@
     "parentSystemPlaceholder": "e.g. Dungeons & Dragons",
     "edition": "Edition",
     "editionPlaceholder": "e.g. 5e, Red, 2020",
+    "compendiumSchema": "Compendium",
+    "compendiumNone": "None",
+    "compendiumHint": "This sheet's entries follow this system's filter in the search and the Compendium.",
     "licensePlaceholder": "e.g. OGL 1.0a",
     "createParentSystem": "Create parent system \"{{name}}\"",
     "fetchMetadata": "Fetch metadata",
@@ -2875,6 +2905,8 @@
     "imported": "Imported {{count}} page",
     "imported_other": "Imported {{count}} pages",
     "embed_file": "File",
+    "embed_image": "Image",
+    "embed_imageOpen": "Open the image full screen",
     "uploadImage": "Upload image",
     "uploadAndEmbed": "Upload & embed",
     "noLinkedResources": "No linked resources yet. Link books, maps, or tokens in the Resources panel first.",

@@ -161,6 +161,34 @@ export const content = {
     }),
 }
 
+type CompendiumQuery = QueryOf<'/content/compendium', 'get'>
+
+/**
+ * The compendium: every catalog entry the caller can read, across content
+ * types, without needing a character sheet installed.
+ */
+export const compendium = {
+  browse: ({
+    filters = {},
+    ...params
+  }: CompendiumQuery & { filters?: Record<string, unknown> } = {}) =>
+    api.get(
+      withQuery(
+        getUrl('/content/compendium', { query: presentParams(params) }),
+        Object.entries(filters)
+          .filter(([, wanted]) => wanted !== '' && wanted !== undefined)
+          .map(([field, wanted]): [string, string] => [`filter[${field}]`, String(wanted)])
+      )
+    ) as Promise<ResponseOf<'/content/compendium', 'get'>>,
+  /** The schemas with compendium content, each with its linked library systems. */
+  schemas: () => client.get('/content/compendium/schemas'),
+  entry: (schemaId: string, contentType: string, entryId: string) =>
+    client.get('/content/compendium/{content_type}/{entry_id}', {
+      path: { content_type: contentType, entry_id: entryId },
+      query: { schema_id: schemaId },
+    }),
+}
+
 /**
  * Rulesets (issue #132).
  *

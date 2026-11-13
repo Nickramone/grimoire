@@ -9,6 +9,8 @@
   "nav": {
     "library": "Bibliotheek",
     "armory": "Wapenkamer",
+    "compendium": "Compendium",
+    "bestiary": "Bestiarium",
     "maps": "Kaarten",
     "tokens": "Tokens",
     "search": "Zoeken",
@@ -392,6 +394,8 @@
     "results_one": "{{count}} resultaat voor \"{{query}}\"",
     "results_other": "{{count}} resultaten voor \"{{query}}\"",
     "books": "Boeken",
+    "compendium": "Compendium",
+    "compendiumAll": "Alles tonen in het Compendium",
     "maps": "Kaarten",
     "tokens": "Tokens",
     "noResults": "Geen resultaten gevonden. Probeer andere zoekwoorden of controleer of je boeken zijn geïndexeerd.",
@@ -1058,6 +1062,27 @@
       "noTags": "None"
     }
   },
+  "compendium": {
+    "title": "Compendium",
+    "subtitle_one": "{{count}} item in het compendium",
+    "subtitle_other": "{{count}} items in het compendium",
+    "subtitleFiltered_one": "{{count}} van {{total}} items",
+    "subtitleFiltered_other": "{{count}} van {{total}} items",
+    "searchPlaceholder": "Zoek spreuken, voorwerpen, feats…",
+    "edition": "Editie",
+    "categories": "Categorieën",
+    "all": "Alle",
+    "filters": "Filters",
+    "any": "Alle",
+    "empty": "Het compendium is leeg: importeer een regelset om het te vullen.",
+    "noMatches": "Geen overeenkomende items.",
+    "loadFailed": "Het compendium kon niet worden geladen."
+  },
+  "bestiary": {
+    "title": "Bestiarium",
+    "searchPlaceholder": "Monsters zoeken…",
+    "empty": "Het bestiarium is leeg: importeer je monsters als persoonlijke regelset van een schema met alleen monsters."
+  },
   "settings": {
     "title": "Instellingen",
     "quickActions": {
@@ -1459,6 +1484,7 @@
       "viewModeTokens": "Tokens",
       "viewModeAudio": "Audio",
       "viewModeModels": "Models",
+      "viewModeCompendium": "Compendium",
       "recentLimit": "Recent geopende boeken",
       "recentLimitHint": "Hoeveel recent geopende boeken onthouden moeten worden (0–{{max}}). Stel in op 0 om de sectie te verbergen."
     },
@@ -1513,6 +1539,7 @@
       "description": "Verberg secties van de zijbalk en de mobiele navigatie voor alle gebruikers.",
       "hideLibrary": "Bibliotheek verbergen",
       "hideArmory": "Wapenkamer verbergen",
+      "hideCompendium": "Compendium verbergen",
       "hideMaps": "Kaarten verbergen",
       "hideTokens": "Tokens verbergen",
       "hideCampaigns": "Campagnes verbergen",
@@ -2641,6 +2668,9 @@
     "parentSystemPlaceholder": "e.g. Dungeons & Dragons",
     "edition": "Editie",
     "editionPlaceholder": "e.g. 5e, Red, 2020",
+    "compendiumSchema": "Compendium",
+    "compendiumNone": "None",
+    "compendiumHint": "This sheet's entries follow this system's filter in the search and the Compendium.",
     "licensePlaceholder": "e.g. OGL 1.0a",
     "createParentSystem": "Oudersysteem \"{{name}}\" aanmaken",
     "fetchMetadata": "Metadata ophalen",
@@ -2875,6 +2905,8 @@
     "imported": "{{count}} pagina geïmporteerd",
     "imported_other": "{{count}} pagina's geïmporteerd",
     "embed_file": "Bestand",
+    "embed_image": "Afbeelding",
+    "embed_imageOpen": "Afbeelding schermvullend openen",
     "uploadImage": "Afbeelding uploaden",
     "uploadAndEmbed": "Uploaden en insluiten",
     "noLinkedResources": "Nog geen gekoppelde bronnen. Koppel eerst boeken, kaarten of tokens in het paneel Bronnen.",

@@ -46,6 +46,7 @@ export default function LibrarySection() {
   const VIEW_MODE_SECTIONS: { type: ContentType; label: string }[] = [
     { type: 'system', label: t('userSettings.library.viewModeSystems') },
     { type: 'book', label: t('userSettings.library.viewModeBooks') },
+    { type: 'compendium', label: t('userSettings.library.viewModeCompendium') },
     { type: 'map', label: t('userSettings.library.viewModeMaps') },
     { type: 'token', label: t('userSettings.library.viewModeTokens') },
     { type: 'audio', label: t('userSettings.library.viewModeAudio') },

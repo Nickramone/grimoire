@@ -9,6 +9,8 @@
   "nav": {
     "library": "Bibliotek",
     "armory": "Rustkammare",
+    "compendium": "Kompendium",
+    "bestiary": "Bestiarium",
     "maps": "Kartor",
     "tokens": "Tokens",
     "search": "Sök",
@@ -392,6 +394,8 @@
     "results_one": "{{count}} resultat för \"{{query}}\"",
     "results_other": "{{count}} resultat för \"{{query}}\"",
     "books": "Böcker",
+    "compendium": "Kompendium",
+    "compendiumAll": "Visa alla i kompendiet",
     "maps": "Kartor",
     "tokens": "Tokens",
     "noResults": "Inga resultat hittades. Prova andra sökord, eller kontrollera att dina böcker är indexerade.",
@@ -1058,6 +1062,27 @@
       "noTags": "Inga"
     }
   },
+  "compendium": {
+    "title": "Kompendium",
+    "subtitle_one": "{{count}} post i kompendiet",
+    "subtitle_other": "{{count}} poster i kompendiet",
+    "subtitleFiltered_one": "Visar {{count}} av {{total}} poster",
+    "subtitleFiltered_other": "Visar {{count}} av {{total}} poster",
+    "searchPlaceholder": "Sök besvärjelser, föremål, feats…",
+    "edition": "Utgåva",
+    "categories": "Kategorier",
+    "all": "Alla",
+    "filters": "Filter",
+    "any": "Valfri",
+    "empty": "Kompendiet är tomt: importera en regeluppsättning för att fylla det.",
+    "noMatches": "Inga poster matchar.",
+    "loadFailed": "Kunde inte läsa in kompendiet."
+  },
+  "bestiary": {
+    "title": "Bestiarium",
+    "searchPlaceholder": "Sök monster…",
+    "empty": "Bestiariet är tomt: importera dina monster som en personlig regeluppsättning för ett schema med bara monster."
+  },
   "settings": {
     "title": "Inställningar",
     "quickActions": {
@@ -1459,6 +1484,7 @@
       "viewModeTokens": "Tokens",
       "viewModeAudio": "Ljud",
       "viewModeModels": "Modeller",
+      "viewModeCompendium": "Kompendium",
       "recentLimit": "Nyligen öppnade böcker",
       "recentLimitHint": "Hur många nyligen öppnade böcker som ska kommas ihåg (0–{{max}}) och visas överst i biblioteket. Sätt till 0 för att dölja nyligen öppnade böcker helt."
     },
@@ -1513,6 +1539,7 @@
       "description": "Dölj kategori från sidofältet och mobilnavigeringen för alla användare.",
       "hideLibrary": "Dölj bibliotek",
       "hideArmory": "Dölj rustkammare",
+      "hideCompendium": "Dölj kompendium",
       "hideMaps": "Dölj kartor",
       "hideTokens": "Dölj tokens",
       "hideCampaigns": "Dölj kampanjer",
@@ -2641,6 +2668,9 @@
     "parentSystemPlaceholder": "t.ex. Dungeons & Dragons",
     "edition": "Utgåva",
     "editionPlaceholder": "t.ex. 5e, Red, 2020",
+    "compendiumSchema": "Compendium",
+    "compendiumNone": "None",
+    "compendiumHint": "This sheet's entries follow this system's filter in the search and the Compendium.",
     "licensePlaceholder": "t.ex. OGL 1.0a",
     "createParentSystem": "Skapa ett övergripande system \"{{name}}\"",
     "fetchMetadata": "Hämta metadata",
@@ -2875,6 +2905,8 @@
     "imported": "Importerade {{count}} sida",
     "imported_other": "Importerade {{count}} sidor",
     "embed_file": "Fil",
+    "embed_image": "Bild",
+    "embed_imageOpen": "Öppna bilden i helskärm",
     "uploadImage": "Ladda upp bild",
     "uploadAndEmbed": "Ladda upp och bädda in",
     "noLinkedResources": "Inga länkade resurser än. Länka böcker, kartor eller tokens i resurspanelen först.",

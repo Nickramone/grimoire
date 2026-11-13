@@ -679,6 +679,7 @@ class TestSettingsBroadPatch:
             "hide_maps": True,
             "hide_tokens": True,
             "hide_audio": True,
+            "hide_compendium": True,
             "hide_campaigns": True,
             "show_stat_systems": False,
             "show_stat_books": True,
@@ -705,6 +706,7 @@ class TestSettingsBroadPatch:
             assert body["rescan_schedule_minute"] == 59
             assert body["rescan_schedule_weekday"] == 6
             assert body["hide_audio"] is True
+            assert body["hide_compendium"] is True
             assert body["show_stat_audio"] is True
             # Campaign upload limits surface on the /ui endpoint (clamped to >= 0).
             ui = client.get("/api/settings/ui", headers=admin_headers).json()
@@ -713,6 +715,8 @@ class TestSettingsBroadPatch:
             # The audio stat toggle also reaches the UI-settings endpoint that the
             # sidebar reads. Default is off; we just set it on.
             assert ui["show_stat_audio"] is True
+            # The sidebar reads the compendium toggle from /ui too.
+            assert ui["hide_compendium"] is True
         finally:
             client.patch(
                 "/api/settings",
@@ -743,6 +747,7 @@ class TestUiSettings:
             "hide_maps",
             "hide_tokens",
             "hide_audio",
+            "hide_compendium",
             "hide_campaigns",
             "hide_armies",
             "hide_leagues",

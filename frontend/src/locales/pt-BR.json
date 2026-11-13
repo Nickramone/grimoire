@@ -9,6 +9,8 @@
   "nav": {
     "library": "Biblioteca",
     "armory": "Arsenal",
+    "compendium": "Compêndio",
+    "bestiary": "Bestiário",
     "maps": "Mapas",
     "tokens": "Tokens",
     "search": "Buscar",
@@ -392,6 +394,8 @@
     "results_one": "{{count}} resultado para \"{{query}}\"",
     "results_other": "{{count}} resultados para \"{{query}}\"",
     "books": "Livros",
+    "compendium": "Compêndio",
+    "compendiumAll": "Mostrar tudo no Compêndio",
     "maps": "Mapas",
     "tokens": "Tokens",
     "noResults": "Nenhum resultado encontrado. Tente outras palavras-chave ou verifique se seus livros estão indexados.",
@@ -1058,6 +1062,27 @@
       "noTags": "None"
     }
   },
+  "compendium": {
+    "title": "Compêndio",
+    "subtitle_one": "{{count}} entrada no compêndio",
+    "subtitle_other": "{{count}} entradas no compêndio",
+    "subtitleFiltered_one": "Mostrando {{count}} de {{total}} entradas",
+    "subtitleFiltered_other": "Mostrando {{count}} de {{total}} entradas",
+    "searchPlaceholder": "Pesquisar magias, itens, talentos…",
+    "edition": "Edição",
+    "categories": "Categorias",
+    "all": "Todas",
+    "filters": "Filtros",
+    "any": "Qualquer",
+    "empty": "O compêndio está vazio: importe um conjunto de regras para preenchê-lo.",
+    "noMatches": "Nenhuma entrada corresponde.",
+    "loadFailed": "Não foi possível carregar o compêndio."
+  },
+  "bestiary": {
+    "title": "Bestiário",
+    "searchPlaceholder": "Pesquisar monstros…",
+    "empty": "O bestiário está vazio: importe os seus monstros como conjunto de regras pessoal de um esquema só com monstros."
+  },
   "settings": {
     "title": "Configurações",
     "quickActions": {
@@ -1459,6 +1484,7 @@
       "viewModeTokens": "Tokens",
       "viewModeAudio": "Áudio",
       "viewModeModels": "Models",
+      "viewModeCompendium": "Compêndio",
       "recentLimit": "Livros abertos recentemente",
       "recentLimitHint": "Quantos livros abertos recentemente memorizar (0–{{max}}). Defina como 0 para ocultar a seção."
     },
@@ -1513,6 +1539,7 @@
       "description": "Ocultar seções da barra lateral e da navegação móvel para todos os usuários.",
       "hideLibrary": "Ocultar biblioteca",
       "hideArmory": "Ocultar arsenal",
+      "hideCompendium": "Ocultar compêndio",
       "hideMaps": "Ocultar mapas",
       "hideTokens": "Ocultar tokens",
       "hideCampaigns": "Ocultar campanhas",
@@ -2641,6 +2668,9 @@
     "parentSystemPlaceholder": "e.g. Dungeons & Dragons",
     "edition": "Edição",
     "editionPlaceholder": "e.g. 5e, Red, 2020",
+    "compendiumSchema": "Compendium",
+    "compendiumNone": "None",
+    "compendiumHint": "This sheet's entries follow this system's filter in the search and the Compendium.",
     "licensePlaceholder": "e.g. OGL 1.0a",
     "createParentSystem": "Criar sistema principal \"{{name}}\"",
     "fetchMetadata": "Obter metadados",
@@ -2875,6 +2905,8 @@
     "imported": "{{count}} página importada",
     "imported_other": "{{count}} páginas importadas",
     "embed_file": "Arquivo",
+    "embed_image": "Imagem",
+    "embed_imageOpen": "Abrir a imagem em tela cheia",
     "uploadImage": "Enviar imagem",
     "uploadAndEmbed": "Enviar e incorporar",
     "noLinkedResources": "Ainda não há recursos vinculados. Vincule livros, mapas ou tokens no painel de Recursos primeiro.",

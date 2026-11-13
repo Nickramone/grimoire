@@ -10,6 +10,7 @@ vi.mock('../../api', () => ({
 
 function mockSettings(overrides: Record<string, unknown> = {}) {
   vi.mocked(settingsApi.get).mockResolvedValue({
+    hide_compendium: false,
     hide_maps: false,
     hide_tokens: false,
     hide_audio: false,
@@ -32,6 +33,7 @@ describe('SidebarVisibilitySection', () => {
     render(<SidebarVisibilitySection />)
     expect(screen.getByText('Sidebar Visibility')).toBeInTheDocument()
     expect(await screen.findByLabelText('Hide Maps')).not.toBeChecked()
+    expect(screen.getByLabelText('Hide Compendium')).not.toBeChecked()
     expect(screen.getByLabelText('Hide Tokens')).toBeInTheDocument()
     expect(screen.getByLabelText('Hide Campaigns')).toBeChecked()
     expect(screen.getByLabelText('Hide Armies')).not.toBeChecked()

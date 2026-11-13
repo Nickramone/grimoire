@@ -19,6 +19,7 @@ import {
   BookReader,
   LibraryView,
   SystemDetailView,
+  CompendiumView,
   MapsView,
   MapDetailView,
   VttEditorView,
@@ -72,6 +73,7 @@ export default function AppShell() {
     hide_tokens: false,
     hide_audio: false,
     hide_models: false,
+    hide_compendium: false,
     hide_campaigns: false,
     hide_armies: false,
     hide_leagues: false,
@@ -275,6 +277,13 @@ export default function AppShell() {
                   <Route path="/armory" element={<LibraryView key="armory" gameType="wargame" />} />
                   <Route path="/armory/system/:systemId" element={<SystemDetailView />} />
                   <Route path="/library/book/:bookId" element={<BookReader />} />
+                  <Route path="/compendium" element={<CompendiumView />} />
+                  <Route path="/compendium/:contentType/:entryId" element={<CompendiumView />} />
+                  <Route path="/bestiary" element={<CompendiumView key="bestiary" bestiary />} />
+                  <Route
+                    path="/bestiary/:contentType/:entryId"
+                    element={<CompendiumView key="bestiary" bestiary />}
+                  />
                   <Route path="/maps" element={<MapsView />} />
                   <Route path="/maps/:mapId" element={<MapDetailView />} />
                   {/* Full-page: the Universal VTT editor needs the whole width for

@@ -9,6 +9,8 @@
   "nav": {
     "library": "Bibliothek",
     "armory": "Rüstkammer",
+    "compendium": "Kompendium",
+    "bestiary": "Bestiarium",
     "maps": "Karten",
     "tokens": "Tokens",
     "search": "Suche",
@@ -392,6 +394,8 @@
     "results_one": "{{count}} Ergebnis für \"{{query}}\"",
     "results_other": "{{count}} Ergebnisse für \"{{query}}\"",
     "books": "Bücher",
+    "compendium": "Kompendium",
+    "compendiumAll": "Alle im Kompendium anzeigen",
     "maps": "Karten",
     "tokens": "Tokens",
     "noResults": "Keine Ergebnisse gefunden. Andere Suchbegriffe versuchen oder sicherstellen, dass die Bücher indiziert sind.",
@@ -1058,6 +1062,27 @@
       "noTags": "None"
     }
   },
+  "compendium": {
+    "title": "Kompendium",
+    "subtitle_one": "{{count}} Eintrag im Kompendium",
+    "subtitle_other": "{{count}} Einträge im Kompendium",
+    "subtitleFiltered_one": "{{count}} von {{total}} Einträgen",
+    "subtitleFiltered_other": "{{count}} von {{total}} Einträgen",
+    "searchPlaceholder": "Zauber, Gegenstände, Talente suchen…",
+    "edition": "Edition",
+    "categories": "Kategorien",
+    "all": "Alle",
+    "filters": "Filter",
+    "any": "Beliebig",
+    "empty": "Das Kompendium ist leer: Importiere ein Regelwerk, um es zu füllen.",
+    "noMatches": "Keine passenden Einträge.",
+    "loadFailed": "Das Kompendium konnte nicht geladen werden."
+  },
+  "bestiary": {
+    "title": "Bestiarium",
+    "searchPlaceholder": "Monster suchen…",
+    "empty": "Das Bestiarium ist leer: Importiere deine Monster als persönliches Regelwerk eines Schemas, das nur Monster enthält."
+  },
   "settings": {
     "title": "Einstellungen",
     "quickActions": {
@@ -1459,6 +1484,7 @@
       "viewModeTokens": "Tokens",
       "viewModeAudio": "Audio",
       "viewModeModels": "Models",
+      "viewModeCompendium": "Kompendium",
       "recentLimit": "Zuletzt geöffnete Bücher",
       "recentLimitHint": "Wie viele zuletzt geöffnete Bücher gemerkt werden (0–{{max}}). Auf 0 setzen, um den Bereich auszublenden."
     },
@@ -1513,6 +1539,7 @@
       "description": "Abschnitte aus der Seitenleiste und mobilen Navigation für alle Benutzer ausblenden.",
       "hideLibrary": "Bibliothek ausblenden",
       "hideArmory": "Rüstkammer ausblenden",
+      "hideCompendium": "Kompendium ausblenden",
       "hideMaps": "Karten ausblenden",
       "hideTokens": "Tokens ausblenden",
       "hideCampaigns": "Kampagnen ausblenden",
@@ -2641,6 +2668,9 @@
     "parentSystemPlaceholder": "e.g. Dungeons & Dragons",
     "edition": "Edition",
     "editionPlaceholder": "e.g. 5e, Red, 2020",
+    "compendiumSchema": "Compendium",
+    "compendiumNone": "None",
+    "compendiumHint": "This sheet's entries follow this system's filter in the search and the Compendium.",
     "licensePlaceholder": "e.g. OGL 1.0a",
     "createParentSystem": "Übergeordnetes System „{{name}}\" erstellen",
     "fetchMetadata": "Metadaten abrufen",
@@ -2875,6 +2905,8 @@
     "imported": "{{count}} Seite importiert",
     "imported_other": "{{count}} Seiten importiert",
     "embed_file": "Datei",
+    "embed_image": "Bild",
+    "embed_imageOpen": "Bild im Vollbild öffnen",
     "uploadImage": "Bild hochladen",
     "uploadAndEmbed": "Hochladen & einbetten",
     "noLinkedResources": "Noch keine verknüpften Ressourcen. Verknüpfe zuerst Bücher, Karten oder Tokens im Ressourcen-Bereich.",

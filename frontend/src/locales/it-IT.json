@@ -9,6 +9,8 @@
   "nav": {
     "library": "Libreria",
     "armory": "Armeria",
+    "compendium": "Compendio",
+    "bestiary": "Bestiario",
     "maps": "Mappe",
     "tokens": "Token",
     "search": "Cerca",
@@ -392,6 +394,8 @@
     "results_one": "{{count}} risultato per \"{{query}}\"",
     "results_other": "{{count}} risultati per \"{{query}}\"",
     "books": "Libri",
+    "compendium": "Compendio",
+    "compendiumAll": "Mostra tutto nel Compendio",
     "maps": "Mappe",
     "tokens": "Token",
     "noResults": "Nessun risultato. Prova con parole chiave diverse o assicurati che i libri siano indicizzati.",
@@ -1058,6 +1062,27 @@
       "noTags": "Nessuno"
     }
   },
+  "compendium": {
+    "title": "Compendio",
+    "subtitle_one": "{{count}} voce nel compendio",
+    "subtitle_other": "{{count}} voci nel compendio",
+    "subtitleFiltered_one": "{{count}} di {{total}} voci",
+    "subtitleFiltered_other": "{{count}} di {{total}} voci",
+    "searchPlaceholder": "Cerca incantesimi, oggetti, talenti…",
+    "edition": "Edizione",
+    "categories": "Categorie",
+    "all": "Tutte",
+    "filters": "Filtri",
+    "any": "Qualsiasi",
+    "empty": "Il compendio è vuoto: importa un ruleset per riempirlo.",
+    "noMatches": "Nessuna voce corrisponde.",
+    "loadFailed": "Impossibile caricare il compendio."
+  },
+  "bestiary": {
+    "title": "Bestiario",
+    "searchPlaceholder": "Cerca mostri…",
+    "empty": "Il bestiario è vuoto: importa i mostri come ruleset personale di uno schema che dichiara solo mostri."
+  },
   "settings": {
     "title": "Impostazioni",
     "quickActions": {
@@ -1459,6 +1484,7 @@
       "viewModeTokens": "Token",
       "viewModeAudio": "Audio",
       "viewModeModels": "Modelli",
+      "viewModeCompendium": "Compendio",
       "recentLimit": "Libri aperti di recente",
       "recentLimitHint": "Quanti libri aperti di recente ricordare (0–{{max}}). Imposta 0 per nascondere la sezione."
     },
@@ -1513,6 +1539,7 @@
       "description": "Nascondi sezioni dalla barra laterale e dalla navigazione mobile per tutti gli utenti.",
       "hideLibrary": "Nascondi Libreria",
       "hideArmory": "Nascondi Armeria",
+      "hideCompendium": "Nascondi Compendio",
       "hideMaps": "Nascondi Mappe",
       "hideTokens": "Nascondi Token",
       "hideCampaigns": "Nascondi Campagne",
@@ -2641,6 +2668,9 @@
     "parentSystemPlaceholder": "es. Dungeons & Dragons",
     "edition": "Edizione",
     "editionPlaceholder": "es. 5e, Red, 2020",
+    "compendiumSchema": "Compendio",
+    "compendiumNone": "Nessuno",
+    "compendiumHint": "Le voci di questa scheda seguono il filtro di questo sistema nella ricerca e nel Compendio.",
     "licensePlaceholder": "es. OGL 1.0a",
     "createParentSystem": "Crea il sistema padre \"{{name}}\"",
     "fetchMetadata": "Recupera metadati",
@@ -2875,6 +2905,8 @@
     "imported": "Importata {{count}} pagina",
     "imported_other": "Importate {{count}} pagine",
     "embed_file": "File",
+    "embed_image": "Immagine",
+    "embed_imageOpen": "Apri l'immagine a tutto schermo",
     "uploadImage": "Carica immagine",
     "uploadAndEmbed": "Carica e incorpora",
     "noLinkedResources": "Nessuna risorsa collegata per ora. Collega prima libri, mappe o token nel pannello Risorse.",

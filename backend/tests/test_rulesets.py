@@ -113,6 +113,25 @@ class TestOwnership:
     def test_a_ruleset_needs_a_name(self, client, admin_headers, schemas):
         assert _create(client, admin_headers, name="  ").status_code == 400
 
+    def test_anyone_can_add_a_personal_ruleset_that_only_they_read(
+        self, client, gm_headers, admin_headers, player_headers, schemas
+    ):
+        """A GM's bestiary: theirs to read and edit, hidden even from an admin."""
+        resp = _create(client, gm_headers, personal=True)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["personal"] is True
+        assert resp.json()["editable"] is True
+        assert _add_entry(client, gm_headers, resp.json()["id"]).status_code == 200
+        for other in (admin_headers, player_headers):
+            listed = client.get("/api/rulesets", headers=other).json()["rulesets"]
+            assert resp.json()["id"] not in [row["id"] for row in listed]
+            assert client.get(f"/api/rulesets/{resp.json()['id']}", headers=other).status_code == 404
+
+    def test_a_personal_ruleset_cannot_belong_to_a_campaign(
+        self, client, gm_headers, schemas, gm_campaign
+    ):
+        assert _create(client, gm_headers, personal=True, campaign_id=gm_campaign).status_code == 400
+
     def test_a_licensed_ruleset_must_carry_its_credit(self, client, admin_headers, schemas):
         resp = _create(client, admin_headers, license="CC-BY-4.0")
         assert resp.status_code == 400

@@ -8,6 +8,7 @@ const DEFAULT_UI_SETTINGS: UISettings = {
   hide_tokens: false,
   hide_audio: false,
   hide_models: false,
+  hide_compendium: false,
   hide_campaigns: false,
   hide_armies: false,
   hide_leagues: false,

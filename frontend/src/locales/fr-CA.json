@@ -9,6 +9,8 @@
   "nav": {
     "library": "Bibliothèque",
     "armory": "Armurerie",
+    "compendium": "Compendium",
+    "bestiary": "Bestiaire",
     "maps": "Cartes",
     "tokens": "Pions",
     "search": "Rechercher",
@@ -392,6 +394,8 @@
     "results_one": "{{count}} résultat pour « {{query}} »",
     "results_other": "{{count}} résultats pour « {{query}} »",
     "books": "Livres",
+    "compendium": "Compendium",
+    "compendiumAll": "Tout afficher dans le Compendium",
     "maps": "Cartes",
     "tokens": "Pions",
     "noResults": "Aucun résultat trouvé. Essayez d'autres mots-clés, ou vérifiez que vos livres sont indexés.",
@@ -1058,6 +1062,27 @@
       "noTags": "None"
     }
   },
+  "compendium": {
+    "title": "Compendium",
+    "subtitle_one": "{{count}} entrée dans le compendium",
+    "subtitle_other": "{{count}} entrées dans le compendium",
+    "subtitleFiltered_one": "{{count}} sur {{total}} entrées",
+    "subtitleFiltered_other": "{{count}} sur {{total}} entrées",
+    "searchPlaceholder": "Rechercher sorts, objets, dons…",
+    "edition": "Édition",
+    "categories": "Catégories",
+    "all": "Toutes",
+    "filters": "Filtres",
+    "any": "Toutes",
+    "empty": "Le compendium est vide : importez un jeu de règles pour le remplir.",
+    "noMatches": "Aucune entrée ne correspond.",
+    "loadFailed": "Impossible de charger le compendium."
+  },
+  "bestiary": {
+    "title": "Bestiaire",
+    "searchPlaceholder": "Rechercher des monstres…",
+    "empty": "Le bestiaire est vide : importez vos monstres comme jeu de règles personnel d'un schéma ne déclarant que des monstres."
+  },
   "settings": {
     "title": "Paramètres",
     "quickActions": {
@@ -1459,6 +1484,7 @@
       "viewModeTokens": "Pions",
       "viewModeAudio": "Audio",
       "viewModeModels": "Models",
+      "viewModeCompendium": "Compendium",
       "recentLimit": "Livres récemment ouverts",
       "recentLimitHint": "Nombre de livres récemment ouverts à mémoriser (0–{{max}}). Mettre 0 pour masquer la section."
     },
@@ -1513,6 +1539,7 @@
       "description": "Masquer des sections de la barre latérale et de la navigation mobile pour tous les utilisateurs.",
       "hideLibrary": "Masquer la bibliothèque",
       "hideArmory": "Masquer l’armurerie",
+      "hideCompendium": "Masquer le compendium",
       "hideMaps": "Masquer les cartes",
       "hideTokens": "Masquer les pions",
       "hideCampaigns": "Masquer les campagnes",
@@ -2641,6 +2668,9 @@
     "parentSystemPlaceholder": "e.g. Dungeons & Dragons",
     "edition": "Édition",
     "editionPlaceholder": "e.g. 5e, Red, 2020",
+    "compendiumSchema": "Compendium",
+    "compendiumNone": "None",
+    "compendiumHint": "This sheet's entries follow this system's filter in the search and the Compendium.",
     "licensePlaceholder": "e.g. OGL 1.0a",
     "createParentSystem": "Créer le système parent « {{name}} »",
     "fetchMetadata": "Récupérer les métadonnées",
@@ -2875,6 +2905,8 @@
     "imported": "{{count}} page importée",
     "imported_other": "{{count}} pages importées",
     "embed_file": "Fichier",
+    "embed_image": "Image",
+    "embed_imageOpen": "Ouvrir l'image en plein écran",
     "uploadImage": "Téléverser une image",
     "uploadAndEmbed": "Téléverser et intégrer",
     "noLinkedResources": "Aucune ressource liée pour le moment. Liez d’abord des livres, cartes ou jetons dans le panneau Ressources.",
