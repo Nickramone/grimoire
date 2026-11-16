@@ -77,6 +77,7 @@ DIRECTIVE_TAGS: frozenset = frozenset(
         "g-option",     # one checkbox bound to one option of a multiselect
         "g-tier",       # one value's rung on a ladder of multiselects
         "g-pips",       # a count drawn as boxes, ticked off as it is used
+        "g-check",      # one checkbox over a checkbox column of some rows
         "g-portrait",   # the character's portrait, framed as the player chose
     }
 )
@@ -120,6 +121,12 @@ _TAG_ATTRS: dict[str, frozenset] = {
     # `count` is a number or a field/computed name; `value` the number field
     # holding how many are used.
     "g-pips": frozenset({"count", "value", "label"}),
+    # A shield's "equipped" on the front page, though the shield is a row of the
+    # equipment list: `field` is a `content_list` (or `list`), `per` one of its
+    # checkbox per-entry fields (or columns), and `where` a condition in which
+    # `row` names one row - the entry with its per-entry values on top -
+    # choosing the rows the box speaks for.
+    "g-check": frozenset({"field", "per", "where", "label", "visible_if"}),
     # The portrait is the character's, not a field's, so it takes no name. Its
     # size is the sheet's to set, through the `gc-portrait` class.
     "g-portrait": frozenset({"visible_if"}),

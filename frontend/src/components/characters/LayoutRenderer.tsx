@@ -167,6 +167,7 @@ const DIRECTIVES = new Set([
   'g-option',
   'g-tier',
   'g-pips',
+  'g-check',
   'g-portrait',
 ])
 
@@ -589,6 +590,53 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
       )
     }
 
+    case 'g-check': {
+      // A checkbox column of a list, or a checkbox per-entry field of a
+      // content_list, ticked from wherever the sheet puts the box: a shield's
+      // "equipped" beside the armour class, though the shield is a row of the
+      // equipment. `where` picks the rows the box speaks for.
+      const field = fields[attrs.field]
+      const per = attrs.per
+      if (!field || !per || !checkboxProperty(field, per)) return null
+      const stored: unknown = data?.[attrs.field]
+      const rows: unknown[] = Array.isArray(stored) ? stored : []
+      const matching = matchingRows(field, rows, attrs.where, context, entries)
+      const value = (index: number) => {
+        const row = rows[index] as Values
+        return field.type === 'list' ? row[per] : (row._per as Values | undefined)?.[per]
+      }
+      const checked = matching.some((index) => Boolean(value(index)))
+      // Nothing to tick until a matching row exists: a box for a shield the
+      // character does not own would have nowhere to write.
+      const editable = Boolean(!readOnly && onChange && matching.length)
+      const toggle = () => {
+        // Ticking marks the first matching row - one shield in hand, not every
+        // shield in the pack; clearing it clears every matching row, so the box
+        // reads unticked afterwards.
+        const targets = new Set(checked ? matching : matching.slice(0, 1))
+        const next = rows.map((existing, index) => {
+          if (!targets.has(index)) return existing
+          const row = existing as Values
+          if (field.type === 'list') return { ...row, [per]: !checked }
+          return { ...row, _per: { ...((row._per as Values | undefined) || {}), [per]: !checked } }
+        })
+        onChange?.(attrs.field, next)
+      }
+      return (
+        <input
+          key={key}
+          type="checkbox"
+          className={['gc-check', attrs.class].filter(Boolean).join(' ')}
+          title={attrs.label || per}
+          style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--gold)' }}
+          checked={checked}
+          disabled={!editable}
+          onChange={editable ? toggle : undefined}
+          aria-label={attrs.label || per}
+        />
+      )
+    }
+
     case 'g-portrait':
       // The character's own art, not a field's: the sheet only says where.
       return <SheetPortrait key={key} className={attrs.class} />
@@ -678,6 +726,49 @@ function computedDefinition(
   if (definition === undefined) return undefined
   // A computed value may be written as its bare formula.
   return typeof definition === 'string' ? { formula: definition } : definition
+}
+
+// Whether `per` is a checkbox the rows of `field` carry: a column of a list, or
+// a per-entry field of a content_list. A <g-check> over anything else draws
+// nothing, as a <g-option> over a field that is not a multiselect does.
+function checkboxProperty(field: FieldDefinition, per: string): boolean {
+  if (field.type === 'list') {
+    const columns = (Array.isArray(field.columns) ? field.columns : []) as FieldDefinition[]
+    return columns.some((column) => column?.key === per && column.type === 'checkbox')
+  }
+  if (field.type === 'content_list') {
+    const declared = (field.per_entry_fields || {}) as Record<string, FieldDefinition | undefined>
+    return declared[per]?.type === 'checkbox'
+  }
+  return false
+}
+
+// The indexes of the rows a <g-check> speaks for. `where` is read once per row
+// with `row` naming it - a list row as it is stored, a picked entry with the
+// character's per-entry values on top - and no `where` means every row. A
+// condition that does not parse matches nothing, so a typo leaves the box
+// disabled rather than ticking rows nobody chose.
+function matchingRows(
+  field: FieldDefinition,
+  rows: unknown[],
+  where: string | undefined,
+  context: Values,
+  entries: Record<string, unknown>
+): number[] {
+  const table = (context?._entries || entries || {}) as Record<string, unknown>
+  const matching: number[] = []
+  rows.forEach((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+    const item = raw as Values
+    let row: Values = item
+    if (field.type === 'content_list') {
+      const per = (item._per || {}) as Values
+      const entry = item._inline ? item : table[String(item._ref)]
+      row = { ...(entry && typeof entry === 'object' ? (entry as Values) : {}), ...per }
+    }
+    if (!where || evaluate(where, { ...context, row }, false)) matching.push(index)
+  })
+  return matching
 }
 
 function optionValues(field: FieldDefinition) {
