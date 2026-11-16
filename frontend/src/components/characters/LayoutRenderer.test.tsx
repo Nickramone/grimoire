@@ -539,6 +539,162 @@ describe('LayoutRenderer — one box per option', () => {
   })
 })
 
+describe('LayoutRenderer — one box over some rows', () => {
+  const doc = {
+    ...DOCUMENT,
+    fields: {
+      ...DOCUMENT.fields,
+      equipment: {
+        type: 'content_list',
+        content_type: 'item',
+        allow_freeform: true,
+        per_entry_fields: {
+          qty: { type: 'number' },
+          equipped: { type: 'checkbox' },
+        },
+      },
+      packs: {
+        type: 'list',
+        columns: [
+          { key: 'name', type: 'text' },
+          { key: 'carried', type: 'checkbox' },
+        ],
+      },
+    },
+  }
+  const entries = {
+    'shield-phb': { name: 'Shield', category: 'Shield' },
+    'plate-phb': { name: 'Plate', category: 'Heavy Armor' },
+  }
+  const check = (attrs: Record<string, string> = {}): LayoutNode[] => [
+    {
+      tag: 'g-check',
+      attrs: {
+        field: 'equipment',
+        per: 'equipped',
+        where: "row.category == 'Shield'",
+        label: 'Shield equipped',
+        ...attrs,
+      },
+      children: [],
+    },
+  ]
+  const plate = { _ref: 'plate-phb', _per: { equipped: true } }
+
+  it('is ticked when a matching row is', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      data: { equipment: [plate, { _ref: 'shield-phb', _per: { equipped: true } }] },
+    })
+    expect(screen.getByLabelText('Shield equipped')).toBeChecked()
+  })
+
+  it('ignores rows the condition leaves out', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      data: { equipment: [plate, { _ref: 'shield-phb' }] },
+    })
+    expect(screen.getByLabelText('Shield equipped')).not.toBeChecked()
+  })
+
+  it('ticks only the first matching row, keeping its other values', async () => {
+    const onChange = vi.fn()
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      onChange,
+      data: {
+        equipment: [plate, { _ref: 'shield-phb', _per: { qty: 2 } }, { _ref: 'shield-phb' }],
+      },
+    })
+    await userEvent.click(screen.getByLabelText('Shield equipped'))
+    expect(onChange).toHaveBeenCalledWith('equipment', [
+      plate,
+      { _ref: 'shield-phb', _per: { qty: 2, equipped: true } },
+      { _ref: 'shield-phb' },
+    ])
+  })
+
+  it('clears every matching row', async () => {
+    const onChange = vi.fn()
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      onChange,
+      data: {
+        equipment: [
+          plate,
+          { _ref: 'shield-phb', _per: { equipped: true } },
+          { _ref: 'shield-phb', _per: { equipped: true } },
+        ],
+      },
+    })
+    await userEvent.click(screen.getByLabelText('Shield equipped'))
+    expect(onChange).toHaveBeenCalledWith('equipment', [
+      plate,
+      { _ref: 'shield-phb', _per: { equipped: false } },
+      { _ref: 'shield-phb', _per: { equipped: false } },
+    ])
+  })
+
+  it('reads a freeform row’s own values', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      data: {
+        equipment: [{ _inline: true, name: 'Kite', category: 'Shield', _per: { equipped: true } }],
+      },
+    })
+    expect(screen.getByLabelText('Shield equipped')).toBeChecked()
+  })
+
+  it('writes a list column', async () => {
+    const onChange = vi.fn()
+    renderLayout(
+      check({ field: 'packs', per: 'carried', where: "row.name == 'Rope'", label: 'Rope' }),
+      { document: doc, onChange, data: { packs: [{ name: 'Torch' }, { name: 'Rope' }] } }
+    )
+    await userEvent.click(screen.getByLabelText('Rope'))
+    expect(onChange).toHaveBeenCalledWith('packs', [
+      { name: 'Torch' },
+      { name: 'Rope', carried: true },
+    ])
+  })
+
+  it('is disabled with no matching row', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      onChange: vi.fn(),
+      data: { equipment: [plate] },
+    })
+    expect(screen.getByLabelText('Shield equipped')).toBeDisabled()
+  })
+
+  it('cannot be changed read-only', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      onChange: vi.fn(),
+      readOnly: true,
+      data: { equipment: [{ _ref: 'shield-phb' }] },
+    })
+    expect(screen.getByLabelText('Shield equipped')).toBeDisabled()
+  })
+
+  it('draws nothing for a property that is not a checkbox', () => {
+    const { container } = renderLayout(check({ per: 'qty' }), {
+      document: doc,
+      entries,
+      onChange: vi.fn(),
+      data: { equipment: [{ _ref: 'shield-phb' }] },
+    })
+    expect(container.querySelector('input')).toBeNull()
+  })
+})
+
 describe('LayoutRenderer — collapsible sections', () => {
   const section = (attrs = {}) => [
     {

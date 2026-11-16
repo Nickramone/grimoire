@@ -98,9 +98,26 @@ class TestTiersAndPips:
         ast = parse_layout_html('<g-pips count="slots_1_total" value="slots_1_used" label="Slot" />')
         assert ast[0]["tag"] == "g-pips"
 
+    def test_a_row_check_parses(self):
+        ast = parse_layout_html(
+            '<g-check field="equipment" per="equipped" '
+            "where=\"row.category == 'Shield'\" label=\"Shield equipped\" />"
+        )
+        assert ast[0]["attrs"] == {
+            "field": "equipment",
+            "per": "equipped",
+            "where": "row.category == 'Shield'",
+            "label": "Shield equipped",
+        }
+
     @pytest.mark.parametrize(
         "html",
-        ['<g-tier value="a" onchange="x()" />', '<g-pips count="3" onclick="x()" />'],
+        [
+            '<g-tier value="a" onchange="x()" />',
+            '<g-pips count="3" onclick="x()" />',
+            '<g-check field="a" per="b" onchange="x()" />',
+            '<g-check field="a" per="b" style="color:red" />',
+        ],
     )
     def test_they_take_no_handlers(self, html):
         with pytest.raises(LayoutHtmlError):
