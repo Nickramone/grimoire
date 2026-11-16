@@ -68,7 +68,17 @@ export default function ContentListField({
     // Picking something already on the sheet is a no-op rather than a duplicate
     // row: two copies of the same spell is never what was meant.
     if (rows.some((row) => row?._ref === picked._ref)) return
-    onChange?.([...rows, picked])
+    // A new row starts from each per-entry field's declared `default` - an
+    // inventory item is added as one, not as an empty quantity.
+    const starting = Object.fromEntries(
+      Object.entries(perFields)
+        .filter(([, field]) => field.default !== undefined)
+        .map(([key, field]) => [key, field.default])
+    )
+    const row = Object.keys(starting).length
+      ? { ...picked, _per: { ...starting, ...(picked._per || {}) } }
+      : picked
+    onChange?.([...rows, row])
   }
 
   // A new custom entry opens straight away, ready to be named.

@@ -252,6 +252,21 @@ describe('ContentListField', () => {
     expect(onChange).toHaveBeenCalledWith([{ _ref: 'fireball', _source: 'srd' }])
   })
 
+  it("starts a new row from each per-entry field's default", async () => {
+    const onChange = vi.fn()
+    renderList({
+      value: [],
+      onChange,
+      definition: {
+        ...DEFINITION,
+        per_entry_fields: { qty: { type: 'number', label: 'Qty', default: 1 } },
+      },
+    })
+    await userEvent.click(screen.getByText(/Browse catalog/i))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    expect(onChange).toHaveBeenCalledWith([{ _ref: 'fireball', _source: 'srd', _per: { qty: 1 } }])
+  })
+
   it('does not add the same entry twice', async () => {
     const onChange = vi.fn()
     renderList({ value: [{ _ref: 'fireball' }], onChange })
