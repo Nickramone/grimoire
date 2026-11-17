@@ -504,6 +504,24 @@ describe('ContentListField — conditions on per-entry fields', () => {
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
+  it('drops the column when the field is hidden on every row', () => {
+    const withColumns = { ...DEFINITION, display_columns: ['rarity'] }
+    const { rerender } = renderItems({ definition: withColumns, value: [{ _ref: 'rope' }] })
+    expect(screen.queryByRole('columnheader', { name: 'Attuned' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('cell')).toHaveLength(3) // name, rarity, remove
+    rerender(
+      <ContentListField
+        name="magic_items"
+        definition={withColumns}
+        entries={ITEMS}
+        value={[{ _ref: 'rope' }, { _ref: 'ring' }]}
+        onChange={vi.fn()}
+        context={{ limit: 3 }}
+      />
+    )
+    expect(screen.getByRole('columnheader', { name: 'Attuned' })).toBeInTheDocument()
+  })
+
   it('leaves the field editable while under the limit', async () => {
     const onChange = vi.fn()
     renderItems({ value: [{ _ref: 'ring' }], onChange })
