@@ -128,13 +128,25 @@ export default function ContentListField({
     return { [name]: rows, _entries: entries, ...(context || {}), row: resolved }
   }
 
+  const isShown = (row: ContentRefValue, perDefinition: FieldDefinition) => {
+    const { visible_if: visibleIf } = perDefinition as EntryValues
+    return !visibleIf || Boolean(evaluate(visibleIf, conditionContext(row), true))
+  }
+
+  // A per-entry field hidden on every row takes no column at all: a value the
+  // sheet ticks elsewhere (a feature's uses, in a tracker of their own) leaves
+  // no empty column behind in the list.
+  const perEntries = Object.entries(perFields).filter(([, perDefinition]) =>
+    rows.some((row) => isShown(row, perDefinition))
+  )
+
   const cell: CSSProperties = { padding: '6px 6px', fontSize: 12, verticalAlign: 'middle' }
   const perCells = (row: ContentRefValue, index: number) =>
-    Object.entries(perFields).map(([key, perDefinition]) => {
-      const { visible_if: visibleIf, disabled_if: disabledIf } = perDefinition as EntryValues
-      const scope = visibleIf || disabledIf ? conditionContext(row) : null
-      const shown = !visibleIf || Boolean(evaluate(visibleIf, scope!, true))
-      const disabled = Boolean(disabledIf) && Boolean(evaluate(disabledIf, scope!, false))
+    perEntries.map(([key, perDefinition]) => {
+      const { disabled_if: disabledIf } = perDefinition as EntryValues
+      const shown = isShown(row, perDefinition)
+      const disabled =
+        Boolean(disabledIf) && Boolean(evaluate(disabledIf, conditionContext(row), false))
       return (
         <td key={key} style={{ ...cell, width: perDefinition.type === 'checkbox' ? 1 : 70 }}>
           {shown ? (
@@ -174,7 +186,7 @@ export default function ContentListField({
                     {column.label}
                   </th>
                 ))}
-                {Object.entries(perFields).map(([key, perDefinition]) => (
+                {perEntries.map(([key, perDefinition]) => (
                   <th key={key} style={{ ...cell, ...headCell }}>
                     {perDefinition.label || key}
                   </th>
@@ -286,11 +298,7 @@ export default function ContentListField({
                   </tr>
                   {expanded && (entry || row?._inline) ? (
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td
-                        colSpan={
-                          1 + columns.length + Object.keys(perFields).length + (readOnly ? 0 : 1)
-                        }
-                      >
+                      <td colSpan={1 + columns.length + perEntries.length + (readOnly ? 0 : 1)}>
                         {entry ? (
                           // The whole entry - a feat's description, a spell's
                           // text - drawn by the component the browser uses.

@@ -10,6 +10,7 @@ Release candidates are omitted; their contents are rolled into the stable releas
 
 ### Added
 
+- **A per-entry field hidden on every row of a content list takes no column.** When its `visible_if` hides it everywhere, the list drops its header and cells rather than leaving an empty column - a value the sheet tracks elsewhere, such as a feature's uses ticked off in a tracker, no longer shows up in the list at all
 - **PDF view works on phones and tablets.** Their browsers can't show a PDF inside a page, so PDF view there now opens Grimoire's own viewer: the whole book scrolls as one column, text can be selected, links work, and you can pinch to zoom. You can highlight, add text and draw on the pages, then save a copy of the PDF with those annotations in it. Phones can now pick PDF view at all - they used to be held to page view
 
 ### Changed
