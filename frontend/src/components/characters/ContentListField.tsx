@@ -21,7 +21,8 @@ export interface ContentListFieldProps {
   entries?: Record<string, unknown>
   schemaId?: string
   typeDefinition?: ContentTypeDefinition
-  onChange?: (value: ContentRefValue[]) => void
+  // `meta.entry` is a newly picked entry's own properties, for `on_pick`.
+  onChange?: (value: ContentRefValue[], meta?: { entry: Record<string, unknown> | null }) => void
   readOnly?: boolean
   hideLabel?: boolean
   // The character as formulas read it, for a per-entry field's `visible_if`
@@ -69,7 +70,7 @@ export default function ContentListField({
       : column
   )
 
-  const add = (picked: ContentRefValue) => {
+  const add = (picked: ContentRefValue, entry?: Record<string, unknown>) => {
     // Picking something already on the sheet is a no-op rather than a duplicate
     // row: two copies of the same spell is never what was meant.
     if (rows.some((row) => row?._ref === picked._ref)) return
@@ -83,7 +84,7 @@ export default function ContentListField({
     const row = Object.keys(starting).length
       ? { ...picked, _per: { ...starting, ...(picked._per || {}) } }
       : picked
-    onChange?.([...rows, row])
+    onChange?.([...rows, row], { entry: entry ?? null })
   }
 
   // A new custom entry opens straight away, ready to be named.

@@ -1,10 +1,13 @@
 // What picking an entry does to the rest of a character.
 //
 // A content_ref field may carry `on_pick` rules: picking a background grants
-// its skills and origin feat, picking a class asks for its skill choices. The
-// rules are data in the sheet, so this engine knows nothing about any game.
+// its skills and origin feat, picking a class asks for its skill choices. A
+// content_list may carry them too, and then each row is a pick of its own - a
+// list of classes, each granting its features. The rules are data in the
+// sheet, so this engine knows nothing about any game.
 //
-// Everything a pick adds is recorded under `_granted[field]`, which is what
+// Everything a pick adds is recorded under `_granted[field]` (or, for a list
+// row, `_granted["field:ref"]`), which is what
 // lets re-picking take it back off: switch Acolyte for Sage and the Acolyte's
 // skills go, rather than the sheet accumulating every background ever tried.
 // Only what a pick actually *added* is recorded, so a skill the player already
@@ -70,8 +73,21 @@ interface PlanPickArgs {
   document?: PickDocument | null
   data?: Values | null
   field: string
+  // Where the grants are recorded: the field itself for a content_ref, one
+  // key per row for a content_list (see `rowSource`).
+  source?: string
   entry?: Values | null
   lookup?: (ids: string[]) => Promise<ResolvedRefs | null | undefined>
+}
+
+/**
+ * The key one content-list row's grants are recorded under: `classes:wizard`.
+ *
+ * A row is known by its reference - a list never holds the same entry twice -
+ * and a field name never contains a colon, so the key splits back unambiguously.
+ */
+export function rowSource(field: string, ref: string): string {
+  return `${field}:${ref}`
 }
 
 // A property read off an entry as a list: a real list, or comma-separated text
@@ -128,6 +144,7 @@ export async function planPick({
   document,
   data,
   field,
+  source = field,
   entry,
   lookup,
 }: PlanPickArgs): Promise<{ patch: Values; choices: PickChoice[] }> {
@@ -141,9 +158,9 @@ export async function planPick({
   const granted: Record<string, Grants> = {
     ...((data?.[GRANTED_KEY] || {}) as Record<string, Grants>),
   }
-  const previous: Grants = granted[field] || {}
+  const previous: Grants = granted[source] || {}
   const hadGrants = Object.keys(previous).length > 0
-  delete granted[field]
+  delete granted[source]
 
   // Take back whatever the previous pick added.
   for (const [target, keys] of Object.entries(previous)) {
@@ -251,14 +268,99 @@ export async function planPick({
         const count =
           typeof rule.count === 'string' ? Number(entry[rule.count]) || 0 : Number(rule.count ?? 1)
         if (count > 0 && options.length) {
-          choices.push({ source: field, target, count, options, label: rule.label || '' })
+          choices.push({ source, target, count, options, label: rule.label || '' })
         }
       }
     }
   }
 
-  if (Object.keys(recorded).length) granted[field] = recorded
+  if (Object.keys(recorded).length) granted[source] = recorded
   if (hadGrants || Object.keys(recorded).length) patch[GRANTED_KEY] = granted
+  return { patch, choices }
+}
+
+/** A content-list row as far as picks care: its reference, if it has one. */
+function rowRef(row: unknown): string | null {
+  if (!row || typeof row !== 'object') return null
+  const ref = (row as Values)._ref
+  return ref === undefined || ref === null || ref === '' ? null : String(ref)
+}
+
+interface PlanListArgs {
+  document?: PickDocument | null
+  // The character's data *before* the list changed.
+  data?: Values | null
+  field: string
+  // The list's new value.
+  value: unknown
+  // Entries already in hand, keyed by id - the one the browser just picked.
+  known?: Record<string, Values | null | undefined>
+  lookup?: (ids: string[]) => Promise<ResolvedRefs | null | undefined>
+  // Fetches an entry's own properties when it is not already known.
+  fetchEntry?: (id: string) => Promise<Values | null>
+}
+
+/**
+ * Work out what changing a content list's rows does, row by row.
+ *
+ * A content_list may carry the same `on_pick` rules as a content_ref: each
+ * catalog row it gains is followed up as a pick, recorded under its own key
+ * (`rowSource`), and each row it loses takes its grants back off. A freeform
+ * row is the player's own writing and triggers nothing, as does a change to a
+ * row that stays - ticking "equipped" is not picking the item again.
+ *
+ * @returns the data to write and the choices the new rows ask for
+ */
+export async function planListChange({
+  document,
+  data,
+  field,
+  value,
+  known = {},
+  lookup,
+  fetchEntry,
+}: PlanListArgs): Promise<{ patch: Values; choices: PickChoice[] }> {
+  const rules = document?.fields?.[field]?.on_pick
+  if (!Array.isArray(rules) || !rules.length) return { patch: {}, choices: [] }
+
+  const before = new Set(
+    (Array.isArray(data?.[field]) ? (data![field] as unknown[]) : []).map(rowRef).filter(Boolean)
+  )
+  const after = new Set((Array.isArray(value) ? value : []).map(rowRef).filter(Boolean) as string[])
+  const removed = [...before].filter((ref) => !after.has(ref!)) as string[]
+  const added = [...after].filter((ref) => !before.has(ref))
+
+  // Each row is planned against the data the previous one left, so two rows
+  // granting into the same target do not overwrite each other's additions.
+  let current: Values = { ...(data || {}), [field]: value }
+  const patch: Values = {}
+  const choices: PickChoice[] = []
+  const follow = async (ref: string, entry: Values | null) => {
+    const plan = await planPick({
+      document,
+      data: current,
+      field,
+      source: rowSource(field, ref),
+      entry,
+      lookup,
+    })
+    Object.assign(patch, plan.patch)
+    current = { ...current, ...plan.patch }
+    choices.push(...plan.choices)
+  }
+
+  for (const ref of removed) await follow(ref, null)
+  for (const ref of added) {
+    let entry = known[ref] ?? null
+    if (!entry && fetchEntry) {
+      try {
+        entry = await fetchEntry(ref)
+      } catch {
+        entry = null
+      }
+    }
+    if (entry) await follow(ref, entry)
+  }
   return { patch, choices }
 }
 

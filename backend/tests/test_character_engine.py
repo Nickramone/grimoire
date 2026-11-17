@@ -1230,13 +1230,33 @@ class TestOnPickValidation:
     def test_accepts_the_rules_a_real_sheet_uses(self):
         assert _pick_schema()["fields"]["background"]["on_pick"]
 
-    def test_only_a_content_ref_may_carry_rules(self):
+    def test_only_a_content_ref_or_list_may_carry_rules(self):
         with pytest.raises(svc.SchemaError, match="only applies to a content_ref"):
             _pick_schema(
-                feats={
+                speed={"type": "number", "on_pick": [{"grant": "skills", "from": "name"}]}
+            )
+
+    def test_a_content_list_may_carry_rules(self):
+        """Each row is a pick of its own - every class in a multiclass list."""
+        document = _pick_schema(
+            classes={
+                "type": "content_list",
+                "content_type": "class",
+                "on_pick": [
+                    {"choose": "skills", "count": "skill_choices", "from": "skill_options"},
+                    {"grant": "feats", "name": "spellcasting"},
+                ],
+            }
+        )
+        assert document["fields"]["classes"]["on_pick"]
+
+    def test_a_list_rule_reads_the_list_content_type(self):
+        with pytest.raises(svc.SchemaError, match="does not declare"):
+            _pick_schema(
+                classes={
                     "type": "content_list",
-                    "content_type": "feat",
-                    "on_pick": [{"grant": "skills", "from": "name"}],
+                    "content_type": "class",
+                    "on_pick": [{"grant": "skills", "from": "skill_proficiencies"}],
                 }
             )
 

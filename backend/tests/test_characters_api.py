@@ -849,6 +849,11 @@ class TestOverridesAndGrants:
                 "content_type": "background",
                 "on_pick": [{"grant": "skills", "from": "skill_proficiencies"}],
             },
+            "backgrounds": {
+                "type": "content_list",
+                "content_type": "background",
+                "on_pick": [{"grant": "skills", "from": "skill_proficiencies"}],
+            },
             "skills": {"type": "multiselect", "options": ["Arcana", "History"]},
             "speed": {"type": "number", "default": 30},
         },
@@ -919,6 +924,11 @@ class TestOverridesAndGrants:
             {"background": "not a mapping"},
             {"background": {"skills": "not a list"}},
             "not a mapping at all",
+            # A list's grants belong to a row, a single pick's to the field.
+            {"backgrounds": {"skills": ["Arcana"]}},
+            {"backgrounds:": {"skills": ["Arcana"]}},
+            {"background:sage": {"skills": ["Arcana"]}},
+            {"speed:sage": {"skills": ["Arcana"]}},
         ],
     )
     def test_drops_anything_outside_the_narrow_shape(
@@ -929,6 +939,14 @@ class TestOverridesAndGrants:
             client, admin_headers, character, data={"_granted": granted}
         ).json()
         assert body["data"].get("_granted", {}) == {}
+
+    def test_stores_what_a_list_row_granted(self, client, admin_headers, character):
+        """Each row of a list with on_pick is a source of its own."""
+        granted = {"backgrounds:sage": {"skills": ["Arcana"]}, "backgrounds:acolyte": {}}
+        body = self._update(
+            client, admin_headers, character, data={"_granted": granted}
+        ).json()
+        assert body["data"]["_granted"] == {"backgrounds:sage": {"skills": ["Arcana"]}}
 
     def test_keeps_only_text_values(self, client, admin_headers, character):
         body = self._update(
