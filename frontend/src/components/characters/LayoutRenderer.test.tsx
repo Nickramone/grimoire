@@ -425,6 +425,86 @@ describe('LayoutRenderer — a repeat over picked entries', () => {
   })
 })
 
+describe('LayoutRenderer — pips per row', () => {
+  const DOC = {
+    fields: {
+      level: { type: 'number', label: 'Level' },
+      features: {
+        type: 'list',
+        columns: [
+          { key: 'name', type: 'text', label: 'Name' },
+          { key: 'uses', type: 'number', label: 'Uses' },
+          { key: 'used', type: 'number', label: 'Used' },
+        ],
+      },
+    },
+    computed: {},
+  }
+  const rows = [
+    { name: 'Rage', uses: 2, used: 1 },
+    { name: 'Second Wind', uses: 1, used: 0 },
+  ]
+  const pips = (attrs: Record<string, string>): LayoutNode[] => [
+    {
+      tag: 'g-repeat',
+      attrs: { over: 'features' },
+      children: [{ tag: 'g-pips', attrs, children: [] }],
+    },
+  ]
+  const renderDoc = (ast: LayoutNode[], props: RendererProps = {}) =>
+    render(
+      <LayoutRenderer
+        ast={ast}
+        document={DOC}
+        data={{ level: 3, features: rows }}
+        computed={{}}
+        {...props}
+      />
+    )
+
+  it('draws as many boxes as the row’s formula says, ticked from its own column', () => {
+    renderDoc(pips({ formula: 'row.uses', per: 'used', label: 'Uses' }))
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes).toHaveLength(3)
+    expect(boxes.map((box) => (box as HTMLInputElement).checked)).toEqual([true, false, false])
+  })
+
+  it('reads the character’s values in the formula too', () => {
+    renderDoc(pips({ formula: 'row.uses + level', per: 'used', label: 'Uses' }))
+    expect(screen.getAllByRole('checkbox')).toHaveLength(5 + 4)
+  })
+
+  it('writes a tick into its own row', async () => {
+    const onChange = vi.fn()
+    renderDoc(pips({ formula: 'row.uses', per: 'used', label: 'Uses' }), { onChange })
+    await userEvent.click(screen.getAllByRole('checkbox')[2])
+    expect(onChange).toHaveBeenCalledWith('features', [
+      { name: 'Rage', uses: 2, used: 1 },
+      { name: 'Second Wind', uses: 1, used: 1 },
+    ])
+  })
+
+  it('cannot be ticked read-only', () => {
+    renderDoc(pips({ formula: 'row.uses', per: 'used', label: 'Uses' }), {
+      onChange: vi.fn(),
+      readOnly: true,
+    })
+    for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled()
+  })
+
+  it('draws no boxes for a formula that does not parse', () => {
+    renderDoc(pips({ formula: 'row.uses +', per: 'used', label: 'Uses' }))
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+  })
+
+  it('falls back to the character’s field when per names no column', () => {
+    renderDoc(pips({ count: '2', per: 'missing', value: 'level', label: 'Level' }))
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes).toHaveLength(4)
+    expect(boxes.every((box) => (box as HTMLInputElement).checked)).toBe(true)
+  })
+})
+
 describe('LayoutRenderer — any value can be set', () => {
   const value = (name: string): LayoutNode[] => [{ tag: 'g-value', attrs: { name }, children: [] }]
   const computedNode = [{ tag: 'g-computed', attrs: { name: 'str_mod' }, children: [] }]

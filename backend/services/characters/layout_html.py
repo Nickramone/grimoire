@@ -124,9 +124,10 @@ _TAG_ATTRS: dict[str, frozenset] = {
     # the multiselects lowest rung first, `labels` the short text shown when
     # closed and `titles` the full names in the list, both "|"-separated.
     "g-tier": frozenset({"value", "fields", "labels", "titles", "label"}),
-    # `count` is a number or a field/computed name; `value` the number field
-    # holding how many are used.
-    "g-pips": frozenset({"count", "value", "label"}),
+    # `count` is a number or a field/computed name, or `formula` works it out;
+    # `value` the number field holding how many are used, or inside a
+    # <g-repeat> `per` the row's own column.
+    "g-pips": frozenset({"count", "formula", "value", "per", "label"}),
     # A shield's "equipped" on the front page, though the shield is a row of the
     # equipment list: `field` is a `content_list` (or `list`), `per` one of its
     # checkbox per-entry fields (or columns), and `where` a condition in which

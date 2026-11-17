@@ -118,6 +118,10 @@ class TestTiersAndPips:
         assert ast[0]["attrs"]["where"] == "row.equipped && row.attack_bonus"
         assert ast[0]["children"][0]["attrs"]["formula"] == "signed(proficiency + row.attack_bonus)"
 
+    def test_pips_per_row_parse(self):
+        ast = parse_layout_html('<g-pips formula="row.uses" per="used" label="Uses" />')
+        assert ast[0]["attrs"] == {"formula": "row.uses", "per": "used", "label": "Uses"}
+
     @pytest.mark.parametrize(
         "html",
         [

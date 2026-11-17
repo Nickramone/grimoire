@@ -580,10 +580,34 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
     }
 
     case 'g-pips': {
-      // `count` is a number, or a field or computed value holding one.
-      const count = /^\d+$/.test(String(attrs.count || ''))
-        ? Number(attrs.count)
-        : Number(context?.[attrs.count]) || 0
+      // `count` is a number, or a field or computed value holding one;
+      // `formula` works the count out instead, so inside a <g-repeat> each row
+      // can draw as many boxes as its own `row.uses` says. A formula that does
+      // not parse draws no boxes.
+      const count = attrs.formula
+        ? Math.floor(Number(evaluate(attrs.formula, context, 0)) || 0)
+        : /^\d+$/.test(String(attrs.count || ''))
+          ? Number(attrs.count)
+          : Number(context?.[attrs.count]) || 0
+      // Inside a <g-repeat>, `per` names the row's own column holding how many
+      // are used - a feature's uses ticked off on its own line - and an edit is
+      // written back into that row. Outside one, or naming no column, `value`
+      // is the character's field as before.
+      const rowScope = ctx.rowScope
+      if (attrs.per && rowScope?.columns?.[attrs.per]) {
+        const per = attrs.per
+        const editable = Boolean(!readOnly && onChange)
+        return (
+          <Pips
+            key={key}
+            count={count}
+            used={Number(rowScope.row?.[per]) || 0}
+            label={attrs.label || per}
+            disabled={!editable}
+            onChange={editable ? (next: number) => rowScope.edit(per, next) : undefined}
+          />
+        )
+      }
       const usedField = fields[attrs.value]
       const used = usedField
         ? Number(fieldState(attrs.value, usedField, data, context).value) || 0
@@ -735,6 +759,8 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
             return renderChildren(node.children, {
               ...ctx,
               key: `${key}-${index}`,
+              // The row's columns read by bare name, and the row itself as
+              // `row`, as a per-row form names it.
               context: { ...context, ...derivedRow, row: derivedRow, _index: index },
               rowScope: { row: row || {}, derivedRow, columns: columnsByKey, edit: editRow },
             })
