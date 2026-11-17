@@ -110,6 +110,14 @@ class TestTiersAndPips:
             "label": "Shield equipped",
         }
 
+    def test_a_repeat_may_pick_its_rows(self):
+        ast = parse_layout_html(
+            '<g-repeat over="magic_items" where="row.equipped &amp;&amp; row.attack_bonus">'
+            '<g-value formula="signed(proficiency + row.attack_bonus)" /></g-repeat>'
+        )
+        assert ast[0]["attrs"]["where"] == "row.equipped && row.attack_bonus"
+        assert ast[0]["children"][0]["attrs"]["formula"] == "signed(proficiency + row.attack_bonus)"
+
     @pytest.mark.parametrize(
         "html",
         [

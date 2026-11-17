@@ -2734,7 +2734,15 @@ and returned as derived `layout_ast` / `styles_css`:
 Directives are `g-field`, `g-computed`, `g-label`, `g-value`, `g-section`,
 `g-if`, and `g-repeat`. Inside a `g-repeat` over a list field, a `g-field`
 naming one of that list's columns addresses **that row's** cell, so a custom
-layout can draw an editable table of its own. Everything else is a closed allowlist of structural
+layout can draw an editable table of its own. A `g-repeat` may also go over a
+`content_list`: each pass reads the entry as `row` (the catalog entry with the
+character's per-entry values on top; a freeform entry as written, `_inline`
+included), and a `g-field` naming a per-entry field edits that entry's value.
+`where` on a `g-repeat` is a condition on `row` choosing the rows drawn
+(`where="row.equipped && row.attack_bonus"`), and `formula` on a `g-value`
+shows an expression's value instead of a named one
+(`<g-value formula="signed(proficiency + row.attack_bonus)" />`), a display
+only. Everything else is a closed allowlist of structural
 tags. **The template never becomes markup**: it is parsed to an AST server-side
 and rendered as React elements, so no schema string ever reaches `innerHTML`.
 Event handlers, `<script>`, `<style>`, `<iframe>`, `<input>` and friends, and
