@@ -318,6 +318,111 @@ describe('LayoutRenderer — Phase 2', () => {
     ])
     expect(screen.queryByText('magic')).not.toBeInTheDocument()
   })
+
+  it('draws only the rows its condition picks, reading the row as row', () => {
+    renderDoc([
+      {
+        tag: 'g-repeat',
+        attrs: { over: 'equipment', where: 'row.qty > 1' },
+        children: [{ tag: 'g-value', attrs: { formula: 'row.name' }, children: [] }],
+      },
+    ])
+    expect(screen.getByText('Rope')).toBeInTheDocument()
+    expect(screen.queryByText('Sword')).not.toBeInTheDocument()
+  })
+})
+
+describe('LayoutRenderer — a repeat over picked entries', () => {
+  const DOC = {
+    fields: {
+      strength: { type: 'number', label: 'Strength' },
+      hero_name: { type: 'text', label: 'Name' },
+      magic_items: {
+        type: 'content_list',
+        content_type: 'magic_item',
+        allow_freeform: true,
+        per_entry_fields: { equipped: { type: 'checkbox', label: 'Equipped' } },
+      },
+    },
+    computed: {},
+  }
+  const entries = {
+    'sword-1': { name: '+1 Sword', attack_bonus: 1 },
+    cloak: { name: 'Cloak', attack_bonus: 0 },
+  }
+  const items = [
+    { _ref: 'sword-1', _per: { equipped: true } },
+    { _ref: 'cloak', _per: { equipped: true } },
+    { _ref: 'gone', _per: { equipped: true } },
+    { _inline: true, name: 'Homebrew Blade', attack_bonus: 5, _per: { equipped: true } },
+  ]
+  const repeat = (where: string, children: LayoutNode[]): LayoutNode[] => [
+    { tag: 'g-repeat', attrs: { over: 'magic_items', where }, children },
+  ]
+  const renderEntries = (ast: LayoutNode[], props: RendererProps = {}) =>
+    render(
+      <LayoutRenderer
+        ast={ast}
+        document={DOC}
+        data={{ strength: 3, hero_name: 'Vex', magic_items: items }}
+        computed={{}}
+        entries={entries}
+        {...props}
+      />
+    )
+
+  it('reads each entry with its per-entry values as row', () => {
+    renderEntries(
+      repeat('row.equipped && row.attack_bonus && not row._inline', [
+        { tag: 'g-value', attrs: { formula: 'row.name' }, children: [] },
+        { tag: 'g-value', attrs: { formula: 'signed(strength + row.attack_bonus)' }, children: [] },
+      ])
+    )
+    expect(screen.getByText('+1 Sword')).toBeInTheDocument()
+    expect(screen.getByText('+4')).toBeInTheDocument()
+    expect(screen.queryByText('Cloak')).not.toBeInTheDocument()
+    expect(screen.queryByText('Homebrew Blade')).not.toBeInTheDocument()
+  })
+
+  it('draws a freeform entry unless the condition leaves it out', () => {
+    renderEntries(
+      repeat('row._inline', [{ tag: 'g-value', attrs: { formula: 'row.name' }, children: [] }])
+    )
+    expect(screen.getByText('Homebrew Blade')).toBeInTheDocument()
+  })
+
+  it("does not lay an entry's properties over the character's", () => {
+    renderEntries(
+      repeat('row.attack_bonus == 1', [
+        { tag: 'g-value', attrs: { name: 'hero_name' }, children: [] },
+      ])
+    )
+    expect(screen.getByText('Vex')).toBeInTheDocument()
+  })
+
+  it("edits an entry's per-entry field", async () => {
+    const onChange = vi.fn()
+    renderEntries(
+      repeat('row.attack_bonus == 1', [
+        { tag: 'g-field', attrs: { name: 'equipped', label: '' }, children: [] },
+      ]),
+      { onChange }
+    )
+    await userEvent.click(screen.getByRole('checkbox'))
+    expect(onChange).toHaveBeenCalledWith('magic_items', [
+      { _ref: 'sword-1', _per: { equipped: false } },
+      items[1],
+      items[2],
+      items[3],
+    ])
+  })
+
+  it('shows nothing for a formula that does not parse', () => {
+    const { container } = renderEntries([
+      { tag: 'g-value', attrs: { formula: 'strength +' }, children: [] },
+    ])
+    expect(container.textContent).toBe('—')
+  })
 })
 
 describe('LayoutRenderer — any value can be set', () => {

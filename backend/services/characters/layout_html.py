@@ -101,8 +101,13 @@ _TAG_ATTRS: dict[str, frozenset] = {
     ),
     "g-computed": frozenset({"name", "label", "format", "variant", "visible_if"}),
     "g-label": frozenset({"name", "text"}),
-    "g-value": frozenset({"name", "format"}),
-    "g-repeat": frozenset({"over", "as"}),
+    # `formula` shows an expression's value instead of a named one - a row's
+    # own figure inside a <g-repeat>, which no computed value can name.
+    "g-value": frozenset({"name", "format", "formula"}),
+    # `over` is a `list` or a `content_list`; `where` a condition in which `row`
+    # names one row (an entry with its per-entry values on top), choosing the
+    # rows drawn.
+    "g-repeat": frozenset({"over", "as", "where"}),
     "g-if": frozenset({"test"}),
     "g-section": frozenset({"title", "name", "visible_if"}),
     "g-tabs": frozenset(),

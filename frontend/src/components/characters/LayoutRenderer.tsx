@@ -421,6 +421,13 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
     }
 
     case 'g-value': {
+      // `formula` shows a worked-out expression instead of a named value: a
+      // row's own attack bonus inside a <g-repeat>, where no computed value
+      // could name it. It is a display, never edited or overridden; one that
+      // does not parse shows nothing.
+      if (attrs.formula !== undefined) {
+        return <span key={key}>{formatValue(evaluate(attrs.formula, context, null))}</span>
+      }
       const value = context?.[name]
       const editable = !readOnly && attrs.readonly === undefined
       const computedField = computedDefinition(schemaDocument, name)
@@ -602,12 +609,15 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
       )
 
     case 'g-repeat': {
-      // Iterates a `list` field's rows. A repeat over anything that is not a
-      // list renders nothing rather than erroring — the schema validator has
-      // already checked the field exists.
+      // Iterates a `list` field's rows, or the entries of a `content_list`. A
+      // repeat over anything else renders nothing rather than erroring — the
+      // schema validator has already checked the field exists.
       const listName = attrs.over
       const rows: unknown = data?.[listName]
       if (!Array.isArray(rows)) return null
+      if (fields[listName]?.type === 'content_list') {
+        return renderEntryRepeat(node, ctx, listName, rows)
+      }
       // The context's copy of the rows has the `default_from` cells worked out.
       // Conditions inside the repeat read that, so a <g-if test> on `age` sees
       // the number the cell shows; edits go to the stored rows.
@@ -632,6 +642,11 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
                 ? derivedRows[index]
                 : row || {}
             ) as Values
+            // `where` picks the rows drawn, reading the row as `row`, as a
+            // per-row form does; one that does not parse draws no row.
+            if (attrs.where && !evaluate(attrs.where, { ...context, row: derivedRow }, false)) {
+              return null
+            }
             const editRow = (columnKey: string, cellValue: unknown) => {
               const next = rows.map((existing: Values, i: number) =>
                 i === index ? { ...existing, [columnKey]: cellValue } : existing
@@ -641,7 +656,7 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
             return renderChildren(node.children, {
               ...ctx,
               key: `${key}-${index}`,
-              context: { ...context, ...derivedRow, _index: index },
+              context: { ...context, ...derivedRow, row: derivedRow, _index: index },
               rowScope: { row: row || {}, derivedRow, columns: columnsByKey, edit: editRow },
             })
           })}
@@ -668,6 +683,63 @@ function titleFrom(source: unknown, context: Values): string {
   }
   const text = String(value).trim()
   return text.length > MAX_TAB_TITLE ? `${text.slice(0, MAX_TAB_TITLE - 1)}…` : text
+}
+
+// A <g-repeat> over a content_list: one pass per entry, the entry read as
+// `row` - the catalog entry with the character's per-entry values on top, or a
+// freeform entry as written, its `_inline` flag included so a sheet can leave
+// it out. Unlike a list row, the entry's properties are not laid over the
+// character's own names: an item's `name` would hide the hero's. A <g-field>
+// naming one of the per-entry fields edits that entry's value.
+function renderEntryRepeat(
+  node: LayoutNode,
+  ctx: RenderContext,
+  listName: string,
+  rows: unknown[]
+): ReactNode {
+  const { key, schemaDocument, context, onChange, entries } = ctx
+  const attrs = node.attrs || {}
+  const definition = (schemaDocument?.fields?.[listName] || {}) as FieldDefinition
+  const declared = (definition.per_entry_fields || {}) as Record<string, FieldDefinition>
+  const columns: Record<string, FieldDefinition> = Object.fromEntries(
+    Object.entries(declared).map(([name, field]) => [name, { ...field, key: name }])
+  )
+  const table = (context?._entries || entries || {}) as Record<string, unknown>
+
+  return (
+    <Fragment key={key}>
+      {rows.map((raw, index) => {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+        const item = raw as Values
+        const per = (item._per || {}) as Values
+        const entry = item._inline ? item : table[String(item._ref)]
+        // A reference whose entry is gone has nothing to draw.
+        if (!entry || typeof entry !== 'object') return null
+        const row: Values = { ...(entry as Values), ...per }
+        if (attrs.where && !evaluate(attrs.where, { ...context, row }, false)) return null
+        const edit = (name: string, value: unknown) => {
+          const next = rows.map((existing, i) =>
+            i === index
+              ? {
+                  ...(existing as Values),
+                  _per: {
+                    ...(((existing as Values)._per as Values | undefined) || {}),
+                    [name]: value,
+                  },
+                }
+              : existing
+          )
+          onChange?.(listName, next)
+        }
+        return renderChildren(node.children, {
+          ...ctx,
+          key: `${key}-${index}`,
+          context: { ...context, row, _index: index },
+          rowScope: { row: per, derivedRow: per, columns, edit },
+        })
+      })}
+    </Fragment>
+  )
 }
 
 function computedDefinition(
