@@ -2611,7 +2611,13 @@ catalogue is unreachable.
 Field types are `text`, `number`, `textarea`, `checkbox`, `select`,
 `multiselect`, and `list`. Formulas are a small arithmetic/comparison/logic
 language with a closed function table (`floor`, `ceil`, `round`, `abs`, `min`,
-`max`, `sum`, `len`, `if`, `clamp`, `signed`, plus the list functions below).
+`max`, `sum`, `len`, `if`, `clamp`, `signed`, `by_level`, plus the list
+functions below). `by_level(table, level)` reads a `'level:value'` table such
+as `'1:2,3:3,6:4'`: the pair with the highest level not above `level` wins, so
+`by_level(ref(feature, 'uses_by_level'), class_level)` is a feature's uses at
+that level. A numeric value comes back as a number, anything else as text
+(`'1:long,5:short'`); below the first level it reads as `''`, which is 0 in
+arithmetic.
 They are **parsed, never executed** - there is no `eval` anywhere in the engine
 - and a formula referencing an unknown name is rejected at install rather than
 failing at render.

@@ -421,6 +421,35 @@ def _fn_at(value: Any, index: Any, prop: Any = None, entries: Any = None) -> Any
     return "" if found_value is None else found_value
 
 
+_NUMBER_TEXT = re.compile(r"-?\d+(\.\d+)?")
+
+
+def _fn_by_level(table: Any, level: Any) -> Any:
+    """The value a level reaches in a `'level:value'` table.
+
+    `by_level('1:2,3:3,6:4', 5)` is 3: the pairs are separated by commas, and
+    the one with the highest level not above `level` wins. A numeric value comes
+    back as a number, anything else as text (`'1:long,5:short'`). Below the
+    first level, an empty table or a non-text reads as ``""``, which is 0 in
+    arithmetic; a malformed pair is skipped.
+    """
+    if not isinstance(table, str):
+        return ""
+    reached = math.floor(_to_number(level))
+    best_level, best_value = None, ""
+    for pair in table.split(","):
+        key, sep, raw = pair.partition(":")
+        key, raw = key.strip(), raw.strip()
+        if not sep or not re.fullmatch(r"-?\d+", key):
+            continue
+        at_level = int(key)
+        if at_level <= reached and (best_level is None or at_level >= best_level):
+            best_level, best_value = at_level, raw
+    if _NUMBER_TEXT.fullmatch(best_value):
+        return _to_number(best_value)
+    return best_value
+
+
 FUNCTIONS: dict[str, Callable[..., Any]] = {
     "floor": _fn_floor,
     "ceil": _fn_ceil,
@@ -445,6 +474,7 @@ FUNCTIONS: dict[str, Callable[..., Any]] = {
     "count_refs": _fn_count_refs,
     "sum_qty": _fn_sum_qty,
     "at": _fn_at,
+    "by_level": _fn_by_level,
 }
 
 #: Functions that read resolved catalog entries. `_eval_node` passes the table
