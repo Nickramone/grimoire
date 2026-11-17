@@ -117,9 +117,10 @@ _TAG_ATTRS: dict[str, frozenset] = {
     # the multiselects lowest rung first, `labels` the short text shown when
     # closed and `titles` the full names in the list, both "|"-separated.
     "g-tier": frozenset({"value", "fields", "labels", "titles", "label"}),
-    # `count` is a number or a field/computed name; `value` the number field
-    # holding how many are used.
-    "g-pips": frozenset({"count", "value", "label"}),
+    # `count` is a number or a field/computed name, or `formula` works it out;
+    # `value` the number field holding how many are used, or inside a
+    # <g-repeat> `per` the row's own column.
+    "g-pips": frozenset({"count", "formula", "value", "per", "label"}),
     # The portrait is the character's, not a field's, so it takes no name. Its
     # size is the sheet's to set, through the `gc-portrait` class.
     "g-portrait": frozenset({"visible_if"}),

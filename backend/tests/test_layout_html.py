@@ -98,6 +98,10 @@ class TestTiersAndPips:
         ast = parse_layout_html('<g-pips count="slots_1_total" value="slots_1_used" label="Slot" />')
         assert ast[0]["tag"] == "g-pips"
 
+    def test_pips_per_row_parse(self):
+        ast = parse_layout_html('<g-pips formula="row.uses" per="used" label="Uses" />')
+        assert ast[0]["attrs"] == {"formula": "row.uses", "per": "used", "label": "Uses"}
+
     @pytest.mark.parametrize(
         "html",
         ['<g-tier value="a" onchange="x()" />', '<g-pips count="3" onclick="x()" />'],
