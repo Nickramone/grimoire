@@ -505,6 +505,68 @@ describe('LayoutRenderer — pips per row', () => {
   })
 })
 
+describe('LayoutRenderer — pips per picked entry', () => {
+  const DOC = {
+    fields: {
+      level: { type: 'number', label: 'Level' },
+      features: {
+        type: 'content_list',
+        content_type: 'feature',
+        per_entry_fields: { used: { type: 'number', label: 'Used', default: 0 } },
+      },
+    },
+    computed: {},
+  }
+  const entries = {
+    rage: { name: 'Rage', uses: 2 },
+    wind: { name: 'Second Wind', uses: 1 },
+  }
+  const items = [
+    { _ref: 'rage', _per: { used: 2 } },
+    { _ref: 'wind', _per: {} },
+  ]
+  const ast: LayoutNode[] = [
+    {
+      tag: 'g-repeat',
+      attrs: { over: 'features', where: 'row.uses' },
+      children: [
+        {
+          tag: 'g-pips',
+          attrs: { formula: 'row.uses + level', per: 'used', label: 'Uses' },
+          children: [],
+        },
+      ],
+    },
+  ]
+  const renderEntries = (props: RendererProps = {}) =>
+    render(
+      <LayoutRenderer
+        ast={ast}
+        document={DOC}
+        data={{ level: 1, features: items }}
+        computed={{}}
+        entries={entries}
+        {...props}
+      />
+    )
+
+  it("draws each entry's boxes from its formula, ticked from its per-entry field", () => {
+    renderEntries()
+    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+    expect(boxes.map((box) => box.checked)).toEqual([true, true, false, false, false])
+  })
+
+  it("writes a tick into the entry's per-entry field", async () => {
+    const onChange = vi.fn()
+    renderEntries({ onChange })
+    await userEvent.click(screen.getAllByRole('checkbox')[4])
+    expect(onChange).toHaveBeenCalledWith('features', [
+      items[0],
+      { _ref: 'wind', _per: { used: 2 } },
+    ])
+  })
+})
+
 describe('LayoutRenderer — any value can be set', () => {
   const value = (name: string): LayoutNode[] => [{ tag: 'g-value', attrs: { name }, children: [] }]
   const computedNode = [{ tag: 'g-computed', attrs: { name: 'str_mod' }, children: [] }]
