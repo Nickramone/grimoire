@@ -376,6 +376,41 @@ describe('sum_qty', () => {
   })
 })
 
+describe('by_level', () => {
+  // Mirrors the backend's TestByLevel cases: the two evaluators must agree.
+  const context = {
+    level: 5,
+    uses: '1:2,3:3,6:4,12:5,17:6',
+    recovery: '1:long,5:short',
+    rage: { _ref: 'rage' },
+    _entries: { rage: { uses_by_level: '1:2, 3:3, 6:4' } },
+  }
+
+  it.each([
+    ['by_level(uses, level)', 3],
+    ['by_level(uses, 1)', 2],
+    ['by_level(uses, 17)', 6],
+    ['by_level(uses, 20)', 6],
+    ['by_level(uses, 0)', ''],
+    // A fractional level is floored, as floor() would.
+    ['by_level(uses, 5.9)', 3],
+    ['by_level(uses, 6)', 4],
+    ['by_level(recovery, level)', 'short'],
+    ['by_level(recovery, 4)', 'long'],
+    // Pairs need not be in order, and a malformed one is skipped.
+    ["by_level('6:4,1:2,x:9,3,3:3', 4)", 3],
+    ["by_level('1:1.5', 1)", 1.5],
+    ["by_level('', 5)", ''],
+    ['by_level(nothing, 5)', ''],
+    ['by_level(level, 5)', ''],
+    ['by_level(uses, 0) + 1', 1],
+    ['by_level(uses, level) * 2', 6],
+    ["by_level(ref(rage, 'uses_by_level'), level)", 3],
+  ])('%s evaluates to %s', (formula, expected) => {
+    expect(evaluate(formula, context)).toBe(expected)
+  })
+})
+
 describe('overriding computed values', () => {
   const DOC = {
     fields: { dexterity: { type: 'number', default: 14 } },

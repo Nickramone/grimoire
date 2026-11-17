@@ -278,6 +278,30 @@ const FUNCTIONS = {
     }
     return false
   },
+
+  // The value a level reaches in a 'level:value' table: by_level('1:2,3:3,6:4', 5)
+  // is 3. Pairs are separated by commas and the highest level not above `level`
+  // wins. A numeric value comes back as a number, anything else as text
+  // ('1:long,5:short'). Below the first level, an empty table or a non-text
+  // reads as '', which is 0 in arithmetic; a malformed pair is skipped.
+  by_level: (table: ExprValue, level: ExprValue) => {
+    if (typeof table !== 'string') return ''
+    const reached = Math.floor(toNumber(level))
+    let bestLevel: number | null = null
+    let bestValue = ''
+    for (const pair of table.split(',')) {
+      const sep = pair.indexOf(':')
+      if (sep < 0) continue
+      const key = pair.slice(0, sep).trim()
+      if (!/^-?\d+$/.test(key)) continue
+      const atLevel = Number(key)
+      if (atLevel <= reached && (bestLevel === null || atLevel >= bestLevel)) {
+        bestLevel = atLevel
+        bestValue = pair.slice(sep + 1).trim()
+      }
+    }
+    return /^-?\d+(\.\d+)?$/.test(bestValue) ? toNumber(bestValue) : bestValue
+  },
 }
 
 type FunctionName = keyof typeof FUNCTIONS
