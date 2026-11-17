@@ -2408,7 +2408,7 @@ rather than stored as sent:
 | Key | Shape | Purpose |
 |---|---|---|
 | `_overrides` | `{computed name: value}` | The player's own value for a computed value. It replaces the formula, and everything depending on it follows. Names must be computed values; values must be short scalars. Sent whole - leaving a name out resets it |
-| `_granted` | `{picking field: {target field: [value, ...]}}` | What each `on_pick` rule added, so changing the pick can take it back off. The source must carry `on_pick` and each target must be a declared field |
+| `_granted` | `{source: {target field: [value, ...]}}` | What each `on_pick` rule added, so changing the pick can take it back off. The source is the picking content_ref field, or `field:ref` for one row of a content_list with `on_pick` (each row is a pick of its own, and removing it takes back only its grants). The field must carry `on_pick` and each target must be a declared field |
 
 **Schema fields:** `id`, `schema_id`, `name`, `system`, `description`,
 `version`, `source_id`, `source_url`, `source_version`, `is_community`,

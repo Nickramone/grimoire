@@ -617,6 +617,8 @@ def _coerce_overrides(document: dict, value: Any) -> dict:
 #: The one reserved key character data may carry beside its fields.
 GRANTED_KEY = "_granted"
 _MAX_GRANTED_VALUES = 200
+#: A source key: a field name, or `field:ref` for a content-list row.
+_MAX_GRANTED_SOURCE = 300
 
 
 def _coerce_granted(fields: dict, value: Any) -> dict:
@@ -627,6 +629,10 @@ def _coerce_granted(fields: dict, value: Any) -> dict:
     background take the old one's grants back off, rather than the sheet
     silently accumulating every background ever tried.
 
+    A content_list's rows are picks of their own, each recorded under
+    `"field:ref"` - "the Wizard row of classes" - so removing one row takes back
+    only what that row granted.
+
     Allowed through only because it is this narrow: source fields must carry
     `on_pick`, targets must be declared fields, and values are short strings.
     Anything else is dropped, so it is not a way to write arbitrary JSON.
@@ -635,8 +641,14 @@ def _coerce_granted(fields: dict, value: Any) -> dict:
         return {}
     cleaned: dict = {}
     for source, targets in value.items():
-        definition = fields.get(source)
+        if not isinstance(source, str) or len(source) > _MAX_GRANTED_SOURCE:
+            continue
+        field_name, row, ref = source.partition(":")
+        definition = fields.get(field_name)
         if not isinstance(definition, dict) or not definition.get("on_pick"):
+            continue
+        if (definition.get("type") == "content_list") != bool(row and ref):
+            # A list's grants belong to a row, a single pick's to the field.
             continue
         if not isinstance(targets, dict):
             continue

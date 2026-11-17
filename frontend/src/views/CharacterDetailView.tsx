@@ -16,7 +16,12 @@ import Spinner from '../components/Spinner'
 import CharacterSheet from '../components/characters/CharacterSheet'
 import ChoiceDialog from '../components/characters/ChoiceDialog'
 import AllValuesDialog from '../components/characters/AllValuesDialog'
-import { planPick, applyChoice, type PickChoice } from '../components/characters/onPick'
+import {
+  planPick,
+  planListChange,
+  applyChoice,
+  type PickChoice,
+} from '../components/characters/onPick'
 import { OVERRIDES_KEY } from '../components/characters/expressions'
 import RawCharacterData from '../components/characters/RawCharacterData'
 import CharacterPortrait from '../components/characters/CharacterPortrait'
@@ -202,9 +207,46 @@ export default function CharacterDetailView() {
 
   const onChange = useCallback(
     async (name: string, value: unknown, meta?: unknown) => {
+      const before = dataRef.current
       applyPatch({ [name]: value })
 
       const definition = document?.fields?.[name]
+      if (definition?.type === 'content_list') {
+        if (!Array.isArray(definition.on_pick) || !definition.on_pick.length) return
+        // Each row gained is a pick, each row lost takes its grants back.
+        const entry =
+          meta && typeof meta === 'object' && 'entry' in meta
+            ? ((meta as { entry: Entry }).entry ?? null)
+            : null
+        const last = Array.isArray(value) ? (value[value.length - 1] as { _ref?: string }) : null
+        const known: Record<string, Values> = {}
+        if (entry && last?._ref) {
+          known[last._ref] = entry
+          const ref = last._ref
+          setPickedEntries((prev) => ({ ...prev, [ref]: entry }))
+        }
+        try {
+          const plan = await planListChange({
+            document: document ?? {},
+            data: before,
+            field: name,
+            value,
+            known,
+            lookup,
+            fetchEntry: async (id) => {
+              const resolved: Record<string, { missing?: boolean; data?: Values; name?: string }> =
+                await lookup([id])
+              const found = resolved[id]
+              return found && !found.missing ? { ...(found.data || {}), name: found.name } : null
+            },
+          })
+          if (Object.keys(plan.patch).length) applyPatch(plan.patch as Values)
+          if (plan.choices.length) setChoices((prev) => [...prev, ...plan.choices])
+        } catch (e) {
+          setError((e as Error).message)
+        }
+        return
+      }
       if (definition?.type !== 'content_ref') return
 
       // The picked entry's own properties: from the browser that picked it,
