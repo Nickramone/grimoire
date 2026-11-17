@@ -445,6 +445,44 @@ class TestSchemaValidation:
         with pytest.raises(svc.SchemaError, match="options"):
             svc.validate_schema(_schema(fields={"x": {"type": "select"}}))
 
+    @staticmethod
+    def _items(**attuned):
+        return {
+            **_schema()["fields"],
+            "items": {
+                "type": "content_list",
+                "content_type": "magic_item",
+                "per_entry_fields": {"attuned": {"type": "checkbox", **attuned}},
+            }
+        }
+
+    @staticmethod
+    def _types():
+        return {
+            "magic_item": {
+                "identity_field": "name",
+                "fields": {"name": {"type": "text"}, "attunement": {"type": "checkbox"}},
+            }
+        }
+
+    def test_accepts_conditions_on_a_per_entry_field(self):
+        svc.validate_schema(
+            _schema(
+                fields=self._items(
+                    visible_if="row.attunement",
+                    disabled_if="not row.attuned && count_refs(items, 'attuned') >= 3",
+                ),
+                content_types=self._types(),
+            )
+        )
+
+    @pytest.mark.parametrize("key", ["visible_if", "disabled_if"])
+    def test_rejects_a_broken_condition_on_a_per_entry_field(self, key):
+        with pytest.raises(svc.SchemaError, match=key):
+            svc.validate_schema(
+                _schema(fields=self._items(**{key: "row.attuned &&"}), content_types=self._types())
+            )
+
     def test_rejects_an_invalid_formula(self):
         with pytest.raises(svc.SchemaError, match="invalid formula"):
             svc.validate_schema(_schema(computed={"x": {"formula": "1 +"}}))

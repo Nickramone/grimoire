@@ -441,3 +441,61 @@ describe('ContentListField — freeform entries read like catalog ones', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
 })
+
+describe('ContentListField — conditions on per-entry fields', () => {
+  const ITEMS = {
+    cloak: { name: 'Cloak', attunement: true },
+    rope: { name: 'Rope' },
+    ring: { name: 'Ring', attunement: true },
+  }
+  const DEFINITION = {
+    label: 'Magic Items',
+    content_type: 'magic_item',
+    per_entry_fields: {
+      attuned: {
+        type: 'checkbox',
+        label: 'Attuned',
+        visible_if: 'row.attunement',
+        disabled_if: "not row.attuned && count_refs(magic_items, 'attuned') >= limit",
+      },
+    },
+  }
+  const renderItems = (props = {}) =>
+    render(
+      <ContentListField
+        name="magic_items"
+        definition={DEFINITION}
+        entries={ITEMS}
+        value={[{ _ref: 'cloak' }, { _ref: 'rope' }, { _ref: 'ring' }]}
+        onChange={vi.fn()}
+        context={{ limit: 3 }}
+        {...props}
+      />
+    )
+
+  it('draws the field only where its visible_if holds for the row', () => {
+    renderItems()
+    // Cloak and Ring need attunement; Rope does not.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+  })
+
+  it('reads the character through context in disabled_if', () => {
+    renderItems({
+      value: [{ _ref: 'cloak', _per: { attuned: true } }, { _ref: 'ring' }],
+      context: { limit: 1 },
+    })
+    // The ticked one can still be cleared; the other is past the limit and is
+    // shown read-only, as a value rather than a box.
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes).toHaveLength(1)
+    expect(boxes[0]).toBeChecked()
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
+  it('leaves the field editable while under the limit', async () => {
+    const onChange = vi.fn()
+    renderItems({ value: [{ _ref: 'ring' }], onChange })
+    await userEvent.click(screen.getByRole('checkbox'))
+    expect(onChange).toHaveBeenCalledWith([{ _ref: 'ring', _per: { attuned: true } }])
+  })
+})

@@ -9,6 +9,7 @@ import type { FieldDefinition } from './FieldRenderer'
 import ContentEntryDetail from './ContentEntryDetail'
 import type { ContentFieldDefinition, ContentTypeDefinition } from './ContentEntryDetail'
 import { ghostBtn, iconBtn, fieldLabel } from './characterStyles'
+import { evaluate } from './expressions'
 
 type EntryValues = Record<string, unknown>
 
@@ -23,6 +24,9 @@ export interface ContentListFieldProps {
   onChange?: (value: ContentRefValue[]) => void
   readOnly?: boolean
   hideLabel?: boolean
+  // The character as formulas read it, for a per-entry field's `visible_if`
+  // and `disabled_if`. Without it those see only the list and the row.
+  context?: Record<string, unknown>
 }
 
 /**
@@ -47,6 +51,7 @@ export default function ContentListField({
   onChange,
   readOnly = false,
   hideLabel = false,
+  context,
 }: ContentListFieldProps) {
   const { t } = useTranslation()
   const [browsing, setBrowsing] = useState(false)
@@ -117,20 +122,44 @@ export default function ContentListField({
     ? typeDefinition.fields!
     : { name: { type: 'text', label: t('characters.name') } }
 
+  // A per-entry field's `visible_if` and `disabled_if` read the entry as `row`
+  // - the catalog entry with the character's per-entry values on top, or a
+  // freeform entry as written - beside the character's own names: an
+  // "attuned" box only on items that need attunement, and none ticked past the
+  // limit. A broken `visible_if` shows the field and a broken `disabled_if`
+  // leaves it editable, as a field's own condition does.
+  const conditionContext = (row: ContentRefValue) => {
+    const per = (row?._per || {}) as EntryValues
+    const entry = (row as EntryValues)?._inline ? row : entries[String(row?._ref)]
+    const resolved = {
+      ...(entry && typeof entry === 'object' ? (entry as EntryValues) : {}),
+      ...per,
+    }
+    return { [name]: rows, _entries: entries, ...(context || {}), row: resolved }
+  }
+
   const cell: CSSProperties = { padding: '6px 6px', fontSize: 12, verticalAlign: 'middle' }
   const perCells = (row: ContentRefValue, index: number) =>
-    Object.entries(perFields).map(([key, perDefinition]) => (
-      <td key={key} style={{ ...cell, width: perDefinition.type === 'checkbox' ? 1 : 70 }}>
-        <FieldRenderer
-          name={`${name}.${index}.${key}`}
-          definition={perDefinition}
-          value={row?._per?.[key]}
-          onChange={readOnly ? undefined : (v) => setPer(index, key, v)}
-          readOnly={readOnly}
-          hideLabel={columns.length > 0}
-        />
-      </td>
-    ))
+    Object.entries(perFields).map(([key, perDefinition]) => {
+      const { visible_if: visibleIf, disabled_if: disabledIf } = perDefinition as EntryValues
+      const scope = visibleIf || disabledIf ? conditionContext(row) : null
+      const shown = !visibleIf || Boolean(evaluate(visibleIf, scope!, true))
+      const disabled = Boolean(disabledIf) && Boolean(evaluate(disabledIf, scope!, false))
+      return (
+        <td key={key} style={{ ...cell, width: perDefinition.type === 'checkbox' ? 1 : 70 }}>
+          {shown ? (
+            <FieldRenderer
+              name={`${name}.${index}.${key}`}
+              definition={perDefinition}
+              value={row?._per?.[key]}
+              onChange={readOnly || disabled ? undefined : (v) => setPer(index, key, v)}
+              readOnly={readOnly || disabled}
+              hideLabel={columns.length > 0}
+            />
+          ) : null}
+        </td>
+      )
+    })
 
   return (
     <div className="gc-content-list">

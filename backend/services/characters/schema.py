@@ -253,6 +253,23 @@ def _validate_definition(
             _validate_definition(
                 f"{what} per-entry field {per_name!r}", per_name, per_definition
             )
+            # `visible_if` and `disabled_if` on a per-entry field read the entry
+            # as `row` beside the character's names, so only their syntax is
+            # checked here: a broken one would silently show or unlock the box.
+            for key in ("visible_if", "disabled_if"):
+                condition = per_definition.get(key)
+                if condition is None:
+                    continue
+                if not isinstance(condition, str) or not condition.strip():
+                    raise SchemaError(
+                        f"{what} per-entry field {per_name!r} {key} must be a non-empty expression"
+                    )
+                try:
+                    parse(condition)
+                except EVALUATION_ERRORS as exc:
+                    raise SchemaError(
+                        f"{what} per-entry field {per_name!r} {key} is not a valid expression: {exc}"
+                    ) from exc
 
     if field_type == "list":
         columns = definition.get("columns")
