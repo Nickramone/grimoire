@@ -388,6 +388,7 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
           entries={entries}
           schemaId={schemaId || schemaDocument?.id}
           contentTypes={schemaDocument?.content_types || {}}
+          context={context}
         />
       )
     }

@@ -202,6 +202,7 @@ export default function CharacterSheet({
                         entries={entries}
                         schemaId={schemaId || schemaDocument.id}
                         contentTypes={schemaDocument.content_types || {}}
+                        context={context}
                       />
                     </div>
                   )

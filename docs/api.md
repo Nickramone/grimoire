@@ -2841,7 +2841,19 @@ kit); `content_list` takes many (spells known, feats). Both name the
 
 `per_entry_fields` are the **character's own** notes on an entry - prepared,
 equipped, uses remaining. They are ordinary field definitions, validated and
-coerced like any other.
+coerced like any other. Two conditions read the entry as `row` (the catalog
+entry with the per-entry values on top) beside the character's own names:
+`visible_if` draws the field only where it holds, and `disabled_if` shows it
+read-only where it holds - an "attuned" box only on items that need
+attunement, and no new one past the limit:
+
+```json
+"attuned": {
+  "type": "checkbox",
+  "visible_if": "row.attunement",
+  "disabled_if": "not row.attuned && count_refs(magic_items, 'attuned') >= 3"
+}
+```
 
 **Stored shape.** A reference, never a copy:
 
