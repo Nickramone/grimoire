@@ -3941,6 +3941,7 @@
     "moveRowUp": "Zeile nach oben",
     "moveRowDown": "Zeile nach unten",
     "listEmpty": "Noch nichts vorhanden.",
+    "orderHandle": "Ziehen zum Umsortieren",
     "browseCatalog": "Katalog durchsuchen",
     "searchCatalog": "Katalog durchsuchen",
     "filters": "Filter",

@@ -12,6 +12,8 @@ import { fieldState } from './onPick'
 import SheetPortrait from './SheetPortrait'
 import { findAction, planAction } from './sheetActions'
 import { disabledBtn, ghostBtn } from './characterStyles'
+import SheetOrder from './SheetOrder'
+import type { OrderItem } from './SheetOrder'
 
 /**
  * Renders a schema's `layout_ast` — the parsed, allowlisted form of its
@@ -172,6 +174,8 @@ const DIRECTIVES = new Set([
   'g-check',
   'g-portrait',
   'g-action',
+  'g-order',
+  'g-order-item',
 ])
 
 // HTML attribute → React prop, for the few that differ.
@@ -711,63 +715,37 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
         </section>
       )
 
-    case 'g-repeat': {
+    case 'g-repeat':
       // Iterates a `list` field's rows, or the entries of a `content_list`. A
       // repeat over anything else renders nothing rather than erroring — the
       // schema validator has already checked the field exists.
-      const listName = attrs.over
-      const rows: unknown = data?.[listName]
-      if (!Array.isArray(rows)) return null
-      if (fields[listName]?.type === 'content_list') {
-        return renderEntryRepeat(node, ctx, listName, rows)
-      }
-      // The context's copy of the rows has the `default_from` cells worked out.
-      // Conditions inside the repeat read that, so a <g-if test> on `age` sees
-      // the number the cell shows; edits go to the stored rows.
-      const derivedRows: unknown = context?.[listName]
-
-      const listDefinition = fields[listName] || {}
-      const columns = (listDefinition.columns || []) as FieldDefinition[]
-      // Inside a repeat, a <g-field name="qty"/> means *this row's* qty. The
-      // row's columns therefore shadow the character's own fields, and an edit
-      // is written back into the row rather than to a top-level field.
-      const columnsByKey: Record<string, FieldDefinition> = Object.fromEntries(
-        columns.map((column) => [column.key, column])
-      )
-
       return (
         <Fragment key={key}>
-          {rows.map((row: Values | null, index: number) => {
-            const derivedRow = (
-              Array.isArray(derivedRows) &&
-              derivedRows[index] &&
-              typeof derivedRows[index] === 'object'
-                ? derivedRows[index]
-                : row || {}
-            ) as Values
-            // `where` picks the rows drawn, reading the row as `row`, as a
-            // per-row form does; one that does not parse draws no row.
-            if (attrs.where && !evaluate(attrs.where, { ...context, row: derivedRow }, false)) {
-              return null
-            }
-            const editRow = (columnKey: string, cellValue: unknown) => {
-              const next = rows.map((existing: Values, i: number) =>
-                i === index ? { ...existing, [columnKey]: cellValue } : existing
-              )
-              onChange?.(listName, next)
-            }
-            return renderChildren(node.children, {
-              ...ctx,
-              key: `${key}-${index}`,
-              // The row's columns read by bare name, and the row itself as
-              // `row`, as a per-row form names it.
-              context: { ...context, ...derivedRow, row: derivedRow, _index: index },
-              rowScope: { row: row || {}, derivedRow, columns: columnsByKey, edit: editRow },
-            })
-          })}
+          {repeatItems(node, ctx).map((item) => (
+            <Fragment key={item.key}>{item.content}</Fragment>
+          ))}
         </Fragment>
       )
+
+    case 'g-order': {
+      // The blocks inside, in the order the player dragged them into, stored
+      // as their keys, one per line, in the text field `field`.
+      const field = attrs.field
+      const editable = !readOnly && !!onChange && !!field && !!fields[field]
+      return (
+        <SheetOrder
+          key={key}
+          items={orderItems(node.children, ctx)}
+          stored={field ? data?.[field] : undefined}
+          readOnly={!editable}
+          onReorder={(keys) => onChange?.(field, keys.join('\n'))}
+        />
+      )
     }
+
+    case 'g-order-item':
+      // Outside a <g-order> it is only its contents.
+      return <Fragment key={key}>{renderChildren(node.children, ctx)}</Fragment>
 
     default:
       return null
@@ -796,12 +774,12 @@ function titleFrom(source: unknown, context: Values): string {
 // it out. Unlike a list row, the entry's properties are not laid over the
 // character's own names: an item's `name` would hide the hero's. A <g-field>
 // naming one of the per-entry fields edits that entry's value.
-function renderEntryRepeat(
+function entryRepeatItems(
   node: LayoutNode,
   ctx: RenderContext,
   listName: string,
   rows: unknown[]
-): ReactNode {
+): OrderItem[] {
   const { key, schemaDocument, context, onChange, entries } = ctx
   const attrs = node.attrs || {}
   const definition = (schemaDocument?.fields?.[listName] || {}) as FieldDefinition
@@ -810,41 +788,158 @@ function renderEntryRepeat(
     Object.entries(declared).map(([name, field]) => [name, { ...field, key: name }])
   )
   const table = (context?._entries || entries || {}) as Record<string, unknown>
+  const keys = rowKeys(listName, rows, undefined)
 
-  return (
-    <Fragment key={key}>
-      {rows.map((raw, index) => {
-        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-        const item = raw as Values
-        const per = (item._per || {}) as Values
-        const entry = item._inline ? item : table[String(item._ref)]
-        // A reference whose entry is gone has nothing to draw.
-        if (!entry || typeof entry !== 'object') return null
-        const row: Values = { ...(entry as Values), ...per }
-        if (attrs.where && !evaluate(attrs.where, { ...context, row }, false)) return null
-        const edit = (name: string, value: unknown) => {
-          const next = rows.map((existing, i) =>
-            i === index
-              ? {
-                  ...(existing as Values),
-                  _per: {
-                    ...(((existing as Values)._per as Values | undefined) || {}),
-                    [name]: value,
-                  },
-                }
-              : existing
-          )
-          onChange?.(listName, next)
-        }
-        return renderChildren(node.children, {
-          ...ctx,
-          key: `${key}-${index}`,
-          context: { ...context, row, _index: index },
-          rowScope: { row: per, derivedRow: per, columns, edit },
-        })
-      })}
-    </Fragment>
+  const items: OrderItem[] = []
+  rows.forEach((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+    const item = raw as Values
+    const per = (item._per || {}) as Values
+    const entry = item._inline ? item : table[String(item._ref)]
+    // A reference whose entry is gone has nothing to draw.
+    if (!entry || typeof entry !== 'object') return
+    const row: Values = { ...(entry as Values), ...per }
+    if (attrs.where && !evaluate(attrs.where, { ...context, row }, false)) return
+    const edit = (name: string, value: unknown) => {
+      const next = rows.map((existing, i) =>
+        i === index
+          ? {
+              ...(existing as Values),
+              _per: {
+                ...(((existing as Values)._per as Values | undefined) || {}),
+                [name]: value,
+              },
+            }
+          : existing
+      )
+      onChange?.(listName, next)
+    }
+    items.push({
+      key: keys[index],
+      content: renderChildren(node.children, {
+        ...ctx,
+        key: `${key}-${index}`,
+        context: { ...context, row, _index: index },
+        rowScope: { row: per, derivedRow: per, columns, edit },
+      }),
+    })
+  })
+  return items
+}
+
+// The blocks a <g-order> moves, in the layout's order. Each row a <g-repeat>
+// draws is one block, keyed by its list and the row (see rowKeys); a
+// <g-order-item key> is one block; a <g-if> that holds lends its children, as
+// if they stood in the <g-order> itself; anything else is a block keyed by its
+// place. Whitespace between them is no block.
+function orderItems(children: LayoutNode[] | undefined, ctx: RenderContext): OrderItem[] {
+  if (!Array.isArray(children)) return []
+  const items: OrderItem[] = []
+  children.forEach((child, index) => {
+    if (!child || typeof child !== 'object') return
+    const childCtx = { ...ctx, key: `${ctx.key}-${index}` }
+    if (typeof child.text === 'string') {
+      if (child.text.trim()) items.push({ key: `@${childCtx.key}`, content: child.text })
+      return
+    }
+    const attrs = child.attrs || {}
+    if (!isVisible(attrs.visible_if, ctx.context)) return
+    if (child.tag === 'g-repeat') {
+      items.push(...repeatItems(child, childCtx))
+    } else if (child.tag === 'g-if') {
+      if (evaluate(attrs.test, ctx.context)) items.push(...orderItems(child.children, childCtx))
+    } else if (child.tag === 'g-order-item') {
+      items.push({
+        key: attrs.key || `@${childCtx.key}`,
+        content: renderChildren(child.children, childCtx),
+      })
+    } else {
+      items.push({ key: `@${childCtx.key}`, content: renderNode(child, childCtx) })
+    }
+  })
+  return items
+}
+
+// A stable key for each row of a list: the list's name, what the row is - a
+// catalog entry's reference, a freeform entry's name, or a list row's first
+// column - and `#2` on the second row that is the same thing. Keys stay put
+// when other rows come and go; renaming a list row makes it a new one.
+function rowKeys(listName: string, rows: unknown[], firstColumn: string | undefined): string[] {
+  const seen = new Map<string, number>()
+  return rows.map((raw, index) => {
+    let base = `#${index}`
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const item = raw as Values
+      if (item._ref !== undefined && item._ref !== null && item._ref !== '') {
+        base = `ref:${String(item._ref)}`
+      } else if (item._inline) {
+        base = `inline:${String(item.name ?? '')}`
+      } else if (firstColumn && item[firstColumn] !== undefined && item[firstColumn] !== null) {
+        base = `row:${String(item[firstColumn])}`
+      }
+    }
+    const count = (seen.get(base) || 0) + 1
+    seen.set(base, count)
+    return `${listName}:${base}${count > 1 ? `#${count}` : ''}`
+  })
+}
+
+// The rows a <g-repeat> draws, each with its key.
+function repeatItems(node: LayoutNode, ctx: RenderContext): OrderItem[] {
+  const { schemaDocument, data, context, onChange } = ctx
+  const attrs = node.attrs || {}
+  const fields: Record<string, FieldDefinition> = schemaDocument?.fields || {}
+  const listName = attrs.over
+  const rows: unknown = data?.[listName]
+  if (!Array.isArray(rows)) return []
+  if (fields[listName]?.type === 'content_list') {
+    return entryRepeatItems(node, ctx, listName, rows)
+  }
+  // The context's copy of the rows has the `default_from` cells worked out.
+  // Conditions inside the repeat read that, so a <g-if test> on `age` sees the
+  // number the cell shows; edits go to the stored rows.
+  const derivedRows: unknown = context?.[listName]
+
+  const listDefinition = fields[listName] || {}
+  const columns = (listDefinition.columns || []) as FieldDefinition[]
+  // Inside a repeat, a <g-field name="qty"/> means *this row's* qty. The row's
+  // columns therefore shadow the character's own fields, and an edit is
+  // written back into the row rather than to a top-level field.
+  const columnsByKey: Record<string, FieldDefinition> = Object.fromEntries(
+    columns.map((column) => [column.key, column])
   )
+  const firstColumn = columns[0]?.key
+  const keys = rowKeys(listName, rows, typeof firstColumn === 'string' ? firstColumn : undefined)
+
+  const items: OrderItem[] = []
+  rows.forEach((row: Values | null, index: number) => {
+    const derivedRow = (
+      Array.isArray(derivedRows) && derivedRows[index] && typeof derivedRows[index] === 'object'
+        ? derivedRows[index]
+        : row || {}
+    ) as Values
+    // `where` picks the rows drawn, reading the row as `row`, as a per-row form
+    // does; one that does not parse draws no row.
+    if (attrs.where && !evaluate(attrs.where, { ...context, row: derivedRow }, false)) return
+    const editRow = (columnKey: string, cellValue: unknown) => {
+      const next = rows.map((existing: Values, i: number) =>
+        i === index ? { ...existing, [columnKey]: cellValue } : existing
+      )
+      onChange?.(listName, next)
+    }
+    items.push({
+      key: keys[index],
+      content: renderChildren(node.children, {
+        ...ctx,
+        key: `${ctx.key}-${index}`,
+        // The row's columns read by bare name, and the row itself as `row`, as
+        // a per-row form names it.
+        context: { ...context, ...derivedRow, row: derivedRow, _index: index },
+        rowScope: { row: row || {}, derivedRow, columns: columnsByKey, edit: editRow },
+      }),
+    })
+  })
+  return items
 }
 
 function computedDefinition(

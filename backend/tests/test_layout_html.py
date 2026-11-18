@@ -122,6 +122,17 @@ class TestTiersAndPips:
         ast = parse_layout_html('<g-pips formula="row.uses" per="used" label="Uses" />')
         assert ast[0]["attrs"] == {"formula": "row.uses", "per": "used", "label": "Uses"}
 
+    def test_an_order_parses(self):
+        ast = parse_layout_html(
+            '<g-order field="attack_order">'
+            '<g-repeat over="equipment"><div class="atk">x</div></g-repeat>'
+            '<g-order-item key="spell" visible_if="is_caster"><div>Spell</div></g-order-item>'
+            "</g-order>"
+        )
+        assert ast[0]["tag"] == "g-order"
+        assert ast[0]["attrs"] == {"field": "attack_order"}
+        assert ast[0]["children"][1]["attrs"] == {"key": "spell", "visible_if": "is_caster"}
+
     @pytest.mark.parametrize(
         "html",
         [
@@ -129,6 +140,9 @@ class TestTiersAndPips:
             '<g-pips count="3" onclick="x()" />',
             '<g-check field="a" per="b" onchange="x()" />',
             '<g-check field="a" per="b" style="color:red" />',
+            '<g-order field="a" ondrop="x()"></g-order>',
+            '<g-order field="a" draggable="true"></g-order>',
+            '<g-order-item key="a" onclick="x()"></g-order-item>',
         ],
     )
     def test_they_take_no_handlers(self, html):
