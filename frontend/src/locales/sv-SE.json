@@ -3927,6 +3927,7 @@
     "moveRowUp": "Flytta raden uppåt",
     "moveRowDown": "Flytta raden nedåt",
     "listEmpty": "Inget här än.",
+    "orderHandle": "Dra för att ändra ordning",
     "browseCatalog": "Bläddra i katalogen",
     "searchCatalog": "Sök i katalogen",
     "filters": "Filter",

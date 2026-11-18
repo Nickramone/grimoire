@@ -106,9 +106,26 @@ class TestTiersAndPips:
         assert ast[0]["attrs"]["where"] == "row.equipped && row.attack_bonus"
         assert ast[0]["children"][0]["attrs"]["formula"] == "signed(proficiency + row.attack_bonus)"
 
+    def test_an_order_parses(self):
+        ast = parse_layout_html(
+            '<g-order field="attack_order">'
+            '<g-repeat over="equipment"><div class="atk">x</div></g-repeat>'
+            '<g-order-item key="spell" visible_if="is_caster"><div>Spell</div></g-order-item>'
+            "</g-order>"
+        )
+        assert ast[0]["tag"] == "g-order"
+        assert ast[0]["attrs"] == {"field": "attack_order"}
+        assert ast[0]["children"][1]["attrs"] == {"key": "spell", "visible_if": "is_caster"}
+
     @pytest.mark.parametrize(
         "html",
-        ['<g-tier value="a" onchange="x()" />', '<g-pips count="3" onclick="x()" />'],
+        [
+            '<g-tier value="a" onchange="x()" />',
+            '<g-pips count="3" onclick="x()" />',
+            '<g-order field="a" ondrop="x()"></g-order>',
+            '<g-order field="a" draggable="true"></g-order>',
+            '<g-order-item key="a" onclick="x()"></g-order-item>',
+        ],
     )
     def test_they_take_no_handlers(self, html):
         with pytest.raises(LayoutHtmlError):

@@ -3927,6 +3927,7 @@
     "moveRowUp": "Move row up",
     "moveRowDown": "Move row down",
     "listEmpty": "Nothing here yet.",
+    "orderHandle": "Drag to reorder",
     "browseCatalog": "Browse catalog",
     "searchCatalog": "Search the catalog",
     "filters": "Filters",

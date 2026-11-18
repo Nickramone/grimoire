@@ -3927,6 +3927,7 @@
     "moveRowUp": "Déplacer vers le haut",
     "moveRowDown": "Déplacer vers le bas",
     "listEmpty": "Rien pour le moment.",
+    "orderHandle": "Glisser pour réordonner",
     "browseCatalog": "Parcourir le catalogue",
     "searchCatalog": "Rechercher dans le catalogue",
     "filters": "Filtres",

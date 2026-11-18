@@ -78,6 +78,8 @@ DIRECTIVE_TAGS: frozenset = frozenset(
         "g-tier",       # one value's rung on a ladder of multiselects
         "g-pips",       # a count drawn as boxes, ticked off as it is used
         "g-portrait",   # the character's portrait, framed as the player chose
+        "g-order",      # blocks the player drags into an order of their own
+        "g-order-item", # one fixed block of a g-order, under its own key
     }
 )
 
@@ -128,6 +130,12 @@ _TAG_ATTRS: dict[str, frozenset] = {
     # The portrait is the character's, not a field's, so it takes no name. Its
     # size is the sheet's to set, through the `gc-portrait` class.
     "g-portrait": frozenset({"visible_if"}),
+    # `field` is the text field holding the order, one block key per line. Each
+    # row a <g-repeat> inside draws is a block of its own (a weapon with its
+    # two-handed and thrown lines); a <g-order-item> is a fixed one, `key`
+    # naming it in the stored order.
+    "g-order": frozenset({"field"}),
+    "g-order-item": frozenset({"key", "visible_if"}),
 }
 
 #: Tags dropped with their contents rather than unwrapped. Keeping a <script>'s

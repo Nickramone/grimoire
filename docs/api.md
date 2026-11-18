@@ -2724,7 +2724,14 @@ included), and a `g-field` naming a per-entry field edits that entry's value.
 (`where="row.equipped && row.attack_bonus"`), and `formula` on a `g-value`
 shows an expression's value instead of a named one
 (`<g-value formula="signed(proficiency + row.attack_bonus)" />`), a display
-only. Everything else is a closed allowlist of structural
+only. `<g-order field="attack_order">` lets the player drag what it holds into
+an order of their own, by a handle beside each block: every row a `g-repeat`
+inside draws is one block (whatever lines it draws), a
+`<g-order-item key="spell">` is one fixed block, and a `g-if` that holds lends
+its children. The order is stored in the text field `field` as the blocks'
+keys, one per line (`equipment:ref:<entry id>`, `#2` on a second copy of the
+same entry; a list row by its first column); a block the stored order does not
+know yet comes first. Everything else is a closed allowlist of structural
 tags. **The template never becomes markup**: it is parsed to an AST server-side
 and rendered as React elements, so no schema string ever reaches `innerHTML`.
 Event handlers, `<script>`, `<style>`, `<iframe>`, `<input>` and friends, and

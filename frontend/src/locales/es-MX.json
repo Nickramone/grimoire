@@ -3927,6 +3927,7 @@
     "moveRowUp": "Subir fila",
     "moveRowDown": "Bajar fila",
     "listEmpty": "Aún no hay nada.",
+    "orderHandle": "Arrastra para reordenar",
     "browseCatalog": "Explorar el catálogo",
     "searchCatalog": "Buscar en el catálogo",
     "filters": "Filtros",

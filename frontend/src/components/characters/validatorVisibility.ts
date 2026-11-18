@@ -115,6 +115,9 @@ function walk(
       case 'g-repeat':
         place(attrs.over, here)
         break
+      case 'g-order':
+        place(attrs.field, here)
+        break
     }
 
     if (node.children?.length) {
