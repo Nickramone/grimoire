@@ -171,6 +171,118 @@ describe('LayoutRenderer — <g-order>', () => {
     expect(container.textContent).toBe('DaggerLongbowKiSpellUnarmed')
   })
 
+  // jsdom lays nothing out: each block is given a 20px slot, top to bottom.
+  const layOut = (container: HTMLElement) => {
+    container.querySelectorAll('[data-order-key]').forEach((element, index) => {
+      ;(element as HTMLElement).getBoundingClientRect = () =>
+        ({ top: index * 20, height: 20, bottom: index * 20 + 20 }) as DOMRect
+    })
+  }
+  const renderOrder = (onChange = vi.fn()) => {
+    const result = render(
+      <LayoutRenderer
+        ast={ast}
+        document={DOC}
+        data={data}
+        computed={{}}
+        entries={entries}
+        onChange={onChange}
+      />
+    )
+    layOut(result.container)
+    return { ...result, onChange }
+  }
+  const ORDER = [
+    'equipment:ref:dagger',
+    'equipment:ref:bow',
+    'resources:row:Ki',
+    'spell',
+    'unarmed',
+  ]
+
+  it('drags a block below another and stores the order on release', () => {
+    const { container, onChange } = renderOrder()
+    const handles = screen.getAllByRole('button', { name: 'characters.orderHandle' })
+    fireEvent.pointerDown(handles[0], { button: 0, pointerId: 1, clientY: 10 })
+    expect(container.querySelector('.gc-order-dragging')).not.toBeNull()
+    fireEvent.pointerMove(handles[0], { pointerId: 1, clientY: 55 })
+    expect(container.querySelector('.gc-order-drop-before')?.getAttribute('data-order-key')).toBe(
+      'spell'
+    )
+    fireEvent.pointerUp(handles[0], { pointerId: 1, clientY: 55 })
+    expect(onChange).toHaveBeenCalledWith(
+      'attack_order',
+      ['equipment:ref:bow', 'resources:row:Ki', 'equipment:ref:dagger', 'spell', 'unarmed'].join(
+        '\n'
+      )
+    )
+    expect(container.querySelector('.gc-order-dragging')).toBeNull()
+  })
+
+  it('drops a block last when released below every other', () => {
+    const { container, onChange } = renderOrder()
+    const handles = screen.getAllByRole('button', { name: 'characters.orderHandle' })
+    fireEvent.pointerDown(handles[1], { button: 0, pointerId: 1, clientY: 30 })
+    fireEvent.pointerMove(handles[1], { pointerId: 1, clientY: 200 })
+    expect(container.querySelector('.gc-order-drop-after')?.getAttribute('data-order-key')).toBe(
+      'unarmed'
+    )
+    fireEvent.pointerUp(handles[1], { pointerId: 1 })
+    expect(onChange).toHaveBeenCalledWith(
+      'attack_order',
+      [ORDER[0], ORDER[2], ORDER[3], ORDER[4], ORDER[1]].join('\n')
+    )
+  })
+
+  it('stores nothing when a block is dropped where it was, or the drag is cancelled', () => {
+    const { container, onChange } = renderOrder()
+    const handles = screen.getAllByRole('button', { name: 'characters.orderHandle' })
+    fireEvent.pointerDown(handles[2], { button: 0, pointerId: 1, clientY: 50 })
+    fireEvent.pointerMove(handles[2], { pointerId: 1, clientY: 52 })
+    fireEvent.pointerUp(handles[2], { pointerId: 1 })
+    fireEvent.pointerDown(handles[2], { button: 0, pointerId: 2, clientY: 50 })
+    fireEvent.pointerMove(handles[2], { pointerId: 2, clientY: 5 })
+    fireEvent.pointerCancel(handles[2], { pointerId: 2 })
+    expect(container.querySelector('.gc-order-dragging')).toBeNull()
+    // A right click starts no drag; moves and releases without one do nothing.
+    fireEvent.pointerDown(handles[2], { button: 2, pointerId: 3, clientY: 50 })
+    fireEvent.pointerMove(handles[2], { pointerId: 3, clientY: 5 })
+    fireEvent.pointerUp(handles[2], { pointerId: 3 })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('moves a block down with the arrow and ignores arrows past either end', () => {
+    const { onChange } = renderOrder()
+    const handles = screen.getAllByRole('button', { name: 'characters.orderHandle' })
+    fireEvent.keyDown(handles[0], { key: 'ArrowUp' })
+    fireEvent.keyDown(handles[4], { key: 'ArrowDown' })
+    fireEvent.keyDown(handles[0], { key: 'Enter' })
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.keyDown(handles[0], { key: 'ArrowDown' })
+    expect(onChange).toHaveBeenCalledWith(
+      'attack_order',
+      [ORDER[1], ORDER[0], ...ORDER.slice(2)].join('\n')
+    )
+  })
+
+  it('keeps the order but draws no handles when the field is not declared', () => {
+    render(
+      <LayoutRenderer
+        ast={[{ ...ast[0], attrs: { field: 'nowhere' } }]}
+        document={DOC}
+        data={data}
+        computed={{}}
+        entries={entries}
+        onChange={() => {}}
+      />
+    )
+    expect(screen.queryByRole('button', { name: 'characters.orderHandle' })).not.toBeInTheDocument()
+  })
+
+  it('reads a stored order given as a list', () => {
+    expect(storedKeys(['b', 'a'])).toEqual(['b', 'a'])
+  })
+
   it('is only its contents outside a g-order', () => {
     render(
       <LayoutRenderer
