@@ -151,6 +151,11 @@ def _with_apply(apply_step):
         (_with_apply({"grant": "feats", "from": "'a'", "carry": {"nope": "1"}}), "does not declare"),
         (_with_apply({"grant": "feats", "from": "'a'", "carry": []}), "'carry'"),
         (_with_apply({"grant": "feats", "from": "'a'", "source": "origin"}), "'source'"),
+        (_with_apply({"grant": "feats", "from": "'a'", "values": {"nope": "1"}}), "per_entry"),
+        (_with_apply({"grant": "feats", "from": "'a'", "values": {"from_level": "nowhere"}}),
+         "unknown name"),
+        (_with_apply({"grant": "skills", "from": "'a'", "values": {"x": "1"}}),
+         "content_list target"),
         (_with_apply({"grant": "feats", "from": "'a'", "source": "nowhere"}), "'source'"),
         (_with_apply({"set": "level", "to": "missing + 1"}), "unknown name"),
     ],
@@ -172,6 +177,9 @@ def test_a_grant_step_reads_formulas_and_records_under_a_pick():
     )
     _validate(_document(prompts))
     _validate(_document(_with_apply({"grant": "skills", "from": "answer.skills"})))
+    _validate(
+        _document(_with_apply({"grant": "feats", "from": "'a'", "values": {"from_level": "'2'"}}))
+    )
 
 
 def test_grant_belongs_to_prompts_only():

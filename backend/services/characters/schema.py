@@ -16,7 +16,7 @@ is routinely half-filled, so a missing value reads as 0 rather than an error.
 """
 import math
 import re
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from .expressions import EVALUATION_ERRORS, evaluate, parse, referenced_names
 from .layout_html import LayoutHtmlError, parse_layout_html
@@ -338,9 +338,12 @@ def _validate_on_pick(
             continue
         if not isinstance(target, str) or target not in fields:
             raise SchemaError(f"{what} rule {index} targets unknown field {target!r}")
-        if target == field_name:
-            raise SchemaError(f"{what} rule {index} cannot target its own field")
         target_type = (fields[target] or {}).get("type", "text")
+        # A content list may grant rows into itself - an equipment pack adds
+        # its contents beside it. The rows it adds are not followed as picks,
+        # so this cannot recurse. A content_ref has one value and cannot.
+        if target == field_name and not (verb == "grant" and target_type == "content_list"):
+            raise SchemaError(f"{what} rule {index} cannot target its own field")
 
         if verb == "grant":
             if target_type not in _GRANT_TARGETS:
@@ -382,6 +385,21 @@ def _validate_on_pick(
                             f"{what} rule {index} carries {from_key!r}, which the "
                             f"{definition.get('content_type')!r} content type does not declare"
                         )
+            values = rule.get("values")
+            if values is not None:
+                # Per-entry values, each a list parallel to `from` - the
+                # quantity of each item a pack holds.
+                if target_type != "content_list" or "from" not in rule:
+                    raise SchemaError(
+                        f"{what} rule {index} values needs a content_list target and 'from'"
+                    )
+                _validate_grant_values(
+                    values,
+                    fields[target] or {},
+                    f"{what} rule {index}",
+                    lambda key: key in properties,
+                    f"the {definition.get('content_type')!r} content type does not declare",
+                )
             continue
 
         if target_type not in _CHOOSE_TARGETS:
@@ -402,6 +420,27 @@ def _validate_on_pick(
         label = rule.get("label")
         if label is not None and (not isinstance(label, str) or len(label) > 200):
             raise SchemaError(f"{what} rule {index} label must be text under 200 characters")
+
+
+def _validate_grant_values(
+    values: Any, target: dict, where: str, readable: Callable[[Any], bool], unreadable: str
+) -> None:
+    """Check a grant's `values`: per-entry fields of the target, each read from a list.
+
+    `readable(source)` says whether a value's source can be read - an entry
+    property for an `on_pick` rule, a formula for a prompt's grant.
+    """
+    if not isinstance(values, dict) or not values:
+        raise SchemaError(f"{where} 'values' must be an object of per-entry field: list")
+    declared = set(target.get("per_entry_fields") or {})
+    for key, source in values.items():
+        if key not in declared:
+            raise SchemaError(
+                f"{where} values sets {key!r}, which is not one of the target's "
+                "per_entry_fields"
+            )
+        if not readable(source):
+            raise SchemaError(f"{where} values reads {source!r}, which {unreadable}")
 
 
 #: Buttons a sheet may declare, and the steps one press may take. A rest resets
@@ -481,9 +520,11 @@ def _validate_write_steps(
       properties worked out by formulas - a level's class features. `from`
       lists ids (or a multiselect's values); `names`, in the same order, are
       what each falls back to when the catalog has no such id; `carry` sets
-      values on those freeform entries. What it adds is recorded under
-      `source` (a content_ref with `on_pick`, so picking another class there
-      takes it back), or else under the pick that opened the prompt.
+      values on those freeform entries; `values` sets per-entry fields, each
+      formula a list parallel to `from` - a pack's quantities. What it adds is
+      recorded under `source` (a content_ref with `on_pick`, so picking
+      another class there takes it back), or else under the pick that opened
+      the prompt.
     """
     if not isinstance(steps, list) or not steps:
         raise SchemaError(f"{what} must be a non-empty list of steps")
@@ -587,7 +628,7 @@ def _validate_prompt_grant(
             "or a content_list"
         )
     _validate_formula(step.get("from"), f"{where} 'from'", known, images)
-    for key in ("names", "carry"):
+    for key in ("names", "carry", "values"):
         if key in step and field_type != "content_list":
             raise SchemaError(f"{where} {key!r} needs a content_list target")
     if "names" in step:
@@ -608,6 +649,14 @@ def _validate_prompt_grant(
                     "does not declare"
                 )
             _validate_formula(formula, f"{where} 'carry' {key!r}", known, images)
+    if "values" in step:
+        def _formula_ok(formula: Any) -> bool:
+            _validate_formula(formula, f"{where} 'values'", known, images)
+            return True
+
+        _validate_grant_values(
+            step["values"], fields[target] or {}, where, _formula_ok, "is not a formula"
+        )
     if "source" in step:
         source = step["source"]
         definition = fields.get(source) if isinstance(source, str) else None

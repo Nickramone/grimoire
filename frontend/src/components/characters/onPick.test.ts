@@ -589,3 +589,112 @@ describe('planListChange — each row is a pick', () => {
     expect(patch[GRANTED_KEY]).toEqual({ 'classes:rogue': { skills: ['Stealth'] } })
   })
 })
+
+describe('planListChange — a pack grants its contents beside it', () => {
+  const PACK_DOCUMENT = {
+    fields: {
+      equipment: {
+        type: 'content_list',
+        content_type: 'item',
+        per_entry_fields: { qty: { type: 'number' }, equipped: { type: 'checkbox' } },
+        on_pick: [
+          {
+            grant: 'equipment',
+            from: 'pack_ids',
+            names: 'pack_names',
+            values: { qty: 'pack_qty' },
+          },
+        ],
+      },
+    },
+  }
+  const EXPLORERS = {
+    name: "Explorer's Pack",
+    pack_ids: ['backpack', 'rations', 'oil'],
+    pack_names: ['Backpack', 'Rations', 'Oil'],
+    pack_qty: [1, 10, 2],
+  }
+  // The catalog has the backpack and the rations as items, not the oil.
+  const lookupItems = async (ids: string[]) =>
+    Object.fromEntries(
+      ids.map((id) => [
+        id,
+        id === 'oil' ? { missing: true } : { content_type: 'item', source: 'xphb', missing: false },
+      ])
+    )
+
+  it('adds each item with its quantity, as a reference or a named entry', async () => {
+    const { patch } = await planListChange({
+      document: PACK_DOCUMENT,
+      data: { equipment: [] },
+      field: 'equipment',
+      value: [{ _ref: 'explorers-pack' }],
+      known: { 'explorers-pack': EXPLORERS },
+      lookup: lookupItems,
+    })
+    expect(patch.equipment).toEqual([
+      { _ref: 'explorers-pack' },
+      { _ref: 'backpack', _source: 'xphb', qty: 1 },
+      { _ref: 'rations', _source: 'xphb', qty: 10 },
+      { _inline: true, qty: 2, name: 'Oil' },
+    ])
+    expect(patch[GRANTED_KEY]).toEqual({
+      'equipment:explorers-pack': { equipment: ['backpack', 'rations', 'Oil'] },
+    })
+  })
+
+  it('reads quantities written as text, an empty slot leaving the default', async () => {
+    const { patch } = await planListChange({
+      document: PACK_DOCUMENT,
+      data: { equipment: [] },
+      field: 'equipment',
+      value: [{ _ref: 'explorers-pack' }],
+      known: { 'explorers-pack': { ...EXPLORERS, pack_qty: '1,,x' } },
+      lookup: lookupMissing,
+    })
+    expect(patch.equipment).toEqual([
+      { _ref: 'explorers-pack' },
+      { _inline: true, qty: 1, name: 'Backpack' },
+      { _inline: true, name: 'Rations' },
+      { _inline: true, name: 'Oil' },
+    ])
+  })
+
+  it('leaves an item the player already had as it was', async () => {
+    const { patch } = await planListChange({
+      document: PACK_DOCUMENT,
+      data: { equipment: [{ _ref: 'rations', qty: 3 }] },
+      field: 'equipment',
+      value: [{ _ref: 'rations', qty: 3 }, { _ref: 'explorers-pack' }],
+      known: { 'explorers-pack': EXPLORERS },
+      lookup: lookupItems,
+    })
+    expect(patch.equipment).toEqual([
+      { _ref: 'rations', qty: 3 },
+      { _ref: 'explorers-pack' },
+      { _ref: 'backpack', _source: 'xphb', qty: 1 },
+      { _inline: true, qty: 2, name: 'Oil' },
+    ])
+  })
+
+  it('takes the contents back with the pack', async () => {
+    const data = {
+      equipment: [
+        { _ref: 'explorers-pack' },
+        { _ref: 'backpack', qty: 1 },
+        { _ref: 'rations', qty: 7 },
+        { _inline: true, qty: 2, name: 'Oil' },
+        { _ref: 'rope', qty: 1 },
+      ],
+      [GRANTED_KEY]: { 'equipment:explorers-pack': { equipment: ['backpack', 'rations', 'Oil'] } },
+    }
+    const { patch } = await planListChange({
+      document: PACK_DOCUMENT,
+      data,
+      field: 'equipment',
+      value: data.equipment.slice(1),
+    })
+    expect(patch.equipment).toEqual([{ _ref: 'rope', qty: 1 }])
+    expect(patch[GRANTED_KEY]).toEqual({})
+  })
+})

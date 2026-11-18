@@ -455,6 +455,59 @@ describe('grant', () => {
     })
   })
 
+  it('works out per-entry values as lists beside the ids, and sets them on each entry', async () => {
+    const pack: SheetPrompt = {
+      label: 'Pack',
+      steps: [],
+      apply: [
+        {
+          grant: 'gear',
+          from: 'row.pack_ids',
+          names: 'row.pack_names',
+          values: { qty: 'row.pack_qty' },
+        },
+      ],
+    }
+    const packDocument = {
+      fields: {
+        gear: {
+          type: 'content_list',
+          content_type: 'item',
+          per_entry_fields: { qty: { type: 'number' } },
+        },
+      },
+    }
+    const plan = planPrompt(pack, {
+      document: packDocument,
+      data: {},
+      context: {},
+      answers: {},
+      row: { pack_ids: ['rations', 'oil'], pack_names: ['Rations', 'Oil'], pack_qty: '10, 2' },
+    })
+    expect(plan.grants).toEqual([
+      {
+        target: 'gear',
+        pairs: [
+          ['rations', 'Rations'],
+          ['oil', 'Oil'],
+        ],
+        carried: {},
+        lists: { qty: ['10', '2'] },
+      },
+    ])
+    const patch = await planGrants(plan.grants, {
+      document: packDocument,
+      data: {},
+      lookup: async () => ({ rations: { content_type: 'item' } }),
+    })
+    expect(patch).toEqual({
+      gear: [
+        { _ref: 'rations', qty: 10 },
+        { _inline: true, qty: 2, name: 'Oil' },
+      ],
+    })
+  })
+
   it('falls back to named entries when the catalog cannot be asked', async () => {
     const patch = await planGrants(
       [{ target: 'features', pairs: [['action-surge', 'Action Surge']], carried: {} }],
