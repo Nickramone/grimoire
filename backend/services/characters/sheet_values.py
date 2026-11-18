@@ -16,7 +16,7 @@ from .schema import SchemaError, validate_schema
 
 logger = logging.getLogger("grimoire.characters")
 
-__all__ = ["validated_document", "resolved_entries"]
+__all__ = ["validated_document", "resolved_entries", "reference_ids"]
 
 
 def validated_document(row: CharacterSchema) -> dict:
@@ -35,6 +35,43 @@ def validated_document(row: CharacterSchema) -> dict:
         return {"id": row.schema_id, "name": row.name, "fields": {}, "layout": []}
 
 
+_REF_TYPES = ("content_ref", "content_list")
+
+
+def reference_ids(document: dict, data: dict) -> set[str]:
+    """Every catalog entry id a character's references point at.
+
+    That includes a reference held in a picked entry's per-entry fields - the
+    base weapon chosen on a generic "+1 Weapon" - so a formula can read the
+    base's own properties through `ref(row.base_weapon, 'damage_dice')`.
+    """
+    wanted: set[str] = set()
+    for name, definition in ((document or {}).get("fields") or {}).items():
+        if isinstance(definition, dict) and definition.get("type") in _REF_TYPES:
+            _collect_ids(definition, (data or {}).get(name), wanted)
+    return wanted
+
+
+def _collect_ids(definition: dict, value: Any, wanted: set[str]) -> None:
+    items = value if isinstance(value, list) else [value]
+    per_refs = {
+        key: per_definition
+        for key, per_definition in (definition.get("per_entry_fields") or {}).items()
+        if isinstance(per_definition, dict) and per_definition.get("type") in _REF_TYPES
+    }
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if not item.get("_inline"):
+            entry_id = item.get("_ref")
+            if isinstance(entry_id, str) and entry_id:
+                wanted.add(entry_id)
+        per = item.get("_per")
+        if per_refs and isinstance(per, dict):
+            for key, per_definition in per_refs.items():
+                _collect_ids(per_definition, per.get(key), wanted)
+
+
 def resolved_entries(db: Session, document: dict, data: dict, user_id: str) -> dict[str, Any]:
     """Catalog entries every reference in a character points at.
 
@@ -42,20 +79,7 @@ def resolved_entries(db: Session, document: dict, data: dict, user_id: str) -> d
     just their ids. Collected in one query rather than per reference: a sheet
     with twenty spells should cost one lookup.
     """
-    fields = document.get("fields") or {}
-    wanted: set[str] = set()
-    for name, definition in fields.items():
-        if not isinstance(definition, dict):
-            continue
-        if definition.get("type") not in ("content_ref", "content_list"):
-            continue
-        value = data.get(name)
-        items = value if isinstance(value, list) else [value]
-        for item in items:
-            if isinstance(item, dict) and not item.get("_inline"):
-                entry_id = item.get("_ref")
-                if isinstance(entry_id, str) and entry_id:
-                    wanted.add(entry_id)
+    wanted = reference_ids(document, data)
 
     if not wanted:
         return {}

@@ -31,6 +31,9 @@ export interface ContentBrowserProps {
   typeDefinition?: ContentTypeDefinition
   multiple?: boolean
   chosen?: (ContentRefValue | null | undefined)[]
+  // The field's own `filter`: always applied, and its fields offer no facet,
+  // so a base weapon is picked from the weapons and nothing else.
+  fixedFilters?: Record<string, unknown>
   // The reference to store, and the picked entry's own properties.
   onChoose?: (ref: { _ref: string; _source: string }, entry: Record<string, unknown>) => void
   onClose?: () => void
@@ -53,6 +56,7 @@ export default function ContentBrowser({
   typeDefinition = {},
   multiple = false,
   chosen = [],
+  fixedFilters,
   onChoose,
   onClose,
 }: ContentBrowserProps) {
@@ -68,6 +72,8 @@ export default function ContentBrowser({
   const [detail, setDetail] = useState<CatalogEntry | null>(null)
 
   const searchRef = useRef<HTMLInputElement>(null)
+  // Serialised, so a definition rebuilt on every render does not reload.
+  const fixedKey = JSON.stringify(fixedFilters || {})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -75,21 +81,28 @@ export default function ContentBrowser({
       const result = await contentApi.browse(schemaId, contentType, {
         search,
         page,
-        filters,
+        filters: { ...filters, ...(JSON.parse(fixedKey) as Record<string, unknown>) },
       })
       setEntries(result.entries || [])
       setTotal(result.total || 0)
       // Facets describe the whole catalog, so they are only refreshed when the
       // filters are not narrowing it — otherwise picking one value would empty
       // every other facet and leave no way back.
-      if (!Object.keys(filters).length) setFacets(result.filters_available || {})
+      if (!Object.keys(filters).length) {
+        const fixed = JSON.parse(fixedKey) as Record<string, unknown>
+        setFacets(
+          Object.fromEntries(
+            Object.entries(result.filters_available || {}).filter(([field]) => !(field in fixed))
+          ) as Facets
+        )
+      }
       setError('')
     } catch (e) {
       setError((e as Error).message || t('characters.catalogFailed'))
     } finally {
       setLoading(false)
     }
-  }, [schemaId, contentType, search, page, filters, t])
+  }, [schemaId, contentType, search, page, filters, fixedKey, t])
 
   useEffect(() => {
     void load()

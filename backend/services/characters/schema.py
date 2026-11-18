@@ -174,6 +174,32 @@ def _validate_column(field_name: str, index: int, column: Any) -> None:
             )
 
 
+_FILTER_SCALARS = (str, int, float, bool)
+
+
+def _validate_catalog_filter(what: str, catalog_filter: Any) -> None:
+    """Check a catalog field's `filter`: the browser's filters, fixed.
+
+    `{"category": ["Melee Weapon", "Ranged Weapon"]}` opens the picker on those
+    entries only - a value, or a list of values any of which matches - so a
+    base weapon is never picked from the potions.
+    """
+    if catalog_filter is None:
+        return
+    if not isinstance(catalog_filter, dict) or not catalog_filter:
+        raise SchemaError(f"{what} 'filter' must be a non-empty object of field: value")
+    for key, wanted in catalog_filter.items():
+        if not _NAME_RE.match(str(key)):
+            raise SchemaError(f"{what} filter key {key!r} is not a valid identifier")
+        values = wanted if isinstance(wanted, list) else [wanted]
+        if not values or not all(
+            isinstance(value, _FILTER_SCALARS) and str(value).strip() for value in values
+        ):
+            raise SchemaError(
+                f"{what} filter {key!r} must be a value or a non-empty list of values"
+            )
+
+
 def _derived_columns(definition: Any) -> list[dict]:
     """A list field's columns that work out their value with `default_from`."""
     if not isinstance(definition, dict) or definition.get("type") != "list":
@@ -239,6 +265,7 @@ def _validate_definition(
                 f"{what} is a {field_type} and needs a 'content_type' naming the "
                 "catalog it picks from"
             )
+        _validate_catalog_filter(what, definition.get("filter"))
         # Per-entry fields are the character's own notes on a referenced entry —
         # prepared, equipped, uses remaining. They are ordinary field
         # definitions, validated as such.
@@ -254,9 +281,12 @@ def _validate_definition(
                 f"{what} per-entry field {per_name!r}", per_name, per_definition
             )
             # `visible_if` and `disabled_if` on a per-entry field read the entry
-            # as `row` beside the character's names, so only their syntax is
-            # checked here: a broken one would silently show or unlock the box.
-            for key in ("visible_if", "disabled_if"):
+            # as `row` beside the character's names, and `default_from` - worked
+            # out once, when the entry is added - reads the added entry as `row`
+            # (a generic "+1 Weapon" whose entry names its base starts with that
+            # base picked). Only their syntax is checked here: a broken one would
+            # silently show or unlock the box.
+            for key in ("visible_if", "disabled_if", "default_from"):
                 condition = per_definition.get(key)
                 if condition is None:
                     continue
@@ -884,12 +914,20 @@ def validate_schema(document: Any, *, scope: str = "gc-sheet") -> dict:
     for field_name, definition in fields.items():
         if not isinstance(definition, dict):
             continue
-        if definition.get("type") in _CONTENT_TYPES_FIELDS:
-            wanted = definition.get("content_type")
+        if definition.get("type") not in _CONTENT_TYPES_FIELDS:
+            continue
+        pickers = [(f"Field {field_name!r}", definition)] + [
+            (f"Field {field_name!r} per-entry field {per_name!r}", per_definition)
+            for per_name, per_definition in (definition.get("per_entry_fields") or {}).items()
+            if isinstance(per_definition, dict)
+            and per_definition.get("type") in _CONTENT_TYPES_FIELDS
+        ]
+        for what, picker in pickers:
+            wanted = picker.get("content_type")
             if wanted not in content_types:
                 declared = ", ".join(sorted(content_types)) or "none declared"
                 raise SchemaError(
-                    f"Field {field_name!r} picks from content type {wanted!r}, "
+                    f"{what} picks from content type {wanted!r}, "
                     f"which the schema does not define (has: {declared})"
                 )
 

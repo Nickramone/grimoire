@@ -326,6 +326,92 @@ describe('ContentListField', () => {
   })
 })
 
+describe('ContentListField — a pick inside a row', () => {
+  // A generic "+1 Weapon": the base weapon is picked on the row, from the
+  // weapons only, and an item whose entry names its base starts with it.
+  const MAGIC = {
+    type: 'content_list',
+    label: 'Magic items',
+    content_type: 'spell',
+    per_entry_fields: {
+      base: {
+        type: 'content_ref',
+        label: 'Base',
+        content_type: 'spell',
+        filter: { school: ['evocation', 'abjuration'] },
+        default_from: 'row.base_id',
+      },
+    },
+  }
+
+  const renderMagic = (props = {}) =>
+    render(
+      <ContentListField
+        name="magic"
+        definition={MAGIC}
+        entries={ENTRIES}
+        schemaId="demo"
+        typeDefinition={TYPE}
+        contentTypes={{ spell: TYPE }}
+        value={[]}
+        {...props}
+      />
+    )
+
+  it('shows the picked base by its resolved name', () => {
+    renderMagic({ value: [{ _ref: 'shield', _per: { base: { _ref: 'fireball' } } }] })
+    expect(screen.getByRole('button', { name: /Choose Base/ })).toHaveTextContent('Fireball')
+  })
+
+  it('opens the catalog on the fixed filter, and hands the picked entry back', async () => {
+    const onChange = vi.fn()
+    renderMagic({ value: [{ _ref: 'shield' }], onChange })
+    await userEvent.click(screen.getByRole('button', { name: /Choose Base/ }))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    expect(mockBrowse).toHaveBeenCalledWith(
+      'demo',
+      'spell',
+      expect.objectContaining({ filters: { school: ['evocation', 'abjuration'] } })
+    )
+    expect(onChange).toHaveBeenCalledWith(
+      [{ _ref: 'shield', _per: { base: { _ref: 'fireball', _source: 'srd' } } }],
+      { picked: { fireball: expect.objectContaining({ name: 'Fireball' }) } }
+    )
+  })
+
+  it('starts a new row from default_from, read against the added entry', async () => {
+    const onChange = vi.fn()
+    mockBrowse.mockResolvedValue({
+      entries: [
+        {
+          entry_id: 'shield',
+          source: 'srd',
+          name: 'Shield',
+          data: { ...ENTRIES.shield, base_id: 'fireball' },
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      filters_available: {},
+    })
+    renderMagic({ value: [], onChange })
+    await userEvent.click(screen.getByText(/Browse catalog/i))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    expect(onChange.mock.calls[0][0]).toEqual([
+      { _ref: 'shield', _source: 'srd', _per: { base: { _ref: 'fireball' } } },
+    ])
+  })
+
+  it('leaves the pick empty when the entry names no base', async () => {
+    const onChange = vi.fn()
+    renderMagic({ value: [], onChange })
+    await userEvent.click(screen.getByText(/Browse catalog/i))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    expect(onChange.mock.calls[0][0]).toEqual([{ _ref: 'fireball', _source: 'srd' }])
+  })
+})
+
 describe('ContentListField — rows you can open', () => {
   const FEAT_TYPE = {
     identity_field: 'name',

@@ -209,6 +209,16 @@ export default function CharacterDetailView() {
       const before = dataRef.current
       applyPatch({ [name]: value })
 
+      // A pick made inside a list row - a magic weapon's base - brings its
+      // entry along, so formulas reading it work before the save resolves it.
+      const rowPicks =
+        meta && typeof meta === 'object' && 'picked' in meta
+          ? (meta as { picked?: Record<string, Entry> }).picked
+          : undefined
+      if (rowPicks && Object.keys(rowPicks).length) {
+        setPickedEntries((prev) => ({ ...prev, ...rowPicks }))
+      }
+
       const definition = document?.fields?.[name]
       if (definition?.type === 'content_list') {
         if (!Array.isArray(definition.on_pick) || !definition.on_pick.length) return

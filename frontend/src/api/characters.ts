@@ -145,9 +145,12 @@ export const content = {
           path: { schema_id: schemaId, content_type: contentType },
           query: presentParams(params),
         }),
-        Object.entries(filters)
-          .filter(([, wanted]) => wanted !== '' && wanted !== undefined)
-          .map(([field, wanted]): [string, string] => [`filter[${field}]`, String(wanted)])
+        // A list of values repeats the key, and the catalog matches any of them.
+        Object.entries(filters).flatMap(([field, wanted]) =>
+          (Array.isArray(wanted) ? wanted : [wanted])
+            .filter((value) => value !== '' && value !== undefined && value !== null)
+            .map((value): [string, string] => [`filter[${field}]`, String(value)])
+        )
       )
     ) as Promise<ResponseOf<'/content/{schema_id}/{content_type}', 'get'>>,
   entry: (schemaId: string, contentType: string, entryId: string) =>

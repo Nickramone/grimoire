@@ -17,6 +17,8 @@ export interface ContentFieldDefinition extends FieldDefinition {
   allow_freeform?: boolean
   per_entry_fields?: Record<string, FieldDefinition>
   display_columns?: (string | { key: string; label?: string })[]
+  // Fixed browser filters: a value, or a list of values any of which matches.
+  filter?: Record<string, unknown>
 }
 
 export interface ContentEntryDetailProps {
