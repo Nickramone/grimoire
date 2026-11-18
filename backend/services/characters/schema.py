@@ -482,8 +482,9 @@ def _validate_actions(
         _validate_condition(source, what, names_known, images)
 
     def _row_keys(target: str, what: str, *, appendable: bool) -> set[str]:
-        definition = fields.get(target)
-        field_type = (definition or {}).get("type", "text") if isinstance(definition, dict) else None
+        found = fields.get(target)
+        definition: dict = found if isinstance(found, dict) else {}
+        field_type = definition.get("type", "text") if isinstance(found, dict) else None
         allowed = ("list",) if appendable else ("list", "content_list")
         if field_type not in allowed:
             kinds = "a list" if appendable else "a list or a content_list"
