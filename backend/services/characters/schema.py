@@ -287,17 +287,19 @@ def _validate_on_pick(
     content_types: dict,
     prompts: frozenset | set = frozenset(),
 ) -> None:
-    """Check a content_ref's `on_pick` rules.
+    """Check a content_ref's or content_list's `on_pick` rules.
 
     `on_pick` is what makes a choice *do* something: picking a background
     grants its skills and origin feat, picking a class asks for its skill
-    choices. The rules are data - a target field and the picked entry's
-    property to read - so they are checked here the way formulas are: a typo in
-    a property name would otherwise grant nothing, with no sign of why.
+    choices. On a content_list each row is a pick of its own - every class in
+    a multiclass list grants its features. The rules are data - a target field
+    and the picked entry's property to read - so they are checked here the way
+    formulas are: a typo in a property name would otherwise grant nothing, with
+    no sign of why.
     """
     what = f"Field {field_name!r} on_pick"
-    if definition.get("type") != "content_ref":
-        raise SchemaError(f"{what} only applies to a content_ref field")
+    if definition.get("type") not in ("content_ref", "content_list"):
+        raise SchemaError(f"{what} only applies to a content_ref or content_list field")
     rules = definition["on_pick"]
     if not isinstance(rules, list):
         raise SchemaError(f"{what} must be a list of rules")

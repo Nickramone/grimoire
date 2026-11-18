@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { planPick, applyChoice, fieldState, GRANTED_KEY } from './onPick'
+import { planPick, planListChange, rowSource, applyChoice, fieldState, GRANTED_KEY } from './onPick'
 
 const SKILLS = ['Arcana', 'History', 'Insight', 'Religion', 'Stealth']
 
@@ -435,5 +435,157 @@ describe('planPick — several entries at once', () => {
       entry: null,
     })
     expect(patch.traits).toEqual([])
+  })
+})
+
+describe('planListChange — each row is a pick', () => {
+  const LIST_DOCUMENT = {
+    fields: {
+      ...DOCUMENT.fields,
+      classes: {
+        type: 'content_list',
+        content_type: 'class',
+        on_pick: [
+          { choose: 'skills', count: 'skill_choices', from: 'skill_options' },
+          { grant: 'feats', from: 'feature_ids', names: 'feature_names' },
+        ],
+      },
+    },
+  }
+  const FIGHTER = {
+    name: 'Fighter',
+    skill_choices: 1,
+    skill_options: ['Arcana', 'Stealth'],
+    feature_ids: ['second-wind'],
+    feature_names: ['Second Wind'],
+  }
+  const ROGUE = {
+    name: 'Rogue',
+    skill_choices: 2,
+    skill_options: ['Stealth', 'Insight'],
+    feature_ids: ['sneak-attack'],
+    feature_names: ['Sneak Attack'],
+  }
+
+  it('grants what a new row grants, recorded under that row', async () => {
+    const { patch, choices } = await planListChange({
+      document: LIST_DOCUMENT,
+      data: { classes: [] },
+      field: 'classes',
+      value: [{ _ref: 'fighter' }],
+      known: { fighter: FIGHTER },
+      lookup: lookupMissing,
+    })
+    expect(patch.feats).toEqual([{ _inline: true, name: 'Second Wind' }])
+    expect(patch[GRANTED_KEY]).toEqual({
+      [rowSource('classes', 'fighter')]: { feats: ['Second Wind'] },
+    })
+    expect(choices).toEqual([
+      {
+        source: 'classes:fighter',
+        target: 'skills',
+        count: 1,
+        options: ['Arcana', 'Stealth'],
+        label: '',
+      },
+    ])
+  })
+
+  it('leaves the rows that stay alone', async () => {
+    const data = {
+      classes: [{ _ref: 'fighter' }],
+      feats: [{ _inline: true, name: 'Second Wind' }],
+      [GRANTED_KEY]: { 'classes:fighter': { feats: ['Second Wind'] } },
+    }
+    const fetchEntry = vi.fn(async () => ROGUE)
+    const { patch } = await planListChange({
+      document: LIST_DOCUMENT,
+      data,
+      field: 'classes',
+      value: [{ _ref: 'fighter', _per: { level: 3 } }, { _ref: 'rogue' }],
+      fetchEntry,
+    })
+    // Only the new row was fetched, and the old row's grants are untouched.
+    expect(fetchEntry).toHaveBeenCalledWith('rogue')
+    expect(fetchEntry).toHaveBeenCalledTimes(1)
+    expect(patch.feats).toEqual([
+      { _inline: true, name: 'Second Wind' },
+      { _inline: true, name: 'Sneak Attack' },
+    ])
+    expect(patch[GRANTED_KEY]).toEqual({
+      'classes:fighter': { feats: ['Second Wind'] },
+      'classes:rogue': { feats: ['Sneak Attack'] },
+    })
+  })
+
+  it('takes back only what the removed row granted', async () => {
+    const data = {
+      classes: [{ _ref: 'fighter' }, { _ref: 'rogue' }],
+      skills: ['Stealth', 'Arcana'],
+      feats: [
+        { _inline: true, name: 'Second Wind' },
+        { _inline: true, name: 'Sneak Attack' },
+      ],
+      [GRANTED_KEY]: {
+        'classes:fighter': { feats: ['Second Wind'], skills: ['Arcana'] },
+        'classes:rogue': { feats: ['Sneak Attack'], skills: ['Stealth'] },
+      },
+    }
+    const { patch, choices } = await planListChange({
+      document: LIST_DOCUMENT,
+      data,
+      field: 'classes',
+      value: [{ _ref: 'fighter' }],
+    })
+    expect(patch.feats).toEqual([{ _inline: true, name: 'Second Wind' }])
+    expect(patch.skills).toEqual(['Arcana'])
+    expect(patch[GRANTED_KEY]).toEqual({
+      'classes:fighter': { feats: ['Second Wind'], skills: ['Arcana'] },
+    })
+    expect(choices).toEqual([])
+  })
+
+  it('a freeform row triggers nothing', async () => {
+    const { patch } = await planListChange({
+      document: LIST_DOCUMENT,
+      data: {},
+      field: 'classes',
+      value: [{ _inline: true, name: 'Blood Hunter' }],
+    })
+    expect(patch).toEqual({})
+  })
+
+  it('a row whose entry cannot be found grants nothing', async () => {
+    const { patch } = await planListChange({
+      document: LIST_DOCUMENT,
+      data: {},
+      field: 'classes',
+      value: [{ _ref: 'gone' }],
+      fetchEntry: async () => {
+        throw new Error('offline')
+      },
+    })
+    expect(patch).toEqual({})
+  })
+
+  it('a list without rules is left alone', async () => {
+    const { patch, choices } = await planListChange({
+      document: DOCUMENT,
+      data: {},
+      field: 'feats',
+      value: [{ _ref: 'alert' }],
+      known: { alert: { name: 'Alert' } },
+    })
+    expect(patch).toEqual({})
+    expect(choices).toEqual([])
+  })
+
+  it('a choice made for a row is recorded under that row', () => {
+    const patch = applyChoice({
+      data: { skills: [] },
+      choice: { source: 'classes:rogue', target: 'skills' },
+      picked: ['Stealth'],
+    })
+    expect(patch[GRANTED_KEY]).toEqual({ 'classes:rogue': { skills: ['Stealth'] } })
   })
 })

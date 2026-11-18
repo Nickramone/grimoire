@@ -249,7 +249,16 @@ describe('ContentListField', () => {
     renderList({ value: [], onChange })
     await userEvent.click(screen.getByText(/Browse catalog/i))
     await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
-    expect(onChange).toHaveBeenCalledWith([{ _ref: 'fireball', _source: 'srd' }])
+    expect(onChange).toHaveBeenCalledWith([{ _ref: 'fireball', _source: 'srd' }], expect.anything())
+  })
+
+  it('hands over the picked entry, for on_pick rules', async () => {
+    const onChange = vi.fn()
+    renderList({ value: [], onChange })
+    await userEvent.click(screen.getByText(/Browse catalog/i))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    const meta = onChange.mock.calls[0][1]
+    expect(meta.entry).toMatchObject({ name: expect.any(String) })
   })
 
   it('does not add the same entry twice', async () => {
