@@ -30,6 +30,7 @@ type Grants = Record<string, string[]>
 interface PickRule {
   grant?: string
   choose?: string
+  prompt?: string
   ref?: string
   name?: string
   from?: string
@@ -86,6 +87,9 @@ interface PlanPickArgs {
  * A row is known by its reference - a list never holds the same entry twice -
  * and a field name never contains a colon, so the key splits back unambiguously.
  */
+/** A prompt one row of a content_list opened: which, and the row's entry. */
+export type ListPrompt = { prompt: string; ref: string; entry: Values }
+
 export function rowSource(field: string, ref: string): string {
   return `${field}:${ref}`
 }
@@ -147,13 +151,15 @@ export async function planPick({
   source = field,
   entry,
   lookup,
-}: PlanPickArgs): Promise<{ patch: Values; choices: PickChoice[] }> {
+}: PlanPickArgs): Promise<{ patch: Values; choices: PickChoice[]; prompts: string[] }> {
   const fields = document?.fields || {}
   const rules: PickRule[] = Array.isArray(fields[field]?.on_pick)
     ? (fields[field]!.on_pick as PickRule[])
     : []
   const patch: Values = {}
   const choices: PickChoice[] = []
+  // The sheet's prompts this pick opens, reading the picked entry as `row`.
+  const prompts: string[] = []
 
   const granted: Record<string, Grants> = {
     ...((data?.[GRANTED_KEY] || {}) as Record<string, Grants>),
@@ -200,6 +206,10 @@ export async function planPick({
     }
 
     for (const rule of rules) {
+      if (rule.prompt) {
+        prompts.push(rule.prompt)
+        continue
+      }
       if (rule.grant) {
         const target = rule.grant
         const definition = fields[target]
@@ -276,7 +286,7 @@ export async function planPick({
 
   if (Object.keys(recorded).length) granted[source] = recorded
   if (hadGrants || Object.keys(recorded).length) patch[GRANTED_KEY] = granted
-  return { patch, choices }
+  return { patch, choices, prompts }
 }
 
 /** A content-list row as far as picks care: its reference, if it has one. */
@@ -319,9 +329,16 @@ export async function planListChange({
   known = {},
   lookup,
   fetchEntry,
-}: PlanListArgs): Promise<{ patch: Values; choices: PickChoice[] }> {
+}: PlanListArgs): Promise<{
+  patch: Values
+  choices: PickChoice[]
+  prompts: ListPrompt[]
+  removed: string[]
+}> {
   const rules = document?.fields?.[field]?.on_pick
-  if (!Array.isArray(rules) || !rules.length) return { patch: {}, choices: [] }
+  if (!Array.isArray(rules) || !rules.length) {
+    return { patch: {}, choices: [], prompts: [], removed: [] }
+  }
 
   const before = new Set(
     (Array.isArray(data?.[field]) ? (data![field] as unknown[]) : []).map(rowRef).filter(Boolean)
@@ -335,6 +352,7 @@ export async function planListChange({
   let current: Values = { ...(data || {}), [field]: value }
   const patch: Values = {}
   const choices: PickChoice[] = []
+  const prompts: ListPrompt[] = []
   const follow = async (ref: string, entry: Values | null) => {
     const plan = await planPick({
       document,
@@ -347,6 +365,7 @@ export async function planListChange({
     Object.assign(patch, plan.patch)
     current = { ...current, ...plan.patch }
     choices.push(...plan.choices)
+    if (entry) prompts.push(...plan.prompts.map((prompt) => ({ prompt, ref, entry })))
   }
 
   for (const ref of removed) await follow(ref, null)
@@ -361,7 +380,7 @@ export async function planListChange({
     }
     if (entry) await follow(ref, entry)
   }
-  return { patch, choices }
+  return { patch, choices, prompts, removed }
 }
 
 /**
