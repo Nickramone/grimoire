@@ -1,7 +1,7 @@
 import { createContext } from 'react'
 import { buildContext, computeValues, evaluate, toNumber } from './expressions'
 import type { ExprContext, ExpressionDocument } from './expressions'
-import { GRANTED_KEY, asList as listOf, grantInto } from './onPick'
+import { GRANTED_KEY, asList as listOf, grantInto, parallelList, perEntryAt } from './onPick'
 import type { ResolvedRefs } from './onPick'
 import { planAction } from './sheetActions'
 import type { ActionStep } from './sheetActions'
@@ -60,12 +60,14 @@ export interface PromptApplyStep extends Omit<ActionStep, 'values'> {
   entry?: string
   // grant: formulas for the ids, the names they fall back to, and the values
   // carried onto a freeform entry; `source` is the pick it is recorded under.
+  // Its `values` are per-entry formulas, each a list parallel to `from`.
   grant?: string
   from?: string
   names?: string
   carry?: Record<string, string>
   source?: string
-  // An `append`'s or a `pick`'s per-entry formulas; an `add`'s one formula.
+  // An `append`'s, a `pick`'s or a `grant`'s per-entry formulas; an `add`'s
+  // one formula.
   values?: string | Record<string, string>
 }
 
@@ -431,6 +433,8 @@ export type PromptGrant = {
   target: string
   pairs: [string, string][]
   carried: Values
+  // Slot by slot beside `pairs`: the per-entry values each entry takes.
+  lists?: Record<string, unknown[]>
   source?: string
 }
 
@@ -504,6 +508,11 @@ export function planPrompt(
           carried[key] = value
         }
       }
+      const lists: Record<string, unknown[]> = {}
+      for (const [key, formula] of Object.entries(isObject(step.values) ? step.values : {})) {
+        const value = evaluate<symbol>(formula as string, ctx, FAILED)
+        if (value !== FAILED) lists[key] = parallelList(value)
+      }
       const pairs = ids.map((id, i): [string, string] => [id, names[i] || ''])
       if (pairs.length) {
         const recordedUnder = step.source || source
@@ -511,6 +520,7 @@ export function planPrompt(
           target: step.grant,
           pairs,
           carried,
+          ...(Object.keys(lists).length ? { lists } : {}),
           ...(recordedUnder ? { source: recordedUnder } : {}),
         })
       }
@@ -628,6 +638,7 @@ export async function planGrants(
       list: Array.isArray(held) ? [...held] : [],
       pairs: grant.pairs,
       carried: grant.carried,
+      perEntry: grant.pairs.map((_, i) => perEntryAt(definition, grant.lists || {}, i)),
       resolved,
       record: (key) => added.push(key),
     })

@@ -36,6 +36,7 @@ interface PickRule {
   from?: string
   names?: string
   carry?: Record<string, string>
+  values?: Record<string, string>
   count?: number | string
   label?: string
 }
@@ -45,6 +46,7 @@ interface PickField {
   options?: unknown[]
   on_pick?: unknown
   content_type?: string
+  per_entry_fields?: Record<string, { type?: string } | undefined> | null
   default?: unknown
   default_from?: unknown
 }
@@ -107,6 +109,46 @@ export function asList(value: unknown): string[] {
   return []
 }
 
+/**
+ * A list read position by position, for values that run parallel to another
+ * list - a pack's quantities beside its item ids. Unlike `asList`, an empty
+ * slot keeps its place (`"1,,10"` is three slots) and values keep their type.
+ */
+export function parallelList(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim())
+  if (value === undefined || value === null || value === '') return []
+  return [value]
+}
+
+/**
+ * The per-entry values the `index`th granted entry takes: slot `index` of each
+ * parallel list, as the list's per-entry field stores it. An empty slot, or a
+ * number that is not one, is left out, so the field keeps its default.
+ */
+export function perEntryAt(
+  definition: PickField,
+  lists: Record<string, unknown[]>,
+  index: number
+): Values {
+  const declared = definition.per_entry_fields || {}
+  const values: Values = {}
+  for (const [key, list] of Object.entries(lists)) {
+    const raw = list[index]
+    if (raw === undefined || raw === null || raw === '') continue
+    const type = declared[key]?.type
+    if (type === 'number') {
+      const number = Number(raw)
+      if (Number.isFinite(number)) values[key] = number
+    } else if (type === 'checkbox') {
+      values[key] = raw === true || raw === 'true' || raw === 1 || raw === '1'
+    } else {
+      values[key] = raw
+    }
+  }
+  return values
+}
+
 function optionValues(definition: PickField | undefined): string[] {
   return (definition?.options || []).map((option) =>
     option && typeof option === 'object'
@@ -137,13 +179,16 @@ function currentList(data: Values | null | undefined, patch: Values, target: str
  * `pairs` are `[id, name]`: a multiselect takes the ids among its options; a
  * content list takes a reference when the catalog really has the id as its
  * content type, otherwise a freeform entry named `name` (or the id) with the
- * `carried` values. Returns the new list, or null for any other field.
+ * `carried` values. `perEntry`, in the same order as `pairs`, sets a content
+ * list's per-entry fields on each entry it adds - the quantity of each item
+ * in a pack. Returns the new list, or null for any other field.
  */
 export function grantInto({
   definition,
   list,
   pairs,
   carried = {},
+  perEntry = [],
   resolved = {},
   record,
 }: {
@@ -151,6 +196,7 @@ export function grantInto({
   list: unknown[]
   pairs: [string, string][]
   carried?: Values
+  perEntry?: Values[]
   resolved?: ResolvedRefs
   record: (key: string) => void
 }): unknown[] | null {
@@ -164,7 +210,8 @@ export function grantInto({
     return list
   }
   if (definition.type !== 'content_list') return null
-  for (const [id, name] of pairs) {
+  for (const [index, [id, name]] of pairs.entries()) {
+    const own = perEntry[index] || {}
     const found = id ? resolved[id] : null
     // A reference only when the catalog really has this id *as this type* -
     // resolve does not filter by type, and a feat and a spell may share an
@@ -172,13 +219,13 @@ export function grantInto({
     // even without the content installed.
     if (found && !found.missing && found.content_type === definition.content_type) {
       if (!list.some((item) => matchesKey(item, id))) {
-        list.push(found.source ? { _ref: id, _source: found.source } : { _ref: id })
+        list.push(found.source ? { _ref: id, _source: found.source, ...own } : { _ref: id, ...own })
         record(id)
       }
     } else if (name || id) {
       const label = name || id
       if (!list.some((item) => matchesKey(item, label))) {
-        list.push({ _inline: true, ...carried, name: label })
+        list.push({ _inline: true, ...carried, ...own, name: label })
         record(label)
       }
     }
@@ -287,11 +334,18 @@ export async function planPick({
                   rule.name ? String(entry[rule.name] ?? '') : '',
                 ],
               ]
+        // Per-entry values, each a list parallel to `from`: a pack's quantities.
+        const lists: Record<string, unknown[]> = {}
+        for (const [toKey, fromKey] of Object.entries(rule.values || {})) {
+          lists[toKey] = parallelList(entry[fromKey])
+        }
+        const perEntry = pairs.map((_, i) => perEntryAt(definition, lists, i))
         const list = grantInto({
           definition,
           list: currentList(data, patch, target),
           pairs,
           carried,
+          perEntry,
           resolved,
           record: (key) => record(target, key),
         })

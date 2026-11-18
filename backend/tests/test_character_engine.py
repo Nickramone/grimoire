@@ -1410,6 +1410,39 @@ class TestOnPickValidation:
         )
         assert document["fields"]["background"]["on_pick"]
 
+    def _pack_list(self, rule, per_entry=None):
+        return _pick_schema(
+            equipment={
+                "type": "content_list",
+                "content_type": "class",
+                "per_entry_fields": per_entry or {"qty": {"type": "number"}},
+                "on_pick": [rule],
+            }
+        )
+
+    def test_a_content_list_may_grant_rows_into_itself(self):
+        """An equipment pack adds its contents beside it, in the same list."""
+        document = self._pack_list(
+            {"grant": "equipment", "from": "skill_options", "values": {"qty": "skill_choices"}}
+        )
+        assert document["fields"]["equipment"]["on_pick"]
+
+    @pytest.mark.parametrize(
+        "rule, message",
+        [
+            ({"grant": "equipment", "from": "skill_options", "values": {"nope": "skill_choices"}},
+             "per_entry_fields"),
+            ({"grant": "equipment", "from": "skill_options", "values": {"qty": "nope"}},
+             "does not declare"),
+            ({"grant": "equipment", "from": "skill_options", "values": {}}, "'values'"),
+            ({"grant": "equipment", "name": "name", "values": {"qty": "skill_choices"}},
+             "'from'"),
+        ],
+    )
+    def test_rejects_malformed_grant_values(self, rule, message):
+        with pytest.raises(svc.SchemaError, match=message):
+            self._pack_list(rule)
+
 
 class TestOverridingComputedValues:
     """The player can override any value, calculated ones included."""
