@@ -19,6 +19,7 @@ from ...models import (
 from ...services import characters as svc
 from ...services.characters import images as char_images
 from ...services.characters import rulesets as rs
+from ...services.characters.sheet_values import reference_ids
 
 #: The file format a character exports as.
 EXPORT_SCHEMA = "grimoire://character/v1"
@@ -263,22 +264,9 @@ def embedded_entries(db: Session, character: Character, document: dict) -> dict[
 
 
 def referenced_ids(document: dict, data: dict) -> set:
-    """Every catalog entry id a character's references point at."""
-    fields = (document or {}).get("fields") or {}
-    wanted: set = set()
-    for name, definition in fields.items():
-        if not isinstance(definition, dict):
-            continue
-        if definition.get("type") not in ("content_ref", "content_list"):
-            continue
-        value = data.get(name)
-        items = value if isinstance(value, list) else [value]
-        for item in items:
-            if isinstance(item, dict) and not item.get("_inline"):
-                entry_id = item.get("_ref")
-                if isinstance(entry_id, str) and entry_id:
-                    wanted.add(entry_id)
-    return wanted
+    """Every catalog entry id a character's references point at, per-entry
+    references included, so an export carries a magic item's chosen base."""
+    return reference_ids(document, data)
 
 
 def import_embedded_entries(

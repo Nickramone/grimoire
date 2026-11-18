@@ -209,11 +209,12 @@ def browse_content(
     # facet and leave no way back.
     facets = helpers.build_facets(entries, definition.get("filter_fields", []))
 
-    filters = {
-        key[7:-1]: value
-        for key, value in request.query_params.items()
-        if key.startswith("filter[") and key.endswith("]") and value
-    }
+    # A field may be filtered on several values at once, `filter[f]=a&filter[f]=b`,
+    # and then matches any of them.
+    filters: dict[str, list[str]] = {}
+    for key, value in request.query_params.multi_items():
+        if key.startswith("filter[") and key.endswith("]") and value:
+            filters.setdefault(key[7:-1], []).append(value)
     if filters:
         entries = [
             entry

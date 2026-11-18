@@ -148,6 +148,7 @@ export default function FieldRenderer({
         entries={entries}
         schemaId={schemaId}
         typeDefinition={(contentTypes[contentType] || {}) as ContentTypeDefinition}
+        contentTypes={contentTypes}
         onChange={onChange}
         readOnly={readOnly}
         hideLabel={hideLabel}

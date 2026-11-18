@@ -2808,7 +2808,7 @@ browses the content types their copy declares.
 | `/api/content/packs` | GET | user | Installed packs with their licence and credit. `?schema_id=` filters |
 | `/api/content/packs/reload` | POST | **admin** | Re-read every pack from disk |
 | `/api/content/:schema_id/types` | GET | user | The content types this user's schema declares, each with an entry count |
-| `/api/content/:schema_id/:content_type` | GET | user | Browse: `search`, `filter[field]=value`, `sort`, `page`, `page_size` |
+| `/api/content/:schema_id/:content_type` | GET | user | Browse: `search`, `filter[field]=value` (repeated: any of the values), `sort`, `page`, `page_size` |
 | `/api/content/:schema_id/:content_type/:entry_id` | GET | user | One entry in full |
 | `/api/content/:schema_id/resolve?ids=a,b,c` | GET | user | Resolve many references at once, for rendering a sheet |
 
@@ -2874,6 +2874,35 @@ kit); `content_list` takes many (spells known, feats). Both name the
 `per_entry_fields` are the **character's own** notes on an entry - prepared,
 equipped, uses remaining. They are ordinary field definitions, validated and
 coerced like any other.
+
+A per-entry field can itself be a `content_ref`: a pick made on the row, such as
+the base weapon of a generic "+1 Weapon". It opens the catalog like any other
+pick, its entry comes back in the character's `entries` beside the top-level
+ones, and a formula reads it through the row:
+`sum_each(magic_items, ref(row.base_weapon, 'damage_bonus'))`.
+
+```json
+{
+  "magic_items": {
+    "type": "content_list", "content_type": "magic_item",
+    "per_entry_fields": {
+      "base_weapon": {
+        "type": "content_ref", "content_type": "item",
+        "filter": { "category": ["Melee Weapon", "Ranged Weapon"] },
+        "default_from": "row.base_item_ref"
+      }
+    }
+  }
+}
+```
+
+- `filter` (on any `content_ref` or `content_list`) fixes the browser's filters:
+  each key is a field of the content type, each value one value or a list of
+  values any of which matches. Those fields offer no facet of their own. The
+  catalog endpoint takes the same shape as a repeated `filter[field]=value`.
+- `default_from` on a per-entry field is worked out once, when the entry is
+  added, with the added entry as `row`. For a per-entry `content_ref` a text
+  result is the id of the entry to pick; an empty result leaves it unset.
 
 **Stored shape.** A reference, never a copy:
 

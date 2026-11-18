@@ -77,20 +77,22 @@ def search_entry_ids(db: Session, schema_id: str, content_type: str, query: str)
     return [row[0] for row in db.execute(text(sql), params).fetchall()]
 
 
-def matches_filters(data: dict, filters: dict[str, str]) -> bool:
+def matches_filters(data: dict, filters: dict[str, Any]) -> bool:
     """Whether an entry satisfies every requested filter.
 
     Comparison is by text, case-insensitively: a filter value arrives from a
     query string, so `level=3` must match the number 3, and a list-valued field
-    matches when any of its items does.
+    matches when any of its items does. A filter given several values - the
+    same `filter[field]` repeated - matches any one of them: a sheet's picker
+    for a base weapon asks for melee and ranged weapons at once.
     """
     for field, wanted in filters.items():
         value = data.get(field)
-        target = str(wanted).strip().lower()
-        if isinstance(value, list):
-            if not any(_as_text(item).strip().lower() == target for item in value):
-                return False
-        elif _as_text(value).strip().lower() != target:
+        targets = {
+            str(item).strip().lower() for item in (wanted if isinstance(wanted, list) else [wanted])
+        }
+        have = value if isinstance(value, list) else [value]
+        if not any(_as_text(item).strip().lower() in targets for item in have):
             return False
     return True
 
