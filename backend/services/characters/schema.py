@@ -164,6 +164,10 @@ def _validate_column(field_name: str, index: int, column: Any) -> None:
         _validate_options(what, {**column, "type": column_type})
     if column_type == "number":
         _validate_bounds(what, column)
+    if "readonly" in column and not isinstance(column["readonly"], bool):
+        # A column the player sees but never types into: the sheet's prompts
+        # and actions write it - the choice a level-up made, kept as made.
+        raise SchemaError(f"{what} 'readonly' must be true or false")
 
     if "default_from" in column:
         # The names it reads are checked in `validate_schema`, which knows the

@@ -47,6 +47,24 @@ describe('ListField', () => {
     expect(onChange).toHaveBeenCalledWith([{ name: '', qty: 1, equipped: false }])
   })
 
+  it('shows a readonly column without letting it be typed into', async () => {
+    const onChange = vi.fn()
+    const definition = {
+      ...DEFINITION,
+      columns: [{ ...DEFINITION.columns[0], readonly: true }, DEFINITION.columns[1]],
+    }
+    renderList({ definition, onChange })
+    expect(screen.getByText('Sword')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('Sword')).not.toBeInTheDocument()
+    // The rest of the row, and the rows themselves, stay the player's.
+    await userEvent.type(screen.getByDisplayValue('2'), '5')
+    expect(onChange).toHaveBeenLastCalledWith([
+      { name: 'Sword', qty: 1, equipped: true },
+      { name: 'Rope', qty: 25, equipped: false },
+    ])
+    expect(screen.getByText(/Add row/i)).toBeInTheDocument()
+  })
+
   it('edits a cell without disturbing the others', async () => {
     const onChange = vi.fn()
     renderList({ onChange })
