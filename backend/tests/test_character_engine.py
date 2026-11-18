@@ -776,6 +776,22 @@ class TestListFields:
                 )
             )
 
+    def test_a_column_may_be_readonly_and_still_written(self):
+        """Read-only is the player's view of it; a prompt's write is still a write."""
+        column = {"key": "choice", "type": "text", "readonly": True}
+        validated = svc.validate_schema(
+            _phase2_schema(fields={"x": {"type": "list", "columns": [column]}}, computed={})
+        )
+        assert validated["fields"]["x"]["columns"][0]["readonly"] is True
+        assert svc.coerce_value({"type": "list", "columns": [column]}, [{"choice": "asi"}]) == [
+            {"choice": "asi"}
+        ]
+
+    def test_rejects_a_readonly_that_is_not_true_or_false(self):
+        column = {"key": "a", "type": "text", "readonly": "yes"}
+        with pytest.raises(svc.SchemaError, match="'readonly' must be true or false"):
+            svc.validate_schema(_phase2_schema(fields={"x": {"type": "list", "columns": [column]}}))
+
     def test_coerces_rows_column_by_column(self):
         rows = svc.coerce_value(EQUIPMENT, [{"name": "Sword", "qty": "2", "equipped": "yes"}])
         assert rows == [{"name": "Sword", "qty": 2, "equipped": True}]

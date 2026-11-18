@@ -367,8 +367,12 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
             definition={{ ...scoped, ...(attrs.label ? { label: attrs.label } : {}) }}
             stored={rowScope.row?.[name]}
             worked={rowScope.derivedRow?.[name]}
-            onChange={readOnly ? undefined : (value) => rowScope.edit(name, value)}
-            readOnly={readOnly || attrs.readonly !== undefined}
+            onChange={
+              readOnly || scoped.readonly === true
+                ? undefined
+                : (value) => rowScope.edit(name, value)
+            }
+            readOnly={readOnly || attrs.readonly !== undefined || scoped.readonly === true}
             hideLabel={attrs.label === ''}
           />
         )
@@ -606,7 +610,7 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
       const rowScope = ctx.rowScope
       if (attrs.per && rowScope?.columns?.[attrs.per]) {
         const per = attrs.per
-        const editable = Boolean(!readOnly && onChange)
+        const editable = Boolean(!readOnly && onChange && rowScope.columns[per].readonly !== true)
         return (
           <Pips
             key={key}
