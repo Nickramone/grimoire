@@ -244,6 +244,25 @@ describe('ContentListField', () => {
     expect(onChange).toHaveBeenCalledWith([{ _ref: 'fireball', _per: { prepared: true } }])
   })
 
+  it("offers a per-entry select only the options its row's filter keeps, and the one held", () => {
+    const definition = {
+      ...DEFINITION,
+      per_entry_fields: {
+        choice: {
+          type: 'select',
+          label: 'Choice',
+          width: 170,
+          options: ['Arid', 'Polar', 'Owl', 'Panther'],
+          options_filter: "contains(row.school, option == 'Owl' ? 'evo' : 'none')",
+        },
+      },
+    }
+    renderList({ definition, value: [{ _ref: 'fireball', _per: { choice: 'Polar' } }] })
+    const select = screen.getByLabelText('Choice') as HTMLSelectElement
+    expect([...select.options].map((option) => option.value)).toEqual(['', 'Polar', 'Owl'])
+    expect(select.closest('td')).toHaveStyle({ width: '170px' })
+  })
+
   it('adds a reference from the browser', async () => {
     const onChange = vi.fn()
     renderList({ value: [], onChange })
