@@ -80,6 +80,23 @@ describe('planAction', () => {
     ])
   })
 
+  it("reads a catalog row's id as `row._ref`, resolved or not", () => {
+    const patch = plan([
+      { each: 'items', where: "row._ref == 'rope'", set: { charges_used: '0' } },
+      { each: 'items', where: "row._ref == 'staff'", set: { charges_used: '9' } },
+    ])
+    expect(patch.items).toEqual([
+      { _ref: 'wand', _per: { charges_used: 5 } },
+      { _ref: 'rope', _per: { charges_used: 0 } },
+      { _inline: true, name: 'Homebrew staff', charges: 3, _per: { charges_used: 2 } },
+    ])
+    const unresolved = plan(
+      [{ each: 'items', where: "row._ref == 'lantern'", set: { charges_used: '1' } }],
+      { ...DATA, items: [{ _ref: 'lantern' }] }
+    )
+    expect(unresolved.items).toEqual([{ _ref: 'lantern', _per: { charges_used: 1 } }])
+  })
+
   it('leaves a list out of the patch when no row changes', () => {
     expect(
       plan([{ each: 'resources', where: "row.recovery == 'never'", set: { used: '0' } }])
