@@ -174,6 +174,30 @@ export default function ContentListField({
     rows.some((row) => isShown(row, perDefinition))
   )
 
+  // A per-entry select's `options_filter` keeps the options this row offers,
+  // read with the entry as `row` and the option's value as `option`: one
+  // "choice" field whose options differ from feature to feature. The value
+  // held stays listed, so a choice the row no longer offers still shows. A
+  // filter that does not parse keeps every option.
+  const rowOptions = (
+    perDefinition: FieldDefinition,
+    row: ContentRefValue,
+    key: string
+  ): FieldDefinition => {
+    const filter = (perDefinition as EntryValues).options_filter
+    if (perDefinition.type !== 'select' || typeof filter !== 'string' || !filter.trim()) {
+      return perDefinition
+    }
+    const held = row?._per?.[key]
+    const base = conditionContext(row)
+    const options = (perDefinition.options || []).filter((option) => {
+      const value = typeof option === 'object' ? option.value : option
+      if (held !== undefined && held !== '' && String(value) === String(held)) return true
+      return Boolean(evaluate(filter, { ...base, option: value }, true))
+    })
+    return { ...perDefinition, options }
+  }
+
   const cell: CSSProperties = { padding: '6px 6px', fontSize: 12, verticalAlign: 'middle' }
   const perCells = (row: ContentRefValue, index: number) =>
     perEntries.map(([key, perDefinition]) => {
@@ -186,7 +210,7 @@ export default function ContentListField({
           {shown ? (
             <FieldRenderer
               name={`${name}.${index}.${key}`}
-              definition={perDefinition}
+              definition={rowOptions(perDefinition, row, key)}
               value={row?._per?.[key]}
               onChange={readOnly || disabled ? undefined : (v, meta) => setPer(index, key, v, meta)}
               readOnly={readOnly || disabled}
@@ -452,8 +476,11 @@ const nameButton: CSSProperties = {
   width: '100%',
 }
 
-// A checkbox takes only its own width; a pick needs room for a name.
+// A field's own `width` in pixels - a select whose options are long names -
+// or else: a checkbox takes only its own width; a pick needs room for a name.
 function perCellWidth(definition: FieldDefinition): number {
+  const width = Number(definition.width)
+  if (Number.isFinite(width) && width > 0) return width
   if (definition.type === 'checkbox') return 1
   if (definition.type === 'content_ref') return 160
   return 70
