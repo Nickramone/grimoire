@@ -123,8 +123,11 @@ export function planAction(
         if (!isRow(raw)) return raw
         let row: Values
         if (isEntries) {
+          // A catalog row carries its id as `_ref`, so a step can write to one
+          // entry - a feature granted a moment ago, before the save resolves it.
           const entry = raw._inline ? raw : table[String(raw._ref)]
           row = { ...(isRow(entry) ? entry : {}), ...((raw._per as Values | undefined) || {}) }
+          if (!raw._inline && typeof raw._ref === 'string') row._ref = raw._ref
         } else {
           const worked = Array.isArray(derived) ? derived[index] : undefined
           row = isRow(worked) ? worked : raw

@@ -326,6 +326,26 @@ describe('planPrompt', () => {
     expect(plan.patch._granted).toEqual({ klass: { skills: ['History', 'insight'] } })
   })
 
+  it('writes an answer onto one row of a list by its id, the entry not yet resolved', () => {
+    const prompt: SheetPrompt = {
+      label: 'Feature choice',
+      steps: [{ key: 'c', type: 'select', options: ['Colossus Slayer', 'Horde Breaker'] }],
+      apply: [
+        { each: 'feats', where: "row._ref == 'hunters-prey'", set: { from_level: 'answer.c' } },
+      ],
+    }
+    const plan = planPrompt(prompt, {
+      document: DOCUMENT,
+      data: { feats: [{ _ref: 'alert' }, { _ref: 'hunters-prey' }] },
+      context: { _entries: { alert: { name: 'Alert' } } },
+      answers: { c: 'Horde Breaker' },
+    })
+    expect(plan.patch.feats).toEqual([
+      { _ref: 'alert' },
+      { _ref: 'hunters-prey', _per: { from_level: 'Horde Breaker' } },
+    ])
+  })
+
   it('takes a row out of a list, the picks after it seeing the list without it', () => {
     const prompt: SheetPrompt = {
       label: 'Replace a feat',
