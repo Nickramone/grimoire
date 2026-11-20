@@ -189,6 +189,42 @@ describe('PromptDialog', () => {
     expect(confirm()).toBeEnabled()
   })
 
+  it('notes each entry beside its name, as its entry_note works out', async () => {
+    const browse = vi.fn(async () => ({
+      entries: [
+        { entry_id: 'light', name: 'Light', source: 'xphb', data: { level: 0 } },
+        { entry_id: 'bless', name: 'Bless', source: 'xphb', data: { level: 1 } },
+      ],
+      total: 2,
+    }))
+    const prompt: SheetPrompt = {
+      label: 'Spells',
+      steps: [
+        {
+          key: 'spells',
+          type: 'entries',
+          label: 'Spells',
+          content_type: 'spell',
+          count: 1,
+          entry_note: "entry.level == 0 ? 'Cantrip' : concat('Lv. ', entry.level)",
+        },
+      ],
+      apply: [],
+    }
+    render(
+      <PromptDialog
+        prompt={prompt}
+        document={DOCUMENT}
+        data={{}}
+        context={SHEET}
+        browse={browse}
+        onConfirm={vi.fn()}
+      />
+    )
+    expect(await screen.findByText('Cantrip')).toBeInTheDocument()
+    expect(screen.getByText('Lv. 1')).toBeInTheDocument()
+  })
+
   it('searches a long list by name', async () => {
     const prompt: SheetPrompt = {
       ...LEVEL_UP,
