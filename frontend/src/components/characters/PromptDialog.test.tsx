@@ -175,6 +175,65 @@ describe('PromptDialog', () => {
     })
   })
 
+  it('chooses several entries, as many as count asks for', async () => {
+    const prompt: SheetPrompt = {
+      ...LEVEL_UP,
+      steps: [{ key: 'spells', type: 'entries', label: 'Spells', content_type: 'spell', count: 2 }],
+    }
+    const browse = async () => ({
+      entries: ['Bless', 'Guidance', 'Light'].map((name) => ({
+        entry_id: name.toLowerCase(),
+        name,
+        data: {},
+      })),
+      total: 3,
+    })
+    const onConfirm = vi.fn()
+    render(
+      <PromptDialog
+        prompt={prompt}
+        document={DOCUMENT}
+        data={{}}
+        context={SHEET}
+        browse={browse}
+        onConfirm={onConfirm}
+      />
+    )
+    await userEvent.click(await screen.findByLabelText('Bless'))
+    expect(screen.getByRole('status')).toHaveTextContent('1 left to choose')
+    expect(confirm()).toBeDisabled()
+    await userEvent.click(screen.getByLabelText('Light'))
+    expect(screen.getByLabelText('Guidance')).toBeDisabled()
+    // Unticking one frees a place again.
+    await userEvent.click(screen.getByLabelText('Bless'))
+    expect(screen.getByLabelText('Guidance')).toBeEnabled()
+    await userEvent.click(screen.getByLabelText('Guidance'))
+    await userEvent.click(confirm())
+    expect(onConfirm).toHaveBeenCalledWith({
+      spells: [
+        { name: 'Light', _ref: 'light', _source: undefined },
+        { name: 'Guidance', _ref: 'guidance', _source: undefined },
+      ],
+    })
+  })
+
+  it('asks an entries step for no more than the catalog offers', async () => {
+    const prompt: SheetPrompt = {
+      ...LEVEL_UP,
+      steps: [{ key: 'spells', type: 'entries', content_type: 'spell', count: 3 }],
+    }
+    const browse = async () => ({
+      entries: [{ entry_id: 'bless', name: 'Bless', data: {} }],
+      total: 1,
+    })
+    render(
+      <PromptDialog prompt={prompt} document={DOCUMENT} data={{}} context={SHEET} browse={browse} />
+    )
+    await userEvent.click(await screen.findByLabelText('Bless'))
+    expect(screen.getByRole('status')).toHaveTextContent('0 left to choose')
+    expect(confirm()).toBeEnabled()
+  })
+
   it('searches a long list by name', async () => {
     const prompt: SheetPrompt = {
       ...LEVEL_UP,

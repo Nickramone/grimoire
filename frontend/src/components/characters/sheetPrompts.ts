@@ -29,7 +29,7 @@ export const PENDING_PROMPTS_KEY = '_pending_prompts'
 const ENTRY_PAGE_SIZE = 200
 const ENTRY_MAX_PAGES = 10
 
-export type PromptStepType = 'choose' | 'distribute' | 'entry' | 'number' | 'select'
+export type PromptStepType = 'choose' | 'distribute' | 'entry' | 'entries' | 'number' | 'select'
 
 export interface PromptStep {
   key: string
@@ -41,12 +41,13 @@ export interface PromptStep {
   visible_if?: string
   // choose
   target?: string
+  // choose, entries
   count?: number | string
   // choose, distribute, select
   options?: string | (string | number | { value: string | number; label?: string })[]
   // distribute
   patterns?: string[]
-  // entry
+  // entry, entries
   content_type?: string
   filters?: Record<string, string | number>
   filter?: string
@@ -251,7 +252,7 @@ export function stepOptions(
   return options
 }
 
-/** How many a `choose` asks for. */
+/** How many a `choose` or an `entries` step asks for. */
 export function stepCount(step: PromptStep, context: ExprContext): number {
   const count =
     typeof step.count === 'string' ? toNumber(evaluate(step.count, context)) : (step.count ?? 1)
@@ -302,13 +303,19 @@ export function chooseTarget(
   return Math.min(stepCount(step, context), free.length)
 }
 
+function isAnswerEntry(value: unknown): value is EntryAnswer {
+  return isObject(value) && typeof value._ref === 'string' && !!value._ref
+}
+
 /** Whether a step has an answer the prompt can be confirmed with. */
 export function isAnswered(
   step: PromptStep,
   answer: unknown,
   context: ExprContext,
   document: PromptDocument | null | undefined,
-  data: Values | null | undefined
+  data: Values | null | undefined,
+  // How many entries an `entries` step has to choose from, once it has read them.
+  available?: number
 ): boolean {
   switch (step.type) {
     case 'choose': {
@@ -318,7 +325,16 @@ export function isAnswered(
     case 'distribute':
       return matchesPattern(answer, stepPatterns(step))
     case 'entry':
-      return isObject(answer) && typeof answer._ref === 'string' && !!answer._ref
+      return isAnswerEntry(answer)
+    case 'entries': {
+      // No more than the catalog offers, once the step has read it.
+      const count = stepCount(step, context)
+      const wanted = available === undefined ? count : Math.min(count, available)
+      return (
+        wanted === 0 ||
+        (Array.isArray(answer) && answer.length === wanted && answer.every(isAnswerEntry))
+      )
+    }
     case 'number':
       return typeof answer === 'number' && Number.isFinite(answer)
     case 'select':
@@ -338,12 +354,15 @@ export function isComplete(
   answers: Answers,
   document: PromptDocument | null | undefined,
   data: Values | null | undefined,
-  row?: Values | null
+  row?: Values | null,
+  // By step key: how many entries each `entries` step found to choose from.
+  available: Record<string, number> = {}
 ): boolean {
   const steps = visibleSteps(prompt, context, answers, row)
   const seen: Answers = {}
   for (const step of steps) {
-    if (!isAnswered(step, answers[step.key], promptContext(context, seen, row), document, data)) {
+    const ctx = promptContext(context, seen, row)
+    if (!isAnswered(step, answers[step.key], ctx, document, data, available[step.key])) {
       return false
     }
     seen[step.key] = answers[step.key]
@@ -391,7 +410,10 @@ export function entryAnswer(entry: {
   }
 }
 
-/** Whether an entry passes an `entry` step's `filter`. One that fails to work out is left out. */
+/**
+ * Whether an entry passes an `entry` or `entries` step's `filter`. One that
+ * fails to work out is left out.
+ */
 export function passesFilter(step: PromptStep, entry: EntryAnswer, context: ExprContext): boolean {
   if (!step.filter) return true
   const value = evaluate<symbol>(step.filter, { ...context, entry }, FAILED)
@@ -425,6 +447,14 @@ export async function loadEntryOptions(
     if (rows.length < ENTRY_PAGE_SIZE || page * ENTRY_PAGE_SIZE >= (result.total ?? 0)) break
   }
   return found
+}
+
+/**
+ * The entries a `pick` or an `unpick` names: an `entry` step's answer, or each
+ * of an `entries` step's.
+ */
+function entriesOf(value: unknown): EntryAnswer[] {
+  return (Array.isArray(value) ? value : [value]).filter(isAnswerEntry)
 }
 
 /** A pick a prompt makes, followed up as a pick by hand: its `on_pick` runs. */
@@ -550,57 +580,64 @@ export function planPrompt(
     if (typeof step.unpick === 'string') {
       // The list less the entry's row, made as a change by hand, so the row's
       // own grants are taken back; the picks after it see the list without it.
+      // An `entries` step's answer takes out each of its entries in turn.
       const field = step.unpick
       if (fields[field]?.type !== 'content_list') continue
-      const entry = evaluate<symbol>(step.entry, ctx, FAILED)
-      if (!isObject(entry) || typeof entry._ref !== 'string' || !entry._ref) continue
-      const wanted = entry._ref.trim().toLowerCase()
-      const before = picks.filter((pick) => pick.field === field).pop()
-      const rows = before
-        ? (before.value as unknown[])
-        : Array.isArray(current(field))
-          ? (current(field) as unknown[])
-          : []
-      const index = rows.findIndex(
-        (item) =>
-          isObject(item) &&
-          String(item._ref ?? '')
-            .trim()
-            .toLowerCase() === wanted
-      )
-      if (index < 0) continue
-      picks.push({ field, value: rows.filter((_, i) => i !== index) })
-      // A row this prompt picked and took out again is not recorded either.
-      const held = granted[field] || []
-      const at = held.indexOf(entry._ref)
-      if (at >= 0) granted[field] = held.filter((_, i) => i !== at)
-      continue
-    }
-    if (typeof step.pick === 'string') {
-      const field = step.pick
-      const definition = fields[field]
-      const entry = evaluate<symbol>(step.entry, ctx, FAILED)
-      if (!definition || !isObject(entry) || typeof entry._ref !== 'string' || !entry._ref) continue
-      const per: Values = {}
-      for (const [key, formula] of Object.entries(isObject(step.values) ? step.values : {})) {
-        const value = evaluate<symbol>(formula, ctx, FAILED)
-        if (value !== FAILED) per[key] = value
-      }
-      const picked: Values = { _ref: entry._ref }
-      if (typeof entry._source === 'string' && entry._source) picked._source = entry._source
-      if (Object.keys(per).length) picked._per = per
-      if (definition.type === 'content_ref') {
-        picks.push({ field, value: picked, entry })
-      } else if (definition.type === 'content_list') {
-        // Each pick into the same list sees the ones before it.
+      for (const entry of entriesOf(evaluate<symbol>(step.entry, ctx, FAILED))) {
+        const wanted = entry._ref.trim().toLowerCase()
         const before = picks.filter((pick) => pick.field === field).pop()
         const rows = before
           ? (before.value as unknown[])
           : Array.isArray(current(field))
             ? (current(field) as unknown[])
             : []
-        picks.push({ field, value: [...rows, picked], entry })
-        granted[field] = [...(granted[field] || []), entry._ref]
+        const index = rows.findIndex(
+          (item) =>
+            isObject(item) &&
+            String(item._ref ?? '')
+              .trim()
+              .toLowerCase() === wanted
+        )
+        if (index < 0) continue
+        picks.push({ field, value: rows.filter((_, i) => i !== index) })
+        // A row this prompt picked and took out again is not recorded either.
+        const held = granted[field] || []
+        const at = held.indexOf(entry._ref)
+        if (at >= 0) granted[field] = held.filter((_, i) => i !== at)
+      }
+      continue
+    }
+    if (typeof step.pick === 'string') {
+      // An `entries` step's answer picks each of its entries in turn, the
+      // per-entry formulas reading the one being picked as `entry`. A
+      // content_ref holds one: a list picks its first there.
+      const field = step.pick
+      const definition = fields[field]
+      if (!definition) continue
+      let entries = entriesOf(evaluate<symbol>(step.entry, ctx, FAILED))
+      if (definition.type === 'content_ref') entries = entries.slice(0, 1)
+      for (const entry of entries) {
+        const per: Values = {}
+        for (const [key, formula] of Object.entries(isObject(step.values) ? step.values : {})) {
+          const value = evaluate<symbol>(formula, { ...ctx, entry }, FAILED)
+          if (value !== FAILED) per[key] = value
+        }
+        const picked: Values = { _ref: entry._ref }
+        if (typeof entry._source === 'string' && entry._source) picked._source = entry._source
+        if (Object.keys(per).length) picked._per = per
+        if (definition.type === 'content_ref') {
+          picks.push({ field, value: picked, entry })
+        } else if (definition.type === 'content_list') {
+          // Each pick into the same list sees the ones before it.
+          const before = picks.filter((pick) => pick.field === field).pop()
+          const rows = before
+            ? (before.value as unknown[])
+            : Array.isArray(current(field))
+              ? (current(field) as unknown[])
+              : []
+          picks.push({ field, value: [...rows, picked], entry })
+          granted[field] = [...(granted[field] || []), entry._ref]
+        }
       }
     }
   }
