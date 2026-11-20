@@ -644,8 +644,8 @@ describe('grant', () => {
     })
     expect(patch).toEqual({
       gear: [
-        { _ref: 'rations', qty: 10 },
-        { _inline: true, qty: 2, name: 'Oil' },
+        { _ref: 'rations', _per: { qty: 10 } },
+        { _inline: true, _per: { qty: 2 }, name: 'Oil' },
       ],
     })
   })

@@ -634,9 +634,9 @@ describe('planListChange — a pack grants its contents beside it', () => {
     })
     expect(patch.equipment).toEqual([
       { _ref: 'explorers-pack' },
-      { _ref: 'backpack', _source: 'xphb', qty: 1 },
-      { _ref: 'rations', _source: 'xphb', qty: 10 },
-      { _inline: true, qty: 2, name: 'Oil' },
+      { _ref: 'backpack', _source: 'xphb', _per: { qty: 1 } },
+      { _ref: 'rations', _source: 'xphb', _per: { qty: 10 } },
+      { _inline: true, _per: { qty: 2 }, name: 'Oil' },
     ])
     expect(patch[GRANTED_KEY]).toEqual({
       'equipment:explorers-pack': { equipment: ['backpack', 'rations', 'Oil'] },
@@ -654,7 +654,7 @@ describe('planListChange — a pack grants its contents beside it', () => {
     })
     expect(patch.equipment).toEqual([
       { _ref: 'explorers-pack' },
-      { _inline: true, qty: 1, name: 'Backpack' },
+      { _inline: true, _per: { qty: 1 }, name: 'Backpack' },
       { _inline: true, name: 'Rations' },
       { _inline: true, name: 'Oil' },
     ])
@@ -672,8 +672,8 @@ describe('planListChange — a pack grants its contents beside it', () => {
     expect(patch.equipment).toEqual([
       { _ref: 'rations', qty: 3 },
       { _ref: 'explorers-pack' },
-      { _ref: 'backpack', _source: 'xphb', qty: 1 },
-      { _inline: true, qty: 2, name: 'Oil' },
+      { _ref: 'backpack', _source: 'xphb', _per: { qty: 1 } },
+      { _inline: true, _per: { qty: 2 }, name: 'Oil' },
     ])
   })
 

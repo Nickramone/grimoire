@@ -211,7 +211,10 @@ export function grantInto({
   }
   if (definition.type !== 'content_list') return null
   for (const [index, [id, name]] of pairs.entries()) {
-    const own = perEntry[index] || {}
+    // Per-entry values ride in `_per`, as a row picked by hand keeps them: the
+    // server keeps nothing else on a reference.
+    const values = perEntry[index] || {}
+    const own = Object.keys(values).length ? { _per: values } : {}
     const found = id ? resolved[id] : null
     // A reference only when the catalog really has this id *as this type* -
     // resolve does not filter by type, and a feat and a spell may share an
