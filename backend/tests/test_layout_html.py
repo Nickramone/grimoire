@@ -106,6 +106,15 @@ class TestTiersAndPips:
         assert ast[0]["attrs"]["where"] == "row.equipped && row.attack_bonus"
         assert ast[0]["children"][0]["attrs"]["formula"] == "signed(proficiency + row.attack_bonus)"
 
+    def test_a_value_may_be_drawn_as_markdown_in_a_row_that_opens(self):
+        ast = parse_layout_html(
+            '<g-repeat over="spells"><details><summary><g-value formula="row.name" /></summary>'
+            '<g-value formula="row.description" markdown /></details></g-repeat>'
+        )
+        value = ast[0]["children"][0]["children"][1]
+        assert value["tag"] == "g-value"
+        assert value["attrs"] == {"formula": "row.description", "markdown": ""}
+
     @pytest.mark.parametrize(
         "html",
         ['<g-tier value="a" onchange="x()" />', '<g-pips count="3" onclick="x()" />'],

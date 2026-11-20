@@ -2,6 +2,7 @@ import { createElement, Fragment, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import FieldRenderer from './FieldRenderer'
 import DerivedCell from './DerivedCell'
+import EntryMarkdown from './EntryMarkdown'
 import type { FieldDefinition } from './FieldRenderer'
 import { evaluate, isVisible, computedOverrides } from './expressions'
 import OverridableValue from './OverridableValue'
@@ -425,6 +426,14 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
       // row's own attack bonus inside a <g-repeat>, where no computed value
       // could name it. It is a display, never edited or overridden; one that
       // does not parse shows nothing.
+      // `markdown` draws the value as rich text, as the catalog draws an
+      // entry's description: a spell's text inside a <details> of its row.
+      if (attrs.markdown !== undefined) {
+        const raw =
+          attrs.formula !== undefined ? evaluate(attrs.formula, context, null) : context?.[name]
+        // Only text is drawn: a property the entry lacks works out to 0.
+        return typeof raw === 'string' && raw.trim() ? <EntryMarkdown key={key} body={raw} /> : null
+      }
       if (attrs.formula !== undefined) {
         return <span key={key}>{formatValue(evaluate(attrs.formula, context, null))}</span>
       }

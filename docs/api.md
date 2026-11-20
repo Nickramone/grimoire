@@ -2724,7 +2724,10 @@ included), and a `g-field` naming a per-entry field edits that entry's value.
 (`where="row.equipped && row.attack_bonus"`), and `formula` on a `g-value`
 shows an expression's value instead of a named one
 (`<g-value formula="signed(proficiency + row.attack_bonus)" />`), a display
-only. Everything else is a closed allowlist of structural
+only; with `markdown` it draws text as Markdown, as the catalog draws an
+entry's description (`<details><summary><g-value formula="row.name" /></summary>
+<g-value formula="row.description" markdown /></details>` for a row that opens).
+Everything else is a closed allowlist of structural
 tags. **The template never becomes markup**: it is parsed to an AST server-side
 and rendered as React elements, so no schema string ever reaches `innerHTML`.
 Event handlers, `<script>`, `<style>`, `<iframe>`, `<input>` and friends, and

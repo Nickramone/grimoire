@@ -103,7 +103,8 @@ _TAG_ATTRS: dict[str, frozenset] = {
     "g-label": frozenset({"name", "text"}),
     # `formula` shows an expression's value instead of a named one - a row's
     # own figure inside a <g-repeat>, which no computed value can name.
-    "g-value": frozenset({"name", "format", "formula"}),
+    # `markdown` draws the value as rich text: an entry's description.
+    "g-value": frozenset({"name", "format", "formula", "markdown"}),
     # `over` is a `list` or a `content_list`; `where` a condition in which `row`
     # names one row (an entry with its per-entry values on top), choosing the
     # rows drawn.
