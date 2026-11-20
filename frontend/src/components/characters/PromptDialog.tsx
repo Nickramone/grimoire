@@ -56,6 +56,9 @@ export default function PromptDialog({
     return start
   })
 
+  // How many entries each `entries` step found: it asks for no more.
+  const [available, setAvailable] = useState<Record<string, number>>({})
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onSkip?.()
@@ -65,7 +68,7 @@ export default function PromptDialog({
   }, [onSkip])
 
   const steps = visibleSteps(prompt, context, answers, row)
-  const complete = isComplete(prompt, context, answers, document, data, row)
+  const complete = isComplete(prompt, context, answers, document, data, row, available)
   const answer = (key: string, value: unknown) =>
     setAnswers((prev) => {
       const next = { ...prev }
@@ -91,6 +94,11 @@ export default function PromptDialog({
           data={data}
           browse={browse}
           onAnswer={(value) => answer(step.key, value)}
+          onAvailable={(count) =>
+            setAvailable((prev) =>
+              prev[step.key] === count ? prev : { ...prev, [step.key]: count }
+            )
+          }
         />
       </section>
     )

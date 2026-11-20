@@ -222,6 +222,81 @@ describe('isComplete', () => {
   })
 })
 
+describe('entries', () => {
+  const SPELLS: SheetPrompt = {
+    label: 'Spells',
+    steps: [{ key: 'spells', type: 'entries', content_type: 'feat', count: 'level - 1' }],
+    apply: [
+      {
+        pick: 'feats',
+        entry: 'answer.spells',
+        values: { from_level: 'level + entry.level' },
+      },
+    ],
+  }
+  const ALERT = { _ref: 'alert', _source: 'xphb', name: 'Alert', level: 1 }
+  const TOUGH = { _ref: 'tough', name: 'Tough', level: 4 }
+
+  it('needs as many as count asks for, no more than the catalog offers', () => {
+    const complete = (answer: unknown, available?: Record<string, number>, level = 3) =>
+      isComplete(SPELLS, { level }, { spells: answer }, DOCUMENT, {}, null, available)
+    expect(complete([ALERT])).toBe(false)
+    expect(complete([ALERT, TOUGH])).toBe(true)
+    expect(complete([ALERT, { name: 'no id' }])).toBe(false)
+    expect(complete([ALERT], { spells: 1 })).toBe(true)
+    // A level with nothing to learn asks for nothing.
+    expect(complete(undefined, undefined, 1)).toBe(true)
+  })
+
+  it('picks each entry in turn, its per-entry values reading it as entry', () => {
+    const plan = planPrompt(SPELLS, {
+      document: DOCUMENT,
+      data: { feats: [{ _ref: 'lucky' }] },
+      context: { level: 3 },
+      answers: { spells: [ALERT, TOUGH] },
+      source: 'klass',
+    })
+    expect(plan.picks).toEqual([
+      {
+        field: 'feats',
+        value: [{ _ref: 'lucky' }, { _ref: 'alert', _source: 'xphb', _per: { from_level: 4 } }],
+        entry: ALERT,
+      },
+      {
+        field: 'feats',
+        value: [
+          { _ref: 'lucky' },
+          { _ref: 'alert', _source: 'xphb', _per: { from_level: 4 } },
+          { _ref: 'tough', _per: { from_level: 7 } },
+        ],
+        entry: TOUGH,
+      },
+    ])
+    expect(plan.patch._granted).toEqual({ klass: { feats: ['alert', 'tough'] } })
+  })
+
+  it('picks only the first into a content_ref, and takes each out of a list', () => {
+    const prompt: SheetPrompt = {
+      ...SPELLS,
+      apply: [
+        { pick: 'origin', entry: 'answer.spells' },
+        { unpick: 'feats', entry: 'answer.spells' },
+      ],
+    }
+    const plan = planPrompt(prompt, {
+      document: DOCUMENT,
+      data: { feats: [{ _ref: 'alert' }, { _ref: 'lucky' }, { _ref: 'tough' }] },
+      context: { level: 3 },
+      answers: { spells: [ALERT, TOUGH] },
+    })
+    expect(plan.picks).toEqual([
+      { field: 'origin', value: { _ref: 'alert', _source: 'xphb' }, entry: ALERT },
+      { field: 'feats', value: [{ _ref: 'lucky' }, { _ref: 'tough' }] },
+      { field: 'feats', value: [{ _ref: 'lucky' }] },
+    ])
+  })
+})
+
 describe('loadEntryOptions', () => {
   it('reads every page and keeps what the filter lets through', async () => {
     const pages: Record<number, { entry_id: string; name: string; data: { level: number } }[]> = {

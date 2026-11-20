@@ -195,6 +195,32 @@ def test_an_unpick_step_takes_a_row_out_of_a_content_list():
         _validate(document)
 
 
+def test_an_entries_step_asks_for_several_entries_picked_one_by_one():
+    step = {
+        "key": "spells",
+        "type": "entries",
+        "content_type": "feat",
+        "count": "level",
+        "filters": {"category": "General"},
+        "filter": "not has_ref(feats, entry._ref)",
+    }
+    apply = [
+        {"pick": "feats", "entry": "answer.spells", "values": {"from_level": "entry.level"}},
+        {"unpick": "feats", "entry": "answer.spells"},
+    ]
+    prompts = {"level_up": {**LEVEL_UP, "steps": [step], "apply": apply}, "lineage": LINEAGE}
+    _validate(_document(prompts))
+    _validate(_document(_with_step({**step, "count": 3})))
+    for broken, message in [
+        ({**step, "count": 0}, "'count'"),
+        ({**step, "count": "nowhere"}, "unknown name"),
+        ({**step, "content_type": "spell"}, "unknown content type"),
+        ({**step, "filter": "nope"}, "unknown name"),
+    ]:
+        with pytest.raises(svc.SchemaError, match=message):
+            _validate(_document(_with_step(broken)))
+
+
 def test_a_start_prompt_names_a_prompt_and_a_condition():
     prompts = {"level_up": LEVEL_UP, "lineage": LINEAGE}
     _validate(_document(prompts, start_prompt={"prompt": "level_up", "when": "level == 0"}))

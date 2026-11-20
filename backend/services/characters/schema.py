@@ -469,7 +469,9 @@ MAX_PROMPT_OPTIONS = 100
 PROMPT_ANSWER_NAME = "answer"
 PROMPT_ROW_NAME = "row"
 PROMPT_ENTRY_NAME = "entry"
-_PROMPT_STEP_TYPES: frozenset = frozenset({"choose", "distribute", "entry", "number", "select"})
+_PROMPT_STEP_TYPES: frozenset = frozenset(
+    {"choose", "distribute", "entry", "entries", "number", "select"}
+)
 _PATTERN_RE = re.compile(r"^\d{1,2}(,\d{1,2}){0,9}$")
 
 
@@ -514,9 +516,11 @@ def _validate_write_steps(
     - `{"pick": content field, "entry": formula, "values": {field: formula}}`
       put the entry a formula names (an `entry` step's answer) in a content_ref
       or a new row of a content_list, with its per-entry fields, and follow
-      its `on_pick` as a pick by hand;
+      its `on_pick` as a pick by hand; a list of entries (an `entries`
+      step's answer) is picked entry by entry, each `values` formula reading
+      the one being picked as `entry`;
     - `{"unpick": content_list, "entry": formula}` take out of a content_list
-      the row of the entry a formula names (an `entry` step's answer), as a
+      the row of the entry, or of each entry, a formula names, as a
       row removed by hand, so what its `on_pick` granted goes with it - an
       option given up for another;
     - `{"grant": field, "from": formula, "names": formula, "carry": {key:
@@ -615,8 +619,12 @@ def _validate_write_steps(
                 )
             _validate_formula(step.get("entry"), f"{where} 'entry'", known, images)
             if "values" in step:
+                # Each formula reads the entry being picked as `entry`: one of
+                # an `entries` step's answer.
                 keys = set((fields[target] or {}).get("per_entry_fields") or {})
-                _cells(step["values"], keys, target, f"{where} 'values'", known)
+                _cells(
+                    step["values"], keys, target, f"{where} 'values'", known | {PROMPT_ENTRY_NAME}
+                )
 
 
 def _validate_prompt_grant(
@@ -753,6 +761,17 @@ def _validate_start_prompt(
     _validate_condition(start.get("when"), "'start_prompt' when", known, images)
 
 
+def _validate_prompt_count(count: Any, where: str, known: set[str], images: frozenset) -> None:
+    """A `choose` or `entries` step's `count`: a fixed number, or a formula
+    (which may work out to 0 - a level with nothing new to learn)."""
+    if isinstance(count, str):
+        _validate_formula(count, f"{where} 'count'", known, images)
+    elif isinstance(count, bool) or not isinstance(count, int) or not (
+        1 <= count <= MAX_CHOOSE_COUNT
+    ):
+        raise SchemaError(f"{where} 'count' must be 1-{MAX_CHOOSE_COUNT} or a formula")
+
+
 def _validate_prompts(
     prompts: Any, fields: dict, known: set[str], images: frozenset, content_types: dict
 ) -> None:
@@ -774,6 +793,9 @@ def _validate_prompts(
       allowed, each a comma-separated list of amounts ("2", "1,1").
     - `entry`: one catalog entry of `content_type`, narrowed by fixed
       `filters` and a `filter` formula reading the candidate as `entry`.
+    - `entries`: `count` catalog entries, narrowed as an `entry` step's -
+      the spells a level teaches. Its answer is a list, which a `pick` or an
+      `unpick` takes entry by entry.
     - `number`: a number, starting from `default`, with a button for `average`.
     - `select`: one of `options`.
 
@@ -828,13 +850,7 @@ def _validate_prompts(
                     _validate_prompt_options(step["options"], where, base, images)
                 elif target is None:
                     raise SchemaError(f"{where} needs 'options' or a multiselect 'target'")
-                count = step.get("count", 1)
-                if isinstance(count, str):
-                    _validate_formula(count, f"{where} 'count'", base, images)
-                elif isinstance(count, bool) or not isinstance(count, int) or not (
-                    1 <= count <= MAX_CHOOSE_COUNT
-                ):
-                    raise SchemaError(f"{where} 'count' must be 1-{MAX_CHOOSE_COUNT} or a formula")
+                _validate_prompt_count(step.get("count", 1), where, base, images)
             elif kind == "distribute":
                 _validate_prompt_options(step.get("options"), where, base, images)
                 patterns = step.get("patterns")
@@ -848,7 +864,9 @@ def _validate_prompts(
                         f"{where} needs 'patterns': the amounts the points may be spread in, "
                         'such as ["2", "1,1"]'
                     )
-            elif kind == "entry":
+            elif kind in ("entry", "entries"):
+                if kind == "entries":
+                    _validate_prompt_count(step.get("count", 1), where, base, images)
                 content_type = step.get("content_type")
                 if content_type not in content_types:
                     raise SchemaError(f"{where} picks from unknown content type {content_type!r}")

@@ -24,6 +24,8 @@ export interface StepControlProps {
   data: Values | null | undefined
   browse?: BrowseEntries
   onAnswer: (value: unknown) => void
+  // An `entries` step says how many it found, so it asks for no more.
+  onAvailable?: (count: number) => void
 }
 
 export const optionLabel = (disabled: boolean): CSSProperties => ({
