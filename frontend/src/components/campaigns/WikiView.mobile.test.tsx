@@ -10,6 +10,8 @@ vi.mock('../../api', () => ({
   campaigns: {
     listWikiPages: vi.fn(),
     getWikiPage: vi.fn(),
+    // The notes under a page; none unless a test says otherwise.
+    listWikiAnnotations: vi.fn(() => Promise.resolve([])),
     updateWikiPage: vi.fn(),
     reorderWikiPages: vi.fn(),
     createWikiPage: vi.fn(),

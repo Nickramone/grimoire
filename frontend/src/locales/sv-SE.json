@@ -5000,5 +5000,30 @@
       "sourceError": "Kunde inte läsa {{url}}: {{error}}",
       "sourceUnreadable": "En av mallkatalogerna kunde inte läsas."
     }
+  },
+  "wikiNotes": {
+    "title": "Anteckningar",
+    "titleCount": "Anteckningar ({{count}})",
+    "text": "Anteckningstext",
+    "placeholder": "Skriv en anteckning om den här sidan…",
+    "visibility": "Vem kan läsa den",
+    "vis": {
+      "party": "Gruppen",
+      "gm": "Jag och SL",
+      "self": "Bara jag"
+    },
+    "add": "Lägg till anteckning",
+    "edit": "Redigera anteckning",
+    "delete": "Ta bort anteckning",
+    "deleteConfirm": "Ta bort den här anteckningen?",
+    "hide": "Dölj för gruppen",
+    "unhide": "Visa för gruppen",
+    "hiddenByGm": "Dold för gruppen",
+    "you": "Du",
+    "unknownAuthor": "Tidigare medlem",
+    "showMine": "Bara mina",
+    "showAll": "Alla anteckningar",
+    "loadFailed": "Anteckningarna kunde inte laddas.",
+    "retry": "Försök igen"
   }
 }

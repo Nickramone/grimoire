@@ -178,6 +178,10 @@ TTRPG_GUEST_REACHABLE = {
     # Pins on a map page (issue #578): the page's own edit rule, as for its text.
     "/api/campaigns/{campaign_id}/wiki/{page_id}/pins": "POST",
     "/api/campaigns/{campaign_id}/wiki/{page_id}/pins/{pin_id}": "DELETE PATCH",
+    # Notes on a page: anyone who can read the page, guests included; the
+    # handler checks the page's own read rule and the note's visibility.
+    "/api/campaigns/{campaign_id}/wiki/{page_id}/annotations": "GET POST",
+    "/api/campaigns/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}": "DELETE PATCH",
     "/api/characters": "GET POST",
     "/api/characters/import": "POST",
     # Another tool's character, through an admin-installed importer, into the

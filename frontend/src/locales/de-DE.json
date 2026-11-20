@@ -5000,5 +5000,30 @@
       "sourceError": "{{url}} konnte nicht gelesen werden: {{error}}",
       "sourceUnreadable": "Einer der Vorlagenkataloge konnte nicht gelesen werden."
     }
+  },
+  "wikiNotes": {
+    "title": "Notizen",
+    "titleCount": "Notizen ({{count}})",
+    "text": "Notiztext",
+    "placeholder": "Schreibe eine Notiz zu dieser Seite…",
+    "visibility": "Wer sie lesen kann",
+    "vis": {
+      "party": "Die Gruppe",
+      "gm": "Ich und die SL",
+      "self": "Nur ich"
+    },
+    "add": "Notiz hinzufügen",
+    "edit": "Notiz bearbeiten",
+    "delete": "Notiz löschen",
+    "deleteConfirm": "Diese Notiz löschen?",
+    "hide": "Vor der Gruppe verbergen",
+    "unhide": "Der Gruppe zeigen",
+    "hiddenByGm": "Vor der Gruppe verborgen",
+    "you": "Du",
+    "unknownAuthor": "Ehemaliges Mitglied",
+    "showMine": "Nur meine",
+    "showAll": "Alle Notizen",
+    "loadFailed": "Die Notizen konnten nicht geladen werden.",
+    "retry": "Erneut versuchen"
   }
 }

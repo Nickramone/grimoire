@@ -5000,5 +5000,30 @@
       "sourceError": "Couldn't read {{url}}: {{error}}",
       "sourceUnreadable": "One of the preset catalogues couldn't be read."
     }
+  },
+  "wikiNotes": {
+    "title": "Notes",
+    "titleCount": "Notes ({{count}})",
+    "text": "Note text",
+    "placeholder": "Write a note on this page…",
+    "visibility": "Who can read it",
+    "vis": {
+      "party": "The party",
+      "gm": "Me and the GM",
+      "self": "Only me"
+    },
+    "add": "Add note",
+    "edit": "Edit note",
+    "delete": "Delete note",
+    "deleteConfirm": "Delete this note?",
+    "hide": "Hide from the party",
+    "unhide": "Show to the party",
+    "hiddenByGm": "Hidden from the party",
+    "you": "You",
+    "unknownAuthor": "Former member",
+    "showMine": "Only mine",
+    "showAll": "All notes",
+    "loadFailed": "The notes could not be loaded.",
+    "retry": "Retry"
   }
 }

@@ -5000,5 +5000,30 @@
       "sourceError": "Impossible de lire {{url}} : {{error}}",
       "sourceUnreadable": "Impossible de lire l'un des catalogues de modèles."
     }
+  },
+  "wikiNotes": {
+    "title": "Notes",
+    "titleCount": "Notes ({{count}})",
+    "text": "Texte de la note",
+    "placeholder": "Écrivez une note sur cette page…",
+    "visibility": "Qui peut la lire",
+    "vis": {
+      "party": "Le groupe",
+      "gm": "Moi et le MJ",
+      "self": "Moi seul"
+    },
+    "add": "Ajouter une note",
+    "edit": "Modifier la note",
+    "delete": "Supprimer la note",
+    "deleteConfirm": "Supprimer cette note ?",
+    "hide": "Masquer au groupe",
+    "unhide": "Montrer au groupe",
+    "hiddenByGm": "Masquée au groupe",
+    "you": "Vous",
+    "unknownAuthor": "Ancien membre",
+    "showMine": "Seulement les miennes",
+    "showAll": "Toutes les notes",
+    "loadFailed": "Impossible de charger les notes.",
+    "retry": "Réessayer"
   }
 }

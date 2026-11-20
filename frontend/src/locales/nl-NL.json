@@ -5000,5 +5000,30 @@
       "sourceError": "Kon {{url}} niet lezen: {{error}}",
       "sourceUnreadable": "Een van de sjablooncatalogi kon niet worden gelezen."
     }
+  },
+  "wikiNotes": {
+    "title": "Notities",
+    "titleCount": "Notities ({{count}})",
+    "text": "Notitietekst",
+    "placeholder": "Schrijf een notitie bij deze pagina…",
+    "visibility": "Wie kan het lezen",
+    "vis": {
+      "party": "De groep",
+      "gm": "Ik en de SL",
+      "self": "Alleen ik"
+    },
+    "add": "Notitie toevoegen",
+    "edit": "Notitie bewerken",
+    "delete": "Notitie verwijderen",
+    "deleteConfirm": "Deze notitie verwijderen?",
+    "hide": "Verbergen voor de groep",
+    "unhide": "Tonen aan de groep",
+    "hiddenByGm": "Verborgen voor de groep",
+    "you": "Jij",
+    "unknownAuthor": "Voormalig lid",
+    "showMine": "Alleen de mijne",
+    "showAll": "Alle notities",
+    "loadFailed": "De notities konden niet worden geladen.",
+    "retry": "Opnieuw proberen"
   }
 }

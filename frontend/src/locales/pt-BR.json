@@ -5000,5 +5000,30 @@
       "sourceError": "Não foi possível ler {{url}}: {{error}}",
       "sourceUnreadable": "Não foi possível ler um dos catálogos de modelos."
     }
+  },
+  "wikiNotes": {
+    "title": "Notas",
+    "titleCount": "Notas ({{count}})",
+    "text": "Texto da nota",
+    "placeholder": "Escreva uma nota sobre esta página…",
+    "visibility": "Quem pode ler",
+    "vis": {
+      "party": "O grupo",
+      "gm": "Eu e o mestre",
+      "self": "Só eu"
+    },
+    "add": "Adicionar nota",
+    "edit": "Editar nota",
+    "delete": "Excluir nota",
+    "deleteConfirm": "Excluir esta nota?",
+    "hide": "Ocultar do grupo",
+    "unhide": "Mostrar ao grupo",
+    "hiddenByGm": "Oculta do grupo",
+    "you": "Você",
+    "unknownAuthor": "Ex-membro",
+    "showMine": "Só as minhas",
+    "showAll": "Todas as notas",
+    "loadFailed": "Não foi possível carregar as notas.",
+    "retry": "Tentar novamente"
   }
 }

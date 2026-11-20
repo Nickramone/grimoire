@@ -5000,5 +5000,30 @@
       "sourceError": "No se pudo leer {{url}}: {{error}}",
       "sourceUnreadable": "No se pudo leer uno de los catálogos de plantillas."
     }
+  },
+  "wikiNotes": {
+    "title": "Notas",
+    "titleCount": "Notas ({{count}})",
+    "text": "Texto de la nota",
+    "placeholder": "Escribe una nota sobre esta página…",
+    "visibility": "Quién puede leerla",
+    "vis": {
+      "party": "El grupo",
+      "gm": "Yo y el DJ",
+      "self": "Solo yo"
+    },
+    "add": "Añadir nota",
+    "edit": "Editar nota",
+    "delete": "Eliminar nota",
+    "deleteConfirm": "¿Eliminar esta nota?",
+    "hide": "Ocultar al grupo",
+    "unhide": "Mostrar al grupo",
+    "hiddenByGm": "Oculta al grupo",
+    "you": "Tú",
+    "unknownAuthor": "Antiguo miembro",
+    "showMine": "Solo las mías",
+    "showAll": "Todas las notas",
+    "loadFailed": "No se pudieron cargar las notas.",
+    "retry": "Reintentar"
   }
 }

@@ -3313,6 +3313,42 @@ export interface paths {
         patch: operations["update_page_api_campaigns__campaign_id__wiki__page_id__patch"];
         trace?: never;
     };
+    "/api/campaigns/{campaign_id}/wiki/{page_id}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the notes on a wiki page this user can see */
+        get: operations["list_annotations_api_campaigns__campaign_id__wiki__page_id__annotations_get"];
+        put?: never;
+        /** Leave a note on a wiki page */
+        post: operations["create_annotation_api_campaigns__campaign_id__wiki__page_id__annotations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete your note on a wiki page */
+        delete: operations["delete_annotation_api_campaigns__campaign_id__wiki__page_id__annotations__annotation_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit, or (GM) hide, a note on a wiki page */
+        patch: operations["update_annotation_api_campaigns__campaign_id__wiki__page_id__annotations__annotation_id__patch"];
+        trace?: never;
+    };
     "/api/campaigns/{campaign_id}/wiki/{page_id}/hide": {
         parameters: {
             query?: never;
@@ -19243,6 +19279,67 @@ export interface components {
              */
             freestanding?: boolean;
         };
+        /** WikiAnnotationCreate */
+        WikiAnnotationCreate: {
+            /** Body */
+            body: string;
+            /**
+             * Visibility
+             * @default party
+             */
+            visibility?: string;
+        };
+        /**
+         * WikiAnnotationOut
+         * @description One note on a wiki page as this viewer may see it (``wiki_annotations.annotation_out``).
+         */
+        WikiAnnotationOut: {
+            /** Author Id */
+            author_id?: string | null;
+            /** Author Name */
+            author_name?: string | null;
+            /** Body */
+            body: string;
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit?: boolean;
+            /**
+             * Can Hide
+             * @default false
+             */
+            can_hide?: boolean;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Hidden By Gm
+             * @default false
+             */
+            hidden_by_gm?: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Is Mine
+             * @default false
+             */
+            is_mine?: boolean;
+            /** Page Id */
+            page_id: string;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Visibility */
+            visibility: string;
+        };
+        /** WikiAnnotationUpdate */
+        WikiAnnotationUpdate: {
+            /** Body */
+            body?: string | null;
+            /** Hidden By Gm */
+            hidden_by_gm?: boolean | null;
+            /** Visibility */
+            visibility?: string | null;
+        };
         /**
          * WikiBacklinkOut
          * @description A page linking here. ``via_pin`` when a pin on its map is (one of) the links.
@@ -27932,6 +28029,162 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WikiPageSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_annotations_api_campaigns__campaign_id__wiki__page_id__annotations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+                page_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiAnnotationOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_annotation_api_campaigns__campaign_id__wiki__page_id__annotations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+                page_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WikiAnnotationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiAnnotationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_annotation_api_campaigns__campaign_id__wiki__page_id__annotations__annotation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+                page_id: string;
+                annotation_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_annotation_api_campaigns__campaign_id__wiki__page_id__annotations__annotation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+                page_id: string;
+                annotation_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WikiAnnotationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiAnnotationOut"];
                 };
             };
             /** @description Validation Error */
