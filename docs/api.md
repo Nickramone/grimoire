@@ -2750,7 +2750,10 @@ included), and a `g-field` naming a per-entry field edits that entry's value.
 (`where="row.equipped && row.attack_bonus"`), and `formula` on a `g-value`
 shows an expression's value instead of a named one
 (`<g-value formula="signed(proficiency + row.attack_bonus)" />`), a display
-only. `<g-order field="attack_order">` lets the player drag what it holds into
+only; with `markdown` it draws text as Markdown, as the catalog draws an
+entry's description (`<details><summary><g-value formula="row.name" /></summary>
+<g-value formula="row.description" markdown /></details>` for a row that opens).
+`<g-order field="attack_order">` lets the player drag what it holds into
 an order of their own, by a handle beside each block: every row a `g-repeat`
 inside draws is one block (whatever lines it draws), a
 `<g-order-item key="spell">` is one fixed block, and a `g-if` that holds lends

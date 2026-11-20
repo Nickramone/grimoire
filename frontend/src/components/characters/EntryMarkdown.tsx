@@ -6,7 +6,8 @@ import EntryLink from './EntryLink'
 import { fieldLabel } from './characterStyles'
 
 export interface EntryMarkdownProps {
-  label: string
+  // Shown above the text; a sheet's <g-value markdown> draws the text alone.
+  label?: string
   body: string
 }
 
@@ -88,7 +89,7 @@ const components: Components = {
 export default function EntryMarkdown({ label, body }: EntryMarkdownProps) {
   return (
     <div>
-      <div style={fieldLabel}>{label}</div>
+      {label ? <div style={fieldLabel}>{label}</div> : null}
       <div className="wiki-markdown" style={{ lineHeight: 1.5, overflowWrap: 'anywhere' }}>
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
           {body}

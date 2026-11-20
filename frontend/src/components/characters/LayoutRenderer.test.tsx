@@ -422,6 +422,35 @@ describe('LayoutRenderer — a repeat over picked entries', () => {
     expect(screen.queryByText('Homebrew Blade')).not.toBeInTheDocument()
   })
 
+  it("draws an entry's text as Markdown, inside a row that opens", () => {
+    renderEntries(
+      repeat('row.attack_bonus == 1', [
+        {
+          tag: 'details',
+          attrs: {},
+          children: [
+            {
+              tag: 'summary',
+              attrs: {},
+              children: [{ tag: 'g-value', attrs: { formula: 'row.name' }, children: [] }],
+            },
+            {
+              tag: 'g-value',
+              attrs: { formula: "'Hits **harder**.'", markdown: '' },
+              children: [],
+            },
+            // Nothing to draw is drawn as nothing.
+            { tag: 'g-value', attrs: { formula: 'row.missing', markdown: '' }, children: [] },
+          ],
+        },
+      ])
+    )
+    expect(screen.getByText('+1 Sword')).toBeInTheDocument()
+    expect(screen.getByText('harder').tagName).toBe('STRONG')
+    expect(screen.queryByText('Hits **harder**.')).not.toBeInTheDocument()
+    expect(document.querySelectorAll('.wiki-markdown')).toHaveLength(1)
+  })
+
   it('draws a freeform entry unless the condition leaves it out', () => {
     renderEntries(
       repeat('row._inline', [{ tag: 'g-value', attrs: { formula: 'row.name' }, children: [] }])
