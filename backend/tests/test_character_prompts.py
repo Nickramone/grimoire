@@ -227,6 +227,19 @@ def test_a_start_prompt_names_a_prompt_and_a_condition():
         _validate(_document(prompts, start_prompt={"prompt": "lineage", "when": "missing + 1"}))
 
 
+def test_an_entry_step_may_note_each_candidate_by_a_formula():
+    step = {
+        "key": "spell",
+        "type": "entry",
+        "content_type": "feat",
+        "entry_note": "concat('Lv. ', entry.level)",
+    }
+    _validate(_document(_with_step(step)))
+    _validate(_document(_with_step({**step, "type": "entries", "count": 2})))
+    with pytest.raises(svc.SchemaError, match="entry_note"):
+        _validate(_document(_with_step({**step, "entry_note": "nowhere + 1"})))
+
+
 def test_a_step_label_may_be_a_formula():
     step = {"key": "x", "type": "number", "label": "X", "label_formula": "concat('Level ', level)"}
     _validate(_document(_with_step(step)))

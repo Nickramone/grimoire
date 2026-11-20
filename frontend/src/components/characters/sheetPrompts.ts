@@ -51,6 +51,9 @@ export interface PromptStep {
   content_type?: string
   filters?: Record<string, string | number>
   filter?: string
+  // Text worked out for each candidate, read as `entry`, shown beside its
+  // name - a spell's level.
+  entry_note?: string
   // number
   default?: string
   average?: string
@@ -725,6 +728,14 @@ function samePrompt(a: PromptRequest, b: PromptRequest): boolean {
     (a.source || '') === (b.source || '') &&
     (a.ref || '') === (b.ref || '')
   )
+}
+
+/** An `entry` or `entries` step's note beside a candidate: its `entry_note` worked out, or ''. */
+export function entryNote(step: PromptStep, entry: EntryAnswer, context: ExprContext): string {
+  if (!step.entry_note) return ''
+  const value = evaluate<symbol>(step.entry_note, { ...context, entry }, FAILED)
+  if (value === FAILED || value === null || value === undefined) return ''
+  return String(value).trim()
 }
 
 /** A step's heading: its `label_formula` worked out, or else its `label`. */
