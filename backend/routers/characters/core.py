@@ -588,6 +588,10 @@ def _coerce_all(document: dict, submitted: dict) -> dict:
         cleaned[GRANTED_KEY] = _coerce_granted(fields, submitted[GRANTED_KEY])
     if svc.OVERRIDES_KEY in submitted:
         cleaned[svc.OVERRIDES_KEY] = _coerce_overrides(document, submitted[svc.OVERRIDES_KEY])
+    if PENDING_PROMPTS_KEY in submitted:
+        cleaned[PENDING_PROMPTS_KEY] = _coerce_pending_prompts(
+            document, submitted[PENDING_PROMPTS_KEY]
+        )
     return cleaned
 
 
@@ -617,6 +621,38 @@ def _coerce_overrides(document: dict, value: Any) -> dict:
 #: The one reserved key character data may carry beside its fields.
 GRANTED_KEY = "_granted"
 _MAX_GRANTED_VALUES = 200
+#: A source key: a field name, or `field:ref` for a content-list row.
+_MAX_GRANTED_SOURCE = 300
+PENDING_PROMPTS_KEY = "_pending_prompts"
+_MAX_PENDING_PROMPTS = 20
+
+
+def _coerce_pending_prompts(document: dict, value: Any) -> list:
+    """Clean the list of prompts the player put off.
+
+    Each is `{"prompt": name, "source": field, "ref": entry id}`: the sheet's
+    prompt, and - when a pick opened it - the field picked and the entry, so
+    reopening it reads the same entry. A prompt the sheet no longer declares
+    is dropped, as is a source that is not a field.
+    """
+    prompts = document.get("prompts")
+    fields = document.get("fields") or {}
+    if not isinstance(value, list) or not isinstance(prompts, dict):
+        return []
+    cleaned: list = []
+    for item in value[:_MAX_PENDING_PROMPTS]:
+        if not isinstance(item, dict) or item.get("prompt") not in prompts:
+            continue
+        kept: dict = {"prompt": item["prompt"]}
+        source = item.get("source")
+        if isinstance(source, str) and source in fields:
+            kept["source"] = source
+            ref = item.get("ref")
+            if isinstance(ref, (str, int)) and not isinstance(ref, bool) and str(ref):
+                kept["ref"] = str(ref)[:200]
+        if kept not in cleaned:
+            cleaned.append(kept)
+    return cleaned
 
 
 def _coerce_granted(fields: dict, value: Any) -> dict:
@@ -627,6 +663,10 @@ def _coerce_granted(fields: dict, value: Any) -> dict:
     background take the old one's grants back off, rather than the sheet
     silently accumulating every background ever tried.
 
+    A content_list's rows are picks of their own, each recorded under
+    `"field:ref"` - "the Wizard row of classes" - so removing one row takes back
+    only what that row granted.
+
     Allowed through only because it is this narrow: source fields must carry
     `on_pick`, targets must be declared fields, and values are short strings.
     Anything else is dropped, so it is not a way to write arbitrary JSON.
@@ -635,8 +675,14 @@ def _coerce_granted(fields: dict, value: Any) -> dict:
         return {}
     cleaned: dict = {}
     for source, targets in value.items():
-        definition = fields.get(source)
+        if not isinstance(source, str) or len(source) > _MAX_GRANTED_SOURCE:
+            continue
+        field_name, row, ref = source.partition(":")
+        definition = fields.get(field_name)
         if not isinstance(definition, dict) or not definition.get("on_pick"):
+            continue
+        if (definition.get("type") == "content_list") != bool(row and ref):
+            # A list's grants belong to a row, a single pick's to the field.
             continue
         if not isinstance(targets, dict):
             continue

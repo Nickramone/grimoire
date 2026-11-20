@@ -8,6 +8,7 @@ import {
   isVisible,
   ExpressionError,
   computedOverrides,
+  MAX_EACH_ROWS,
 } from './expressions'
 
 // These mirror backend/tests/test_character_engine.py::TestExpressions. The two
@@ -376,6 +377,82 @@ describe('sum_qty', () => {
   })
 })
 
+describe('at', () => {
+  // Mirrors the backend's TestAt cases: the two evaluators must agree.
+  const context = {
+    levels: [
+      { class: 'wizard', die: 6 },
+      { class: 'wizard', die: 4 },
+      { class: 'fighter', die: 10 },
+    ],
+    classes: [
+      { _ref: 'wizard', _per: { subclass: 'evoker' } },
+      { _inline: true, name: 'Homebrew', hit_die: 8 },
+      { _ref: 'not-installed' },
+    ],
+    langs: ['Elvish', 'Dwarvish'],
+    _entries: { wizard: { name: 'Wizard', hit_die: 6 } },
+  }
+
+  it.each([
+    ["at(levels, 0, 'die')", 6],
+    ["at(levels, -1, 'class')", 'fighter'],
+    // A fractional index is floored, as floor() would.
+    ["at(levels, 1.7, 'die')", 4],
+    ["at(levels, 3, 'die')", ''],
+    ["at(levels, -4, 'die')", ''],
+    ["at(levels, 0, 'missing')", ''],
+    ['at(langs, 1)', 'Dwarvish'],
+    ["at(langs, 0, 'name')", ''],
+    ['at(nothing, 0)', ''],
+    ["at(classes, 0, 'hit_die')", 6],
+    ["at(classes, 0, 'subclass')", 'evoker'],
+    ["at(classes, 1, 'hit_die')", 8],
+    ["at(classes, 2, 'hit_die')", ''],
+    ["ref(at(classes, 0), 'name')", 'Wizard'],
+    ["at(levels, 0, 'die') + at(levels, 1, 'die')", 10],
+    ["at(levels, 5, 'die') + 1", 1],
+    ["count_where(levels, 'class', at(levels, 0, 'class'))", 2],
+  ])('%s evaluates to %s', (formula, expected) => {
+    expect(evaluate(formula, context)).toBe(expected)
+  })
+})
+
+describe('by_level', () => {
+  // Mirrors the backend's TestByLevel cases: the two evaluators must agree.
+  const context = {
+    level: 5,
+    uses: '1:2,3:3,6:4,12:5,17:6',
+    recovery: '1:long,5:short',
+    rage: { _ref: 'rage' },
+    _entries: { rage: { uses_by_level: '1:2, 3:3, 6:4' } },
+  }
+
+  it.each([
+    ['by_level(uses, level)', 3],
+    ['by_level(uses, 1)', 2],
+    ['by_level(uses, 17)', 6],
+    ['by_level(uses, 20)', 6],
+    ['by_level(uses, 0)', ''],
+    // A fractional level is floored, as floor() would.
+    ['by_level(uses, 5.9)', 3],
+    ['by_level(uses, 6)', 4],
+    ['by_level(recovery, level)', 'short'],
+    ['by_level(recovery, 4)', 'long'],
+    // Pairs need not be in order, and a malformed one is skipped.
+    ["by_level('6:4,1:2,x:9,3,3:3', 4)", 3],
+    ["by_level('1:1.5', 1)", 1.5],
+    ["by_level('', 5)", ''],
+    ['by_level(nothing, 5)', ''],
+    ['by_level(level, 5)', ''],
+    ['by_level(uses, 0) + 1', 1],
+    ['by_level(uses, level) * 2', 6],
+    ["by_level(ref(rage, 'uses_by_level'), level)", 3],
+  ])('%s evaluates to %s', (formula, expected) => {
+    expect(evaluate(formula, context)).toBe(expected)
+  })
+})
+
 describe('overriding computed values', () => {
   const DOC = {
     fields: { dexterity: { type: 'number', default: 14 } },
@@ -395,5 +472,81 @@ describe('overriding computed values', () => {
 
   it('ignores an override of something not computed', () => {
     expect(computedOverrides(DOC, { _overrides: { dexterity: 1 } })).toEqual({})
+  })
+})
+
+describe('per-row forms', () => {
+  const entries = {
+    'chain-mail': { name: 'Chain Mail', ac_base: 16, dex_cap: 0 },
+    'scale-mail': { name: 'Scale Mail', ac_base: 14, dex_cap: 2 },
+    leather: { name: 'Leather Armor', ac_base: 11 },
+    shield: { name: 'Shield', ac_bonus: 2 },
+  }
+  const gear = (...picks: [string, boolean][]) =>
+    picks.map(([ref, equipped]) => ({ _ref: ref, _per: { equipped } }))
+  const ctx = (values: Record<string, unknown>) => ({
+    dexterity_mod: 3,
+    _entries: entries,
+    ...values,
+  })
+
+  it('sums a row formula over rows matching a condition', () => {
+    expect(
+      evaluate(
+        'sum_each(gear, row.ac_bonus, row.equipped)',
+        ctx({ gear: gear(['shield', true], ['leather', true]) })
+      )
+    ).toBe(2)
+    expect(
+      evaluate('sum_each(gear, row.ac_bonus, row.equipped)', ctx({ gear: gear(['shield', false]) }))
+    ).toBe(0)
+  })
+
+  it('mixes the row and the character in one formula', () => {
+    const formula =
+      'max_each(gear, row.ac_base + (row.dex_cap == 0 ? dexterity_mod : min(dexterity_mod, row.dex_cap)), ' +
+      'row.equipped && row.ac_base > 0, 10 + dexterity_mod)'
+    expect(evaluate(formula, ctx({ gear: gear(['scale-mail', true], ['leather', true]) }))).toBe(16)
+  })
+
+  it('falls back when no row matches', () => {
+    const context = ctx({ gear: gear(['chain-mail', false]) })
+    expect(evaluate('max_each(gear, row.ac_base, row.equipped, 10 + dexterity_mod)', context)).toBe(
+      13
+    )
+    expect(evaluate('max_each(gear, row.ac_base, row.equipped)', context)).toBe(0)
+    expect(evaluate('min_each(gear, row.ac_base)', context)).toBe(16)
+  })
+
+  it('counts matching rows', () => {
+    const context = ctx({ gear: gear(['chain-mail', true], ['shield', true]) })
+    expect(evaluate('count_each(gear, row.ac_base > 0)', context)).toBe(1)
+    expect(evaluate('count_each(gear)', context)).toBe(2)
+  })
+
+  it('reads plain list rows and a single reference', () => {
+    const attacks = [{ bonus: 5, magic: true }, { bonus: 3 }, 'junk']
+    expect(evaluate('sum_each(attacks, row.bonus * 2, row.magic)', { attacks })).toBe(10)
+    expect(evaluate('max_each(attacks, row.bonus)', { attacks })).toBe(5)
+    expect(evaluate('sum_each(armor, row.ac_base)', ctx({ armor: { _ref: 'leather' } }))).toBe(11)
+  })
+
+  it('reads nonsense as zero', () => {
+    expect(evaluate('sum_each(missing, row.x)', {})).toBe(0)
+    expect(evaluate('sum_each(5, row.x)', {})).toBe(0)
+    expect(evaluate('sum_each()', {})).toBe(0)
+    expect(evaluate('sum_each(gear)', { gear: [{ x: 1 }] })).toBe(0)
+    expect(evaluate('sum_each(gear, row.x, true, 1)', { gear: [{ x: 1 }] })).toBe(0)
+  })
+
+  it('scopes row to the form, nested forms seeing their own row', () => {
+    expect(evaluate('row + sum_each(gear, row.x)', { row: 7, gear: [{ x: 1 }, { x: 2 }] })).toBe(10)
+    const groups = [{ items: [{ x: 1 }, { x: 2 }] }, { items: [{ x: 5 }] }]
+    expect(evaluate('sum_each(groups, max_each(row.items, row.x))', { groups })).toBe(7)
+  })
+
+  it('ignores rows past the limit', () => {
+    const rows = Array.from({ length: MAX_EACH_ROWS + 50 }, () => ({ x: 1 }))
+    expect(evaluate('sum_each(gear, row.x)', { gear: rows })).toBe(MAX_EACH_ROWS)
   })
 })

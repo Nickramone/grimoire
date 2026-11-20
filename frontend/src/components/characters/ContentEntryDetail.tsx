@@ -1,3 +1,4 @@
+import EntryMarkdown from './EntryMarkdown'
 import FieldRenderer from './FieldRenderer'
 import type { FieldDefinition } from './FieldRenderer'
 
@@ -16,6 +17,8 @@ export interface ContentFieldDefinition extends FieldDefinition {
   allow_freeform?: boolean
   per_entry_fields?: Record<string, FieldDefinition>
   display_columns?: (string | { key: string; label?: string })[]
+  // Fixed browser filters: a value, or a list of values any of which matches.
+  filter?: Record<string, unknown>
 }
 
 export interface ContentEntryDetailProps {
@@ -56,12 +59,18 @@ export default function ContentEntryDetail({ entry, typeDefinition }: ContentEnt
             key={name}
             style={definition.type === 'textarea' ? { gridColumn: '1 / -1' } : undefined}
           >
-            <FieldRenderer
-              name={name}
-              definition={definition}
-              value={entry.data?.[name]}
-              readOnly
-            />
+            {definition.type === 'textarea' && typeof entry.data?.[name] === 'string' ? (
+              // Long text reads as Markdown (tables, lists, images) rather than
+              // a read-only textarea showing the raw markup.
+              <EntryMarkdown label={definition.label || name} body={entry.data[name] as string} />
+            ) : (
+              <FieldRenderer
+                name={name}
+                definition={definition}
+                value={entry.data?.[name]}
+                readOnly
+              />
+            )}
           </div>
         ))}
     </div>

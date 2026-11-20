@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { planPick, applyChoice, fieldState, GRANTED_KEY } from './onPick'
+import { planPick, planListChange, rowSource, applyChoice, fieldState, GRANTED_KEY } from './onPick'
 
 const SKILLS = ['Arcana', 'History', 'Insight', 'Religion', 'Stealth']
 
@@ -256,6 +256,33 @@ describe('planPick — changing your mind', () => {
   })
 })
 
+describe('planPick — prompts', () => {
+  it('names the prompts a pick opens, alongside its grants', async () => {
+    const document = {
+      ...DOCUMENT,
+      fields: {
+        ...DOCUMENT.fields,
+        klass: { ...DOCUMENT.fields.klass, on_pick: [{ prompt: 'class_skills' }] },
+      },
+    }
+    const plan = await planPick({ document, data: {}, field: 'klass', entry: { name: 'Wizard' } })
+    expect(plan.prompts).toEqual(['class_skills'])
+    expect(plan.choices).toEqual([])
+  })
+
+  it('opens nothing when the pick is cleared', async () => {
+    const document = {
+      ...DOCUMENT,
+      fields: {
+        ...DOCUMENT.fields,
+        klass: { ...DOCUMENT.fields.klass, on_pick: [{ prompt: 'class_skills' }] },
+      },
+    }
+    const plan = await planPick({ document, data: {}, field: 'klass', entry: null })
+    expect(plan.prompts).toEqual([])
+  })
+})
+
 describe('planPick — choices', () => {
   const WIZARD = { name: 'Wizard', skill_choices: 2, skill_options: ['Arcana', 'History'] }
 
@@ -408,5 +435,266 @@ describe('planPick — several entries at once', () => {
       entry: null,
     })
     expect(patch.traits).toEqual([])
+  })
+})
+
+describe('planListChange — each row is a pick', () => {
+  const LIST_DOCUMENT = {
+    fields: {
+      ...DOCUMENT.fields,
+      classes: {
+        type: 'content_list',
+        content_type: 'class',
+        on_pick: [
+          { choose: 'skills', count: 'skill_choices', from: 'skill_options' },
+          { grant: 'feats', from: 'feature_ids', names: 'feature_names' },
+        ],
+      },
+    },
+  }
+  const FIGHTER = {
+    name: 'Fighter',
+    skill_choices: 1,
+    skill_options: ['Arcana', 'Stealth'],
+    feature_ids: ['second-wind'],
+    feature_names: ['Second Wind'],
+  }
+  const ROGUE = {
+    name: 'Rogue',
+    skill_choices: 2,
+    skill_options: ['Stealth', 'Insight'],
+    feature_ids: ['sneak-attack'],
+    feature_names: ['Sneak Attack'],
+  }
+
+  it('grants what a new row grants, recorded under that row', async () => {
+    const { patch, choices } = await planListChange({
+      document: LIST_DOCUMENT,
+      data: { classes: [] },
+      field: 'classes',
+      value: [{ _ref: 'fighter' }],
+      known: { fighter: FIGHTER },
+      lookup: lookupMissing,
+    })
+    expect(patch.feats).toEqual([{ _inline: true, name: 'Second Wind' }])
+    expect(patch[GRANTED_KEY]).toEqual({
+      [rowSource('classes', 'fighter')]: { feats: ['Second Wind'] },
+    })
+    expect(choices).toEqual([
+      {
+        source: 'classes:fighter',
+        target: 'skills',
+        count: 1,
+        options: ['Arcana', 'Stealth'],
+        label: '',
+      },
+    ])
+  })
+
+  it('leaves the rows that stay alone', async () => {
+    const data = {
+      classes: [{ _ref: 'fighter' }],
+      feats: [{ _inline: true, name: 'Second Wind' }],
+      [GRANTED_KEY]: { 'classes:fighter': { feats: ['Second Wind'] } },
+    }
+    const fetchEntry = vi.fn(async () => ROGUE)
+    const { patch } = await planListChange({
+      document: LIST_DOCUMENT,
+      data,
+      field: 'classes',
+      value: [{ _ref: 'fighter', _per: { level: 3 } }, { _ref: 'rogue' }],
+      fetchEntry,
+    })
+    // Only the new row was fetched, and the old row's grants are untouched.
+    expect(fetchEntry).toHaveBeenCalledWith('rogue')
+    expect(fetchEntry).toHaveBeenCalledTimes(1)
+    expect(patch.feats).toEqual([
+      { _inline: true, name: 'Second Wind' },
+      { _inline: true, name: 'Sneak Attack' },
+    ])
+    expect(patch[GRANTED_KEY]).toEqual({
+      'classes:fighter': { feats: ['Second Wind'] },
+      'classes:rogue': { feats: ['Sneak Attack'] },
+    })
+  })
+
+  it('takes back only what the removed row granted', async () => {
+    const data = {
+      classes: [{ _ref: 'fighter' }, { _ref: 'rogue' }],
+      skills: ['Stealth', 'Arcana'],
+      feats: [
+        { _inline: true, name: 'Second Wind' },
+        { _inline: true, name: 'Sneak Attack' },
+      ],
+      [GRANTED_KEY]: {
+        'classes:fighter': { feats: ['Second Wind'], skills: ['Arcana'] },
+        'classes:rogue': { feats: ['Sneak Attack'], skills: ['Stealth'] },
+      },
+    }
+    const { patch, choices } = await planListChange({
+      document: LIST_DOCUMENT,
+      data,
+      field: 'classes',
+      value: [{ _ref: 'fighter' }],
+    })
+    expect(patch.feats).toEqual([{ _inline: true, name: 'Second Wind' }])
+    expect(patch.skills).toEqual(['Arcana'])
+    expect(patch[GRANTED_KEY]).toEqual({
+      'classes:fighter': { feats: ['Second Wind'], skills: ['Arcana'] },
+    })
+    expect(choices).toEqual([])
+  })
+
+  it('a freeform row triggers nothing', async () => {
+    const { patch } = await planListChange({
+      document: LIST_DOCUMENT,
+      data: {},
+      field: 'classes',
+      value: [{ _inline: true, name: 'Blood Hunter' }],
+    })
+    expect(patch).toEqual({})
+  })
+
+  it('a row whose entry cannot be found grants nothing', async () => {
+    const { patch } = await planListChange({
+      document: LIST_DOCUMENT,
+      data: {},
+      field: 'classes',
+      value: [{ _ref: 'gone' }],
+      fetchEntry: async () => {
+        throw new Error('offline')
+      },
+    })
+    expect(patch).toEqual({})
+  })
+
+  it('a list without rules is left alone', async () => {
+    const { patch, choices } = await planListChange({
+      document: DOCUMENT,
+      data: {},
+      field: 'feats',
+      value: [{ _ref: 'alert' }],
+      known: { alert: { name: 'Alert' } },
+    })
+    expect(patch).toEqual({})
+    expect(choices).toEqual([])
+  })
+
+  it('a choice made for a row is recorded under that row', () => {
+    const patch = applyChoice({
+      data: { skills: [] },
+      choice: { source: 'classes:rogue', target: 'skills' },
+      picked: ['Stealth'],
+    })
+    expect(patch[GRANTED_KEY]).toEqual({ 'classes:rogue': { skills: ['Stealth'] } })
+  })
+})
+
+describe('planListChange — a pack grants its contents beside it', () => {
+  const PACK_DOCUMENT = {
+    fields: {
+      equipment: {
+        type: 'content_list',
+        content_type: 'item',
+        per_entry_fields: { qty: { type: 'number' }, equipped: { type: 'checkbox' } },
+        on_pick: [
+          {
+            grant: 'equipment',
+            from: 'pack_ids',
+            names: 'pack_names',
+            values: { qty: 'pack_qty' },
+          },
+        ],
+      },
+    },
+  }
+  const EXPLORERS = {
+    name: "Explorer's Pack",
+    pack_ids: ['backpack', 'rations', 'oil'],
+    pack_names: ['Backpack', 'Rations', 'Oil'],
+    pack_qty: [1, 10, 2],
+  }
+  // The catalog has the backpack and the rations as items, not the oil.
+  const lookupItems = async (ids: string[]) =>
+    Object.fromEntries(
+      ids.map((id) => [
+        id,
+        id === 'oil' ? { missing: true } : { content_type: 'item', source: 'xphb', missing: false },
+      ])
+    )
+
+  it('adds each item with its quantity, as a reference or a named entry', async () => {
+    const { patch } = await planListChange({
+      document: PACK_DOCUMENT,
+      data: { equipment: [] },
+      field: 'equipment',
+      value: [{ _ref: 'explorers-pack' }],
+      known: { 'explorers-pack': EXPLORERS },
+      lookup: lookupItems,
+    })
+    expect(patch.equipment).toEqual([
+      { _ref: 'explorers-pack' },
+      { _ref: 'backpack', _source: 'xphb', _per: { qty: 1 } },
+      { _ref: 'rations', _source: 'xphb', _per: { qty: 10 } },
+      { _inline: true, _per: { qty: 2 }, name: 'Oil' },
+    ])
+    expect(patch[GRANTED_KEY]).toEqual({
+      'equipment:explorers-pack': { equipment: ['backpack', 'rations', 'Oil'] },
+    })
+  })
+
+  it('reads quantities written as text, an empty slot leaving the default', async () => {
+    const { patch } = await planListChange({
+      document: PACK_DOCUMENT,
+      data: { equipment: [] },
+      field: 'equipment',
+      value: [{ _ref: 'explorers-pack' }],
+      known: { 'explorers-pack': { ...EXPLORERS, pack_qty: '1,,x' } },
+      lookup: lookupMissing,
+    })
+    expect(patch.equipment).toEqual([
+      { _ref: 'explorers-pack' },
+      { _inline: true, _per: { qty: 1 }, name: 'Backpack' },
+      { _inline: true, name: 'Rations' },
+      { _inline: true, name: 'Oil' },
+    ])
+  })
+
+  it('leaves an item the player already had as it was', async () => {
+    const { patch } = await planListChange({
+      document: PACK_DOCUMENT,
+      data: { equipment: [{ _ref: 'rations', qty: 3 }] },
+      field: 'equipment',
+      value: [{ _ref: 'rations', qty: 3 }, { _ref: 'explorers-pack' }],
+      known: { 'explorers-pack': EXPLORERS },
+      lookup: lookupItems,
+    })
+    expect(patch.equipment).toEqual([
+      { _ref: 'rations', qty: 3 },
+      { _ref: 'explorers-pack' },
+      { _ref: 'backpack', _source: 'xphb', _per: { qty: 1 } },
+      { _inline: true, _per: { qty: 2 }, name: 'Oil' },
+    ])
+  })
+
+  it('takes the contents back with the pack', async () => {
+    const data = {
+      equipment: [
+        { _ref: 'explorers-pack' },
+        { _ref: 'backpack', qty: 1 },
+        { _ref: 'rations', qty: 7 },
+        { _inline: true, qty: 2, name: 'Oil' },
+        { _ref: 'rope', qty: 1 },
+      ],
+      [GRANTED_KEY]: { 'equipment:explorers-pack': { equipment: ['backpack', 'rations', 'Oil'] } },
+    }
+    const { patch } = await planListChange({
+      document: PACK_DOCUMENT,
+      data,
+      field: 'equipment',
+      value: data.equipment.slice(1),
+    })
+    expect(patch.equipment).toEqual([{ _ref: 'rope', qty: 1 }])
+    expect(patch[GRANTED_KEY]).toEqual({})
   })
 })

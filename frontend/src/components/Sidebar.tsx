@@ -3,6 +3,8 @@ import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LuLibrary,
+  LuBookOpenText,
+  LuSkull,
   LuMap,
   LuMusic,
   LuBox,
@@ -102,6 +104,10 @@ export default function Sidebar({
     isAdmin: user?.role === 'admin',
   })
   const hide_library = uiSettings.hide_library
+  const hide_compendium = uiSettings.hide_compendium
+  // The bestiary is the GM's: its monsters are in personal rulesets, so a
+  // player would only ever find it empty.
+  const showBestiary = (user?.role === 'admin' || user?.role === 'gm') && !hide_compendium
   const hide_maps = uiSettings.hide_maps
   const hide_tokens = uiSettings.hide_tokens
   const hide_audio = uiSettings.hide_audio
@@ -263,6 +269,11 @@ export default function Sidebar({
         {!isGuest &&
           showArmory &&
           navItem('/armory', <LuSwords size={16} />, t('nav.armory'), { end: false })}
+        {!isGuest &&
+          !hide_compendium &&
+          navItem('/compendium', <LuBookOpenText size={16} />, t('nav.compendium'), { end: false })}
+        {showBestiary &&
+          navItem('/bestiary', <LuSkull size={16} />, t('nav.bestiary'), { end: false })}
         {!isGuest && !hide_maps && navItem('/maps', <LuMap size={16} />, t('nav.maps'))}
         {!isGuest && !hide_tokens && navItem('/tokens', <LuUser size={16} />, t('nav.tokens'))}
         {!isGuest && !hide_audio && navItem('/audio', <LuMusic size={16} />, t('nav.audio'))}

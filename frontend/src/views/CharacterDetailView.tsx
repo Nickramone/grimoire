@@ -9,14 +9,37 @@ import {
   LuListTree,
   LuEye,
   LuPencil,
+  LuX,
 } from 'react-icons/lu'
 import { characters as charactersApi, content as contentApi } from '../api'
 import type { Schema } from '../api'
 import Spinner from '../components/Spinner'
 import CharacterSheet from '../components/characters/CharacterSheet'
 import ChoiceDialog from '../components/characters/ChoiceDialog'
+import PromptDialog from '../components/characters/PromptDialog'
+import type { BrowseEntries } from '../components/characters/PromptDialog'
+import {
+  findPrompt,
+  pendingPrompts,
+  planPrompt,
+  planGrants,
+  PromptLauncher,
+  sheetContext,
+  startPrompt,
+  visibleSteps,
+  withPending,
+  withoutPending,
+  withoutPendingFrom,
+} from '../components/characters/sheetPrompts'
+import type { Answers, PromptRequest } from '../components/characters/sheetPrompts'
 import AllValuesDialog from '../components/characters/AllValuesDialog'
-import { planPick, applyChoice, type PickChoice } from '../components/characters/onPick'
+import {
+  planPick,
+  planListChange,
+  rowSource,
+  applyChoice,
+  type PickChoice,
+} from '../components/characters/onPick'
 import { OVERRIDES_KEY } from '../components/characters/expressions'
 import RawCharacterData from '../components/characters/RawCharacterData'
 import CharacterPortrait from '../components/characters/CharacterPortrait'
@@ -64,6 +87,9 @@ export default function CharacterDetailView() {
 
   // Choices a pick asked for - "choose 2 skills" - shown one at a time.
   const [choices, setChoices] = useState<Choice[]>([])
+  // The sheet's prompts waiting to be shown, after any choice: a level's hit
+  // points and feat, a background's ability increases.
+  const [prompts, setPrompts] = useState<PromptRequest[]>([])
   // Entries the player just picked, overlaid on the resolved ones until the
   // next save brings them back from the server. Without it a derived value -
   // "a wizard casts spells" - would lag the pick by a round trip.
@@ -201,9 +227,80 @@ export default function CharacterDetailView() {
 
   const onChange = useCallback(
     async (name: string, value: unknown, meta?: unknown) => {
+      const before = dataRef.current
       applyPatch({ [name]: value })
 
+      // A pick made inside a list row - a magic weapon's base - brings its
+      // entry along, so formulas reading it work before the save resolves it.
+      const rowPicks =
+        meta && typeof meta === 'object' && 'picked' in meta
+          ? (meta as { picked?: Record<string, Entry> }).picked
+          : undefined
+      if (rowPicks && Object.keys(rowPicks).length) {
+        setPickedEntries((prev) => ({ ...prev, ...rowPicks }))
+      }
+
       const definition = document?.fields?.[name]
+      if (definition?.type === 'content_list') {
+        if (!Array.isArray(definition.on_pick) || !definition.on_pick.length) return
+        // Each row gained is a pick, each row lost takes its grants back.
+        const entry =
+          meta && typeof meta === 'object' && 'entry' in meta
+            ? ((meta as { entry: Entry }).entry ?? null)
+            : null
+        const last = Array.isArray(value) ? (value[value.length - 1] as { _ref?: string }) : null
+        const known: Record<string, Values> = {}
+        if (entry && last?._ref) {
+          known[last._ref] = entry
+          const ref = last._ref
+          setPickedEntries((prev) => ({ ...prev, [ref]: entry }))
+        }
+        try {
+          const plan = await planListChange({
+            document: document ?? {},
+            data: before,
+            field: name,
+            value,
+            known,
+            lookup,
+            fetchEntry: async (id) => {
+              const resolved: Record<string, { missing?: boolean; data?: Values; name?: string }> =
+                await lookup([id])
+              const found = resolved[id]
+              return found && !found.missing ? { ...(found.data || {}), name: found.name } : null
+            },
+          })
+          // A row gone takes its prompts with it, answered or put off.
+          let dropped: Values = {}
+          for (const lost of plan.removed) {
+            const row = { prompt: '', source: name, ref: lost }
+            dropped = {
+              ...dropped,
+              ...withoutPending({ ...dataRef.current, ...dropped }, row, true),
+            }
+          }
+          if (Object.keys(plan.patch).length || Object.keys(dropped).length) {
+            applyPatch({ ...(plan.patch as Values), ...dropped })
+          }
+          if (plan.choices.length) setChoices((prev) => [...prev, ...plan.choices])
+          if (plan.prompts.length || plan.removed.length) {
+            const gone = new Set(plan.removed)
+            const opened = plan.prompts.map(({ prompt, ref: rowRef, entry: row }) => ({
+              prompt,
+              source: name,
+              ref: rowRef,
+              row,
+            }))
+            setPrompts((prev) => [
+              ...prev.filter((item) => item.source !== name || !gone.has(item.ref || '')),
+              ...opened,
+            ])
+          }
+        } catch (e) {
+          setError((e as Error).message)
+        }
+        return
+      }
       if (definition?.type !== 'content_ref') return
 
       // The picked entry's own properties: from the browser that picked it,
@@ -236,8 +333,21 @@ export default function CharacterDetailView() {
           entry: entry ?? null,
           lookup,
         })
-        if (Object.keys(plan.patch).length) applyPatch(plan.patch as Values)
+        // A new pick replaces the old one's prompts, answered or put off.
+        const dropped = withoutPendingFrom(dataRef.current, name)
+        if (Object.keys(plan.patch).length || Object.keys(dropped).length) {
+          applyPatch({ ...(plan.patch as Values), ...dropped })
+        }
         if (plan.choices.length) setChoices((prev) => [...prev, ...plan.choices])
+        if (plan.prompts.length) {
+          const opened = plan.prompts.map((prompt) => ({
+            prompt,
+            source: name,
+            ref: ref || undefined,
+            row: entry ?? null,
+          }))
+          setPrompts((prev) => [...prev.filter((item) => item.source !== name), ...opened])
+        }
       } catch (e) {
         // A pick that could not be followed up is still a pick: the value is
         // saved, and the player can add what it would have granted by hand.
@@ -295,6 +405,119 @@ export default function CharacterDetailView() {
   // is still `editable` by the campaign's GM when its player lets them in.
   const owned = character?.owned !== false
   const readOnly = !(character?.editable ?? owned)
+  // The prompts: opened by a pick, an action or a <g-action prompt> button,
+  // shown one at a time once no choice is waiting.
+  const openPrompt = useCallback(
+    (request: PromptRequest) => setPrompts((prev) => [...prev, request]),
+    []
+  )
+  const currentPrompt = choices.length ? undefined : prompts[0]
+  const currentDefinition = currentPrompt ? findPrompt(document, currentPrompt.prompt) : undefined
+  const entriesForSheet = useMemo(
+    () => ({ ...(character?.entries || {}), ...pickedEntries }),
+    [character?.entries, pickedEntries]
+  )
+  // Worked out when a prompt opens: its answers read the sheet as it stood.
+  const promptSheet = useMemo(
+    () => (currentPrompt ? sheetContext(document, dataRef.current, entriesForSheet) : {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentPrompt, document]
+  )
+  // A sheet's start prompt - a new character's first level - opens by itself,
+  // once each time the character is opened.
+  const startedRef = useRef('')
+  useEffect(() => {
+    if (loading || readOnly || !document || !character) return
+    if (startedRef.current === character.id) return
+    startedRef.current = character.id
+    const name = startPrompt(
+      document,
+      sheetContext(document, dataRef.current, character.entries || {}),
+      dataRef.current
+    )
+    if (name) openPrompt({ prompt: name })
+  }, [loading, readOnly, document, character, openPrompt])
+
+  // A prompt the sheet no longer has, or with no question for this character,
+  // is passed over rather than shown empty.
+  useEffect(() => {
+    if (!currentPrompt) return
+    if (
+      !currentDefinition ||
+      !visibleSteps(currentDefinition, promptSheet, {}, currentPrompt.row).length
+    ) {
+      setPrompts((prev) => prev.slice(1))
+    }
+  }, [currentPrompt, currentDefinition, promptSheet])
+
+  const browseEntries = useCallback<BrowseEntries>(
+    (contentType, filters, page, pageSize) =>
+      contentApi.browse(character?.schema_ref || '', contentType, {
+        filters,
+        page,
+        page_size: pageSize,
+      }),
+    [character?.schema_ref]
+  )
+
+  // Where what a prompt adds is recorded: under the pick that opened it,
+  // one row of a content_list being a pick of its own.
+  const grantSource = (request: PromptRequest) =>
+    request.source && request.ref && document?.fields?.[request.source]?.type === 'content_list'
+      ? rowSource(request.source, request.ref)
+      : request.source
+
+  const confirmPrompt = async (answers: Answers) => {
+    const request = prompts[0]
+    const definition = findPrompt(document, request?.prompt)
+    setPrompts((prev) => prev.slice(1))
+    if (!request || !definition) return
+    const plan = planPrompt(definition, {
+      document,
+      data: dataRef.current,
+      context: promptSheet,
+      answers,
+      row: request.row,
+      source: grantSource(request),
+    })
+    // Grants ask the catalog which ids it has, as a pick's grants do.
+    const granted = plan.grants.length
+      ? await planGrants(plan.grants, {
+          document,
+          data: { ...dataRef.current, ...plan.patch },
+          lookup,
+        })
+      : {}
+    applyPatch({ ...plan.patch, ...granted, ...withoutPending(dataRef.current, request) })
+    // Each pick goes the way a pick by hand goes, so its own on_pick runs -
+    // a feat's prompt joining the queue after this one.
+    for (const pick of plan.picks) await onChange(pick.field, pick.value, { entry: pick.entry })
+    if (plan.prompts.length) {
+      setPrompts((prev) => [...prev, ...plan.prompts.map((prompt) => ({ prompt }))])
+    }
+  }
+
+  const skipPrompt = () => {
+    const request = prompts[0]
+    setPrompts((prev) => prev.slice(1))
+    if (request && !readOnly) {
+      const patch = withPending(dataRef.current, request)
+      if (Object.keys(patch).length) applyPatch(patch)
+    }
+  }
+
+  // A prompt put off, opened again: with the entry its pick read, fetched anew.
+  const reopenPrompt = async (request: PromptRequest) => {
+    let row: Values | null = null
+    if (request.ref) {
+      const resolved: Record<string, { missing?: boolean; data?: Values; name?: string }> =
+        await lookup([request.ref]).catch(() => ({}))
+      const found = resolved[request.ref]
+      if (found && !found.missing) row = { ...(found.data || {}), name: found.name }
+    }
+    openPrompt({ ...request, row })
+  }
+
   const media = useMemo<CharacterMedia | null>(
     () =>
       character
@@ -546,19 +769,62 @@ export default function CharacterDetailView() {
           </div>
         ) : null}
 
+        {document && !readOnly && pendingPrompts(data).length ? (
+          <div
+            role="status"
+            style={{
+              ...card,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              alignItems: 'center',
+              padding: 12,
+              marginBottom: 20,
+              borderColor: 'var(--warning)',
+              fontSize: 13,
+            }}
+          >
+            <span style={{ color: 'var(--text-dim)' }}>{t('characters.promptPending')}</span>
+            {pendingPrompts(data).map((request) => {
+              const label = findPrompt(document, request.prompt)?.label || request.prompt
+              return (
+                <span
+                  key={`${request.prompt}:${request.source || ''}:${request.ref || ''}`}
+                  style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}
+                >
+                  <button type="button" style={ghostBtn} onClick={() => void reopenPrompt(request)}>
+                    {label}
+                  </button>
+                  <button
+                    type="button"
+                    style={iconBtn}
+                    aria-label={t('characters.promptDismiss', { name: label })}
+                    title={t('characters.promptDismiss', { name: label })}
+                    onClick={() => applyPatch(withoutPending(dataRef.current, request))}
+                  >
+                    <LuX size={14} />
+                  </button>
+                </span>
+              )
+            })}
+          </div>
+        ) : null}
+
         {document ? (
-          <CharacterSheet
-            document={document}
-            data={data}
-            // A party member may read another player's sheet but not edit it; the
-            // server refuses the write, so the controls should not be offered.
-            readOnly={readOnly}
-            onChange={onChange}
-            onReset={onReset}
-            onOverride={onOverride}
-            entries={{ ...(character.entries || {}), ...pickedEntries }}
-            schemaId={character.schema_ref}
-          />
+          <PromptLauncher.Provider value={readOnly ? null : openPrompt}>
+            <CharacterSheet
+              document={document}
+              data={data}
+              // A party member may read another player's sheet but not edit it; the
+              // server refuses the write, so the controls should not be offered.
+              readOnly={readOnly}
+              onChange={onChange}
+              onReset={onReset}
+              onOverride={onOverride}
+              entries={{ ...(character.entries || {}), ...pickedEntries }}
+              schemaId={character.schema_ref}
+            />
+          </PromptLauncher.Provider>
         ) : (
           <RawCharacterData data={data} />
         )}
@@ -588,6 +854,26 @@ export default function CharacterDetailView() {
             sourceLabel={document?.fields?.[choices[0].source]?.label || choices[0].source}
             onConfirm={confirmChoice}
             onSkip={() => setChoices((prev) => prev.slice(1))}
+          />
+        ) : null}
+
+        {currentPrompt && currentDefinition ? (
+          <PromptDialog
+            // Keyed so the next prompt starts with no answers.
+            key={`${currentPrompt.prompt}:${currentPrompt.source || ''}:${prompts.length}`}
+            prompt={currentDefinition}
+            document={document}
+            data={dataRef.current}
+            context={promptSheet}
+            row={currentPrompt.row}
+            sourceLabel={
+              currentPrompt.source
+                ? document?.fields?.[currentPrompt.source]?.label || currentPrompt.source
+                : undefined
+            }
+            browse={browseEntries}
+            onConfirm={(answers) => void confirmPrompt(answers)}
+            onSkip={skipPrompt}
           />
         ) : null}
 

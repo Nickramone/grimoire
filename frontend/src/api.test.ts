@@ -1179,6 +1179,11 @@ describe('character, content, and ruleset helpers', () => {
     // endpoint reads them back out of.
     await content.browse('dnd-5e', 'spell', { filters: { level: 3, school: '' } })
     expect(url()).toBe('/api/content/dnd-5e/spell?filter%5Blevel%5D=3')
+    // A list of values repeats the key; the catalog matches any of them.
+    await content.browse('dnd-5e', 'item', { filters: { category: ['Melee', 'Ranged'] } })
+    expect(url()).toBe(
+      '/api/content/dnd-5e/item?filter%5Bcategory%5D=Melee&filter%5Bcategory%5D=Ranged'
+    )
 
     // Empty values are dropped rather than sent as blanks.
     await content.browse('dnd-5e', 'spell', { search: '', sort: undefined })

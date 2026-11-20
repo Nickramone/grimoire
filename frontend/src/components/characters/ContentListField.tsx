@@ -9,6 +9,7 @@ import type { FieldDefinition } from './FieldRenderer'
 import ContentEntryDetail from './ContentEntryDetail'
 import type { ContentFieldDefinition, ContentTypeDefinition } from './ContentEntryDetail'
 import { ghostBtn, iconBtn, fieldLabel } from './characterStyles'
+import { evaluate } from './expressions'
 
 type EntryValues = Record<string, unknown>
 
@@ -20,9 +21,22 @@ export interface ContentListFieldProps {
   entries?: Record<string, unknown>
   schemaId?: string
   typeDefinition?: ContentTypeDefinition
-  onChange?: (value: ContentRefValue[]) => void
+  // The sheet's content types, for a per-entry field that is itself a pick.
+  contentTypes?: Record<string, unknown>
+  // `meta.entry` is a newly picked entry's own properties, for `on_pick`;
+  // `meta.picked` holds entries just picked in a per-entry field, by id, so the
+  // sheet can read them before the next save resolves them.
+  onChange?: (value: ContentRefValue[], meta?: ContentListChangeMeta) => void
   readOnly?: boolean
   hideLabel?: boolean
+  // The character as formulas read it, for a per-entry field's `visible_if`
+  // and `disabled_if`. Without it those see only the list and the row.
+  context?: Record<string, unknown>
+}
+
+export interface ContentListChangeMeta {
+  entry?: EntryValues | null
+  picked?: Record<string, EntryValues>
 }
 
 /**
@@ -44,9 +58,11 @@ export default function ContentListField({
   entries = {},
   schemaId,
   typeDefinition = {},
+  contentTypes = {},
   onChange,
   readOnly = false,
   hideLabel = false,
+  context,
 }: ContentListFieldProps) {
   const { t } = useTranslation()
   const [browsing, setBrowsing] = useState(false)
@@ -64,11 +80,26 @@ export default function ContentListField({
       : column
   )
 
-  const add = (picked: ContentRefValue) => {
+  const add = (picked: ContentRefValue, entry?: EntryValues) => {
     // Picking something already on the sheet is a no-op rather than a duplicate
     // row: two copies of the same spell is never what was meant.
     if (rows.some((row) => row?._ref === picked._ref)) return
-    onChange?.([...rows, picked])
+    // A new row starts from each per-entry field's declared `default` - an
+    // inventory item is added as one, not as an empty quantity - and from its
+    // `default_from`, worked out once, now, with the entry being added as
+    // `row`: a "+1 Longsword" starts with its base picked.
+    const starting = {
+      ...Object.fromEntries(
+        Object.entries(perFields)
+          .filter(([, field]) => field.default !== undefined)
+          .map(([key, field]) => [key, field.default])
+      ),
+      ...perEntryDefaults(perFields, entry),
+    }
+    const row = Object.keys(starting).length
+      ? { ...picked, _per: { ...starting, ...(picked._per || {}) } }
+      : picked
+    onChange?.([...rows, row], { entry: entry ?? null })
   }
 
   // A new custom entry opens straight away, ready to be named.
@@ -90,12 +121,20 @@ export default function ContentListField({
       return next
     })
 
-  const setPer = (index: number, key: string, cellValue: unknown) =>
-    onChange?.(
-      rows.map((row, i) =>
-        i === index ? { ...row, _per: { ...(row._per || {}), [key]: cellValue } } : row
-      )
+  const setPer = (index: number, key: string, cellValue: unknown, cellMeta?: unknown) => {
+    // A per-entry pick hands back the entry it picked; the sheet holds on to it
+    // so formulas reading the pick work before the next save resolves it.
+    const pickedEntry =
+      cellMeta && typeof cellMeta === 'object' && 'entry' in cellMeta
+        ? (cellMeta as { entry: EntryValues | null }).entry
+        : null
+    const pickedId = (cellValue as ContentRefValue | null)?._ref
+    const next = rows.map((row, i) =>
+      i === index ? { ...row, _per: { ...(row._per || {}), [key]: cellValue } } : row
     )
+    if (pickedEntry && pickedId) onChange?.(next, { picked: { [pickedId]: pickedEntry } })
+    else onChange?.(next)
+  }
 
   const setInline = (index: number, key: string, cellValue: unknown) =>
     onChange?.(rows.map((row, i) => (i === index ? { ...row, [key]: cellValue } : row)))
@@ -107,20 +146,85 @@ export default function ContentListField({
     ? typeDefinition.fields!
     : { name: { type: 'text', label: t('characters.name') } }
 
+  // A per-entry field's `visible_if` and `disabled_if` read the entry as `row`
+  // - the catalog entry with the character's per-entry values on top, or a
+  // freeform entry as written - beside the character's own names: an
+  // "attuned" box only on items that need attunement, and none ticked past the
+  // limit. A broken `visible_if` shows the field and a broken `disabled_if`
+  // leaves it editable, as a field's own condition does.
+  const conditionContext = (row: ContentRefValue) => {
+    const per = (row?._per || {}) as EntryValues
+    const entry = (row as EntryValues)?._inline ? row : entries[String(row?._ref)]
+    const resolved = {
+      ...(entry && typeof entry === 'object' ? (entry as EntryValues) : {}),
+      ...per,
+    }
+    return { [name]: rows, _entries: entries, ...(context || {}), row: resolved }
+  }
+
+  const isShown = (row: ContentRefValue, perDefinition: FieldDefinition) => {
+    const { visible_if: visibleIf } = perDefinition as EntryValues
+    return !visibleIf || Boolean(evaluate(visibleIf, conditionContext(row), true))
+  }
+
+  // A per-entry field hidden on every row takes no column at all: a value the
+  // sheet ticks elsewhere (a feature's uses, in a tracker of their own) leaves
+  // no empty column behind in the list.
+  const perEntries = Object.entries(perFields).filter(([, perDefinition]) =>
+    rows.some((row) => isShown(row, perDefinition))
+  )
+
+  // A per-entry select's `options_filter` keeps the options this row offers,
+  // read with the entry as `row` and the option's value as `option`: one
+  // "choice" field whose options differ from feature to feature. The value
+  // held stays listed, so a choice the row no longer offers still shows. A
+  // filter that does not parse keeps every option.
+  const rowOptions = (
+    perDefinition: FieldDefinition,
+    row: ContentRefValue,
+    key: string
+  ): FieldDefinition => {
+    const filter = (perDefinition as EntryValues).options_filter
+    if (perDefinition.type !== 'select' || typeof filter !== 'string' || !filter.trim()) {
+      return perDefinition
+    }
+    const held = row?._per?.[key]
+    const base = conditionContext(row)
+    const options = (perDefinition.options || []).filter((option) => {
+      const value = typeof option === 'object' ? option.value : option
+      if (held !== undefined && held !== '' && String(value) === String(held)) return true
+      return Boolean(evaluate(filter, { ...base, option: value }, true))
+    })
+    return { ...perDefinition, options }
+  }
+
   const cell: CSSProperties = { padding: '6px 6px', fontSize: 12, verticalAlign: 'middle' }
   const perCells = (row: ContentRefValue, index: number) =>
-    Object.entries(perFields).map(([key, perDefinition]) => (
-      <td key={key} style={{ ...cell, width: perDefinition.type === 'checkbox' ? 1 : 70 }}>
-        <FieldRenderer
-          name={`${name}.${index}.${key}`}
-          definition={perDefinition}
-          value={row?._per?.[key]}
-          onChange={readOnly ? undefined : (v) => setPer(index, key, v)}
-          readOnly={readOnly}
-          hideLabel={columns.length > 0}
-        />
-      </td>
-    ))
+    perEntries.map(([key, perDefinition]) => {
+      const { disabled_if: disabledIf } = perDefinition as EntryValues
+      const shown = isShown(row, perDefinition)
+      const disabled =
+        Boolean(disabledIf) && Boolean(evaluate(disabledIf, conditionContext(row), false))
+      return (
+        <td key={key} style={{ ...cell, width: perCellWidth(perDefinition) }}>
+          {shown ? (
+            <FieldRenderer
+              name={`${name}.${index}.${key}`}
+              definition={rowOptions(perDefinition, row, key)}
+              value={row?._per?.[key]}
+              onChange={readOnly || disabled ? undefined : (v, meta) => setPer(index, key, v, meta)}
+              readOnly={readOnly || disabled}
+              hideLabel={columns.length > 0}
+              // A per-entry pick - a magic weapon's base - opens the catalog like
+              // any other pick, and names what it picked from the same entries.
+              entries={entries}
+              schemaId={schemaId}
+              contentTypes={contentTypes}
+            />
+          ) : null}
+        </td>
+      )
+    })
 
   return (
     <div className="gc-content-list">
@@ -145,7 +249,7 @@ export default function ContentListField({
                     {column.label}
                   </th>
                 ))}
-                {Object.entries(perFields).map(([key, perDefinition]) => (
+                {perEntries.map(([key, perDefinition]) => (
                   <th key={key} style={{ ...cell, ...headCell }}>
                     {perDefinition.label || key}
                   </th>
@@ -257,11 +361,7 @@ export default function ContentListField({
                   </tr>
                   {expanded && (entry || row?._inline) ? (
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td
-                        colSpan={
-                          1 + columns.length + Object.keys(perFields).length + (readOnly ? 0 : 1)
-                        }
-                      >
+                      <td colSpan={1 + columns.length + perEntries.length + (readOnly ? 0 : 1)}>
                         {entry ? (
                           // The whole entry - a feat's description, a spell's
                           // text - drawn by the component the browser uses.
@@ -332,6 +432,7 @@ export default function ContentListField({
           typeDefinition={typeDefinition}
           multiple
           chosen={rows}
+          fixedFilters={definition.filter}
           onChoose={add}
           onClose={() => setBrowsing(false)}
         />
@@ -373,6 +474,41 @@ const nameButton: CSSProperties = {
   cursor: 'pointer',
   font: 'inherit',
   width: '100%',
+}
+
+// A field's own `width` in pixels - a select whose options are long names -
+// or else: a checkbox takes only its own width; a pick needs room for a name.
+function perCellWidth(definition: FieldDefinition): number {
+  const width = Number(definition.width)
+  if (Number.isFinite(width) && width > 0) return width
+  if (definition.type === 'checkbox') return 1
+  if (definition.type === 'content_ref') return 160
+  return 70
+}
+
+/**
+ * The starting `_per` values of an entry being added: each per-entry field's
+ * `default_from`, worked out with the entry as `row`. A text result names an
+ * entry for a per-entry pick, which stores it as a reference; an empty result
+ * leaves the field unset.
+ */
+export function perEntryDefaults(
+  perFields: Record<string, FieldDefinition>,
+  entry: EntryValues | null | undefined
+): EntryValues {
+  const starting: EntryValues = {}
+  for (const [key, field] of Object.entries(perFields)) {
+    const formula = field.default_from
+    if (typeof formula !== 'string' || !formula.trim()) continue
+    const value = evaluate(formula, { row: entry || {} }, null)
+    if (value === null || value === undefined || value === '') continue
+    if (field.type === 'content_ref') {
+      if (typeof value === 'string' && value.trim()) starting[key] = { _ref: value.trim() }
+      continue
+    }
+    starting[key] = value
+  }
+  return starting
 }
 
 function formatCell(value: unknown): string {

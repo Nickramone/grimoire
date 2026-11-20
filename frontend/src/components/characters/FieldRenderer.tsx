@@ -48,6 +48,9 @@ interface Props {
   overridden?: boolean
   variant?: string
   derivedValue?: unknown
+  // The character as formulas read it. Only a content list uses it, for its
+  // per-entry fields' conditions.
+  context?: Record<string, unknown>
 }
 
 /**
@@ -90,6 +93,7 @@ export default function FieldRenderer({
   // The value as the sheet reads it. Only a list uses it: its rows with their
   // `default_from` cells worked out, shown in the cells the player left empty.
   derivedValue,
+  context,
 }: Props) {
   const { t } = useTranslation()
   const inputId = useId()
@@ -148,9 +152,11 @@ export default function FieldRenderer({
         entries={entries}
         schemaId={schemaId}
         typeDefinition={(contentTypes[contentType] || {}) as ContentTypeDefinition}
+        contentTypes={contentTypes}
         onChange={onChange}
         readOnly={readOnly}
         hideLabel={hideLabel}
+        context={context}
       />
     )
   }

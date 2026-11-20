@@ -445,6 +445,44 @@ class TestSchemaValidation:
         with pytest.raises(svc.SchemaError, match="options"):
             svc.validate_schema(_schema(fields={"x": {"type": "select"}}))
 
+    @staticmethod
+    def _items(**attuned):
+        return {
+            **_schema()["fields"],
+            "items": {
+                "type": "content_list",
+                "content_type": "magic_item",
+                "per_entry_fields": {"attuned": {"type": "checkbox", **attuned}},
+            }
+        }
+
+    @staticmethod
+    def _types():
+        return {
+            "magic_item": {
+                "identity_field": "name",
+                "fields": {"name": {"type": "text"}, "attunement": {"type": "checkbox"}},
+            }
+        }
+
+    def test_accepts_conditions_on_a_per_entry_field(self):
+        svc.validate_schema(
+            _schema(
+                fields=self._items(
+                    visible_if="row.attunement",
+                    disabled_if="not row.attuned && count_refs(items, 'attuned') >= 3",
+                ),
+                content_types=self._types(),
+            )
+        )
+
+    @pytest.mark.parametrize("key", ["visible_if", "disabled_if"])
+    def test_rejects_a_broken_condition_on_a_per_entry_field(self, key):
+        with pytest.raises(svc.SchemaError, match=key):
+            svc.validate_schema(
+                _schema(fields=self._items(**{key: "row.attuned &&"}), content_types=self._types())
+            )
+
     def test_rejects_an_invalid_formula(self):
         with pytest.raises(svc.SchemaError, match="invalid formula"):
             svc.validate_schema(_schema(computed={"x": {"formula": "1 +"}}))
@@ -738,6 +776,22 @@ class TestListFields:
                 )
             )
 
+    def test_a_column_may_be_readonly_and_still_written(self):
+        """Read-only is the player's view of it; a prompt's write is still a write."""
+        column = {"key": "choice", "type": "text", "readonly": True}
+        validated = svc.validate_schema(
+            _phase2_schema(fields={"x": {"type": "list", "columns": [column]}}, computed={})
+        )
+        assert validated["fields"]["x"]["columns"][0]["readonly"] is True
+        assert svc.coerce_value({"type": "list", "columns": [column]}, [{"choice": "asi"}]) == [
+            {"choice": "asi"}
+        ]
+
+    def test_rejects_a_readonly_that_is_not_true_or_false(self):
+        column = {"key": "a", "type": "text", "readonly": "yes"}
+        with pytest.raises(svc.SchemaError, match="'readonly' must be true or false"):
+            svc.validate_schema(_phase2_schema(fields={"x": {"type": "list", "columns": [column]}}))
+
     def test_coerces_rows_column_by_column(self):
         rows = svc.coerce_value(EQUIPMENT, [{"name": "Sword", "qty": "2", "equipped": "yes"}])
         assert rows == [{"name": "Sword", "qty": 2, "equipped": True}]
@@ -1008,6 +1062,90 @@ class TestSumQty:
         assert svc.evaluate("count_refs(spells, 'prepared')", context) == 2
 
 
+class TestAt:
+    """Mirrors the frontend's at() cases: the two evaluators must agree."""
+
+    CONTEXT = {
+        "levels": [
+            {"class": "wizard", "die": 6},
+            {"class": "wizard", "die": 4},
+            {"class": "fighter", "die": 10},
+        ],
+        "classes": [
+            {"_ref": "wizard", "_per": {"subclass": "evoker"}},
+            {"_inline": True, "name": "Homebrew", "hit_die": 8},
+            {"_ref": "not-installed"},
+        ],
+        "langs": ["Elvish", "Dwarvish"],
+        "_entries": {"wizard": {"name": "Wizard", "hit_die": 6}},
+    }
+
+    @pytest.mark.parametrize(
+        "formula,expected",
+        [
+            ("at(levels, 0, 'die')", 6),
+            ("at(levels, -1, 'class')", "fighter"),
+            # A fractional index is floored, as floor() would.
+            ("at(levels, 1.7, 'die')", 4),
+            ("at(levels, 3, 'die')", ""),
+            ("at(levels, -4, 'die')", ""),
+            ("at(levels, 0, 'missing')", ""),
+            ("at(langs, 1)", "Dwarvish"),
+            ("at(langs, 0, 'name')", ""),
+            ("at(nothing, 0)", ""),
+            ("at(classes, 0, 'hit_die')", 6),
+            ("at(classes, 0, 'subclass')", "evoker"),
+            ("at(classes, 1, 'hit_die')", 8),
+            ("at(classes, 2, 'hit_die')", ""),
+            ("ref(at(classes, 0), 'name')", "Wizard"),
+            ("at(levels, 0, 'die') + at(levels, 1, 'die')", 10),
+            ("at(levels, 5, 'die') + 1", 1),
+            ("count_where(levels, 'class', at(levels, 0, 'class'))", 2),
+        ],
+    )
+    def test_reads_one_item_by_position(self, formula, expected):
+        assert svc.evaluate(formula, self.CONTEXT) == expected
+
+
+class TestByLevel:
+    """Mirrors the frontend's by_level() cases: the two evaluators must agree."""
+
+    CONTEXT = {
+        "level": 5,
+        "uses": "1:2,3:3,6:4,12:5,17:6",
+        "recovery": "1:long,5:short",
+        "rage": {"_ref": "rage"},
+        "_entries": {"rage": {"uses_by_level": "1:2, 3:3, 6:4"}},
+    }
+
+    @pytest.mark.parametrize(
+        "formula,expected",
+        [
+            ("by_level(uses, level)", 3),
+            ("by_level(uses, 1)", 2),
+            ("by_level(uses, 17)", 6),
+            ("by_level(uses, 20)", 6),
+            ("by_level(uses, 0)", ""),
+            # A fractional level is floored, as floor() would.
+            ("by_level(uses, 5.9)", 3),
+            ("by_level(uses, 6)", 4),
+            ("by_level(recovery, level)", "short"),
+            ("by_level(recovery, 4)", "long"),
+            # Pairs need not be in order, and a malformed one is skipped.
+            ("by_level('6:4,1:2,x:9,3,3:3', 4)", 3),
+            ("by_level('1:1.5', 1)", 1.5),
+            ("by_level('', 5)", ""),
+            ("by_level(nothing, 5)", ""),
+            ("by_level(level, 5)", ""),
+            ("by_level(uses, 0) + 1", 1),
+            ("by_level(uses, level) * 2", 6),
+            ("by_level(ref(rage, 'uses_by_level'), level)", 3),
+        ],
+    )
+    def test_reads_the_value_a_level_reaches(self, formula, expected):
+        assert svc.evaluate(formula, self.CONTEXT) == expected
+
+
 # --- derived defaults and picks ----------------------------------------------
 
 from backend.services.characters.schema import _build_context  # noqa: E402
@@ -1192,13 +1330,33 @@ class TestOnPickValidation:
     def test_accepts_the_rules_a_real_sheet_uses(self):
         assert _pick_schema()["fields"]["background"]["on_pick"]
 
-    def test_only_a_content_ref_may_carry_rules(self):
+    def test_only_a_content_ref_or_list_may_carry_rules(self):
         with pytest.raises(svc.SchemaError, match="only applies to a content_ref"):
             _pick_schema(
-                feats={
+                speed={"type": "number", "on_pick": [{"grant": "skills", "from": "name"}]}
+            )
+
+    def test_a_content_list_may_carry_rules(self):
+        """Each row is a pick of its own - every class in a multiclass list."""
+        document = _pick_schema(
+            classes={
+                "type": "content_list",
+                "content_type": "class",
+                "on_pick": [
+                    {"choose": "skills", "count": "skill_choices", "from": "skill_options"},
+                    {"grant": "feats", "name": "spellcasting"},
+                ],
+            }
+        )
+        assert document["fields"]["classes"]["on_pick"]
+
+    def test_a_list_rule_reads_the_list_content_type(self):
+        with pytest.raises(svc.SchemaError, match="does not declare"):
+            _pick_schema(
+                classes={
                     "type": "content_list",
-                    "content_type": "feat",
-                    "on_pick": [{"grant": "skills", "from": "name"}],
+                    "content_type": "class",
+                    "on_pick": [{"grant": "skills", "from": "skill_proficiencies"}],
                 }
             )
 
@@ -1251,6 +1409,39 @@ class TestOnPickValidation:
             }
         )
         assert document["fields"]["background"]["on_pick"]
+
+    def _pack_list(self, rule, per_entry=None):
+        return _pick_schema(
+            equipment={
+                "type": "content_list",
+                "content_type": "class",
+                "per_entry_fields": per_entry or {"qty": {"type": "number"}},
+                "on_pick": [rule],
+            }
+        )
+
+    def test_a_content_list_may_grant_rows_into_itself(self):
+        """An equipment pack adds its contents beside it, in the same list."""
+        document = self._pack_list(
+            {"grant": "equipment", "from": "skill_options", "values": {"qty": "skill_choices"}}
+        )
+        assert document["fields"]["equipment"]["on_pick"]
+
+    @pytest.mark.parametrize(
+        "rule, message",
+        [
+            ({"grant": "equipment", "from": "skill_options", "values": {"nope": "skill_choices"}},
+             "per_entry_fields"),
+            ({"grant": "equipment", "from": "skill_options", "values": {"qty": "nope"}},
+             "does not declare"),
+            ({"grant": "equipment", "from": "skill_options", "values": {}}, "'values'"),
+            ({"grant": "equipment", "name": "name", "values": {"qty": "skill_choices"}},
+             "'from'"),
+        ],
+    )
+    def test_rejects_malformed_grant_values(self, rule, message):
+        with pytest.raises(svc.SchemaError, match=message):
+            self._pack_list(rule)
 
 
 class TestOverridingComputedValues:
@@ -1357,3 +1548,100 @@ def test_an_expression_past_the_length_limit_is_refused():
         expressions.parse(long_sum)
     assert expressions.evaluate(long_sum, {}, default=None) is None
     assert expressions.parse(" + ".join(["1"] * 1000))
+
+
+# ---------------------------------------------------------------------------
+# Per-row forms: sum_each / max_each / min_each / count_each
+# ---------------------------------------------------------------------------
+
+_GEAR_ENTRIES = {
+    "chain-mail": {"name": "Chain Mail", "ac_base": 16, "dex_cap": 0},
+    "scale-mail": {"name": "Scale Mail", "ac_base": 14, "dex_cap": 2},
+    "leather": {"name": "Leather Armor", "ac_base": 11},
+    "shield": {"name": "Shield", "ac_bonus": 2},
+}
+
+
+def _gear(*picks):
+    return [{"_ref": ref, "_per": {"equipped": equipped}} for ref, equipped in picks]
+
+
+class TestEachForms:
+    def _context(self, **values):
+        return {"dexterity_mod": 3, "_entries": _GEAR_ENTRIES, **values}
+
+    def test_sum_each_filters_by_a_row_condition(self):
+        context = self._context(gear=_gear(("shield", True), ("leather", True)))
+        assert svc.evaluate("sum_each(gear, row.ac_bonus, row.equipped)", context) == 2
+        context = self._context(gear=_gear(("shield", False), ("leather", True)))
+        assert svc.evaluate("sum_each(gear, row.ac_bonus, row.equipped)", context) == 0
+
+    def test_a_row_formula_mixes_the_row_and_the_character(self):
+        context = self._context(gear=_gear(("scale-mail", True), ("leather", True)))
+        formula = (
+            "max_each(gear, row.ac_base + (row.dex_cap == 0 ? dexterity_mod "
+            ": min(dexterity_mod, row.dex_cap)), row.equipped && row.ac_base > 0, "
+            "10 + dexterity_mod)"
+        )
+        assert svc.evaluate(formula, context) == 16  # 14 + min(3, 2) beats 11 + 3
+
+    def test_max_each_falls_back_when_no_row_matches(self):
+        context = self._context(gear=_gear(("chain-mail", False)))
+        assert svc.evaluate(
+            "max_each(gear, row.ac_base, row.equipped, 10 + dexterity_mod)", context
+        ) == 13
+        assert svc.evaluate("max_each(gear, row.ac_base, row.equipped)", context) == 0
+        assert svc.evaluate("min_each(gear, row.ac_base)", context) == 16
+
+    def test_count_each_counts_matching_rows(self):
+        context = self._context(gear=_gear(("chain-mail", True), ("shield", True)))
+        assert svc.evaluate("count_each(gear, row.ac_base > 0)", context) == 1
+        assert svc.evaluate("count_each(gear)", context) == 2
+
+    def test_plain_list_rows_are_read_as_they_are(self):
+        context = {"attacks": [{"bonus": 5, "magic": True}, {"bonus": 3}, "junk"]}
+        assert svc.evaluate("sum_each(attacks, row.bonus * 2, row.magic)", context) == 10
+        assert svc.evaluate("max_each(attacks, row.bonus)", context) == 5
+
+    def test_a_single_reference_is_one_row(self):
+        context = self._context(armor={"_ref": "leather"})
+        assert svc.evaluate("sum_each(armor, row.ac_base)", context) == 11
+
+    def test_nonsense_reads_as_zero(self):
+        assert svc.evaluate("sum_each(missing, row.x)", {}) == 0
+        assert svc.evaluate("sum_each(5, row.x)", {}) == 0
+        assert svc.evaluate("sum_each()", {}) == 0
+        assert svc.evaluate("sum_each(gear)", {"gear": [{"x": 1}]}) == 0
+        assert svc.evaluate("sum_each(gear, row.x, true, 1)", {"gear": [{"x": 1}]}) == 0
+
+    def test_row_shadows_a_field_only_inside_the_form(self):
+        context = {"row": 7, "gear": [{"x": 1}, {"x": 2}]}
+        assert svc.evaluate("row + sum_each(gear, row.x)", context) == 10
+
+    def test_nested_forms_see_their_own_row(self):
+        context = {"groups": [{"items": [{"x": 1}, {"x": 2}]}, {"items": [{"x": 5}]}]}
+        assert svc.evaluate("sum_each(groups, max_each(row.items, row.x))", context) == 7
+
+    def test_rows_past_the_limit_are_ignored(self):
+        from backend.services.characters import expressions
+
+        rows = [{"x": 1}] * (expressions.MAX_EACH_ROWS + 50)
+        assert svc.evaluate("sum_each(gear, row.x)", {"gear": rows}) == expressions.MAX_EACH_ROWS
+
+    def test_referenced_names_skip_row_inside_the_form_only(self):
+        ast = svc.parse("max_each(gear, row.ac_base + dexterity_mod, row.equipped, base)")
+        assert svc.referenced_names(ast) == {"gear", "dexterity_mod", "base"}
+        assert svc.referenced_names(svc.parse("row.x + 1")) == {"row"}
+
+    def test_a_schema_may_use_row_inside_a_form(self):
+        document = _schema(
+            fields={
+                "dex": {"type": "number", "label": "Dex"},
+                "gear": {"type": "list", "label": "Gear",
+                         "columns": [{"key": "ac", "label": "AC", "type": "number"}]},
+            },
+            computed={"ac": {"formula": "max_each(gear, row.ac + dex, true, 10 + dex)"}},
+        )
+        svc.validate_schema(document)
+        with pytest.raises(svc.SchemaError, match="unknown name"):
+            svc.validate_schema(_schema(computed={"x": {"formula": "row.ac + 1"}}))

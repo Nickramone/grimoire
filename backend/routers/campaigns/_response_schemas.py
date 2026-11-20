@@ -548,6 +548,24 @@ class WikiMapOut(BaseModel):
     has_thumbnail: bool = False
 
 
+class WikiAnnotationOut(BaseModel):
+    """One note on a wiki page as this viewer may see it (``wiki_annotations.annotation_out``)."""
+
+    id: str
+    page_id: str
+    body: str
+    visibility: str
+    hidden_by_gm: bool = False
+    author_id: Optional[str] = None
+    author_name: Optional[str] = None
+    is_mine: bool = False
+    # The author edits and deletes; the GM (or an admin) hides a party note.
+    can_edit: bool = False
+    can_hide: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
 class WikiMapPinOut(BaseModel):
     """One pin as this viewer may see it, from ``_wiki_maps.pin_out``."""
 
@@ -807,6 +825,7 @@ __all__ = [
     "WikiImportOut",
     "WikiMapOut",
     "WikiMapPinOut",
+    "WikiAnnotationOut",
     "WikiPageDetailOut",
     "WikiPageHiddenOut",
     "WikiPageListItem",

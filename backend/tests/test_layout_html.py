@@ -98,9 +98,61 @@ class TestTiersAndPips:
         ast = parse_layout_html('<g-pips count="slots_1_total" value="slots_1_used" label="Slot" />')
         assert ast[0]["tag"] == "g-pips"
 
+    def test_a_row_check_parses(self):
+        ast = parse_layout_html(
+            '<g-check field="equipment" per="equipped" '
+            "where=\"row.category == 'Shield'\" label=\"Shield equipped\" />"
+        )
+        assert ast[0]["attrs"] == {
+            "field": "equipment",
+            "per": "equipped",
+            "where": "row.category == 'Shield'",
+            "label": "Shield equipped",
+        }
+
+    def test_a_repeat_may_pick_its_rows(self):
+        ast = parse_layout_html(
+            '<g-repeat over="magic_items" where="row.equipped &amp;&amp; row.attack_bonus">'
+            '<g-value formula="signed(proficiency + row.attack_bonus)" /></g-repeat>'
+        )
+        assert ast[0]["attrs"]["where"] == "row.equipped && row.attack_bonus"
+        assert ast[0]["children"][0]["attrs"]["formula"] == "signed(proficiency + row.attack_bonus)"
+
+    def test_a_value_may_be_drawn_as_markdown_in_a_row_that_opens(self):
+        ast = parse_layout_html(
+            '<g-repeat over="spells"><details><summary><g-value formula="row.name" /></summary>'
+            '<g-value formula="row.description" markdown /></details></g-repeat>'
+        )
+        value = ast[0]["children"][0]["children"][1]
+        assert value["tag"] == "g-value"
+        assert value["attrs"] == {"formula": "row.description", "markdown": ""}
+
+    def test_pips_per_row_parse(self):
+        ast = parse_layout_html('<g-pips formula="row.uses" per="used" label="Uses" />')
+        assert ast[0]["attrs"] == {"formula": "row.uses", "per": "used", "label": "Uses"}
+
+    def test_an_order_parses(self):
+        ast = parse_layout_html(
+            '<g-order field="attack_order">'
+            '<g-repeat over="equipment"><div class="atk">x</div></g-repeat>'
+            '<g-order-item key="spell" visible_if="is_caster"><div>Spell</div></g-order-item>'
+            "</g-order>"
+        )
+        assert ast[0]["tag"] == "g-order"
+        assert ast[0]["attrs"] == {"field": "attack_order"}
+        assert ast[0]["children"][1]["attrs"] == {"key": "spell", "visible_if": "is_caster"}
+
     @pytest.mark.parametrize(
         "html",
-        ['<g-tier value="a" onchange="x()" />', '<g-pips count="3" onclick="x()" />'],
+        [
+            '<g-tier value="a" onchange="x()" />',
+            '<g-pips count="3" onclick="x()" />',
+            '<g-check field="a" per="b" onchange="x()" />',
+            '<g-check field="a" per="b" style="color:red" />',
+            '<g-order field="a" ondrop="x()"></g-order>',
+            '<g-order field="a" draggable="true"></g-order>',
+            '<g-order-item key="a" onclick="x()"></g-order-item>',
+        ],
     )
     def test_they_take_no_handlers(self, html):
         with pytest.raises(LayoutHtmlError):

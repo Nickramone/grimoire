@@ -77,7 +77,11 @@ DIRECTIVE_TAGS: frozenset = frozenset(
         "g-option",     # one checkbox bound to one option of a multiselect
         "g-tier",       # one value's rung on a ladder of multiselects
         "g-pips",       # a count drawn as boxes, ticked off as it is used
+        "g-check",      # one checkbox over a checkbox column of some rows
         "g-portrait",   # the character's portrait, framed as the player chose
+        "g-action",     # a button running one of the sheet's `actions`
+        "g-order",      # blocks the player drags into an order of their own
+        "g-order-item", # one fixed block of a g-order, under its own key
     }
 )
 
@@ -101,8 +105,14 @@ _TAG_ATTRS: dict[str, frozenset] = {
     ),
     "g-computed": frozenset({"name", "label", "format", "variant", "visible_if"}),
     "g-label": frozenset({"name", "text"}),
-    "g-value": frozenset({"name", "format"}),
-    "g-repeat": frozenset({"over", "as"}),
+    # `formula` shows an expression's value instead of a named one - a row's
+    # own figure inside a <g-repeat>, which no computed value can name.
+    # `markdown` draws the value as rich text: an entry's description.
+    "g-value": frozenset({"name", "format", "formula", "markdown"}),
+    # `over` is a `list` or a `content_list`; `where` a condition in which `row`
+    # names one row (an entry with its per-entry values on top), choosing the
+    # rows drawn.
+    "g-repeat": frozenset({"over", "as", "where"}),
     "g-if": frozenset({"test"}),
     "g-section": frozenset({"title", "name", "visible_if"}),
     "g-tabs": frozenset(),
@@ -117,12 +127,28 @@ _TAG_ATTRS: dict[str, frozenset] = {
     # the multiselects lowest rung first, `labels` the short text shown when
     # closed and `titles` the full names in the list, both "|"-separated.
     "g-tier": frozenset({"value", "fields", "labels", "titles", "label"}),
-    # `count` is a number or a field/computed name; `value` the number field
-    # holding how many are used.
-    "g-pips": frozenset({"count", "value", "label"}),
+    # `count` is a number or a field/computed name, or `formula` works it out;
+    # `value` the number field holding how many are used, or inside a
+    # <g-repeat> `per` the row's own column.
+    "g-pips": frozenset({"count", "formula", "value", "per", "label"}),
+    # A shield's "equipped" on the front page, though the shield is a row of the
+    # equipment list: `field` is a `content_list` (or `list`), `per` one of its
+    # checkbox per-entry fields (or columns), and `where` a condition in which
+    # `row` names one row - the entry with its per-entry values on top -
+    # choosing the rows the box speaks for.
+    "g-check": frozenset({"field", "per", "where", "label", "visible_if"}),
     # The portrait is the character's, not a field's, so it takes no name. Its
     # size is the sheet's to set, through the `gc-portrait` class.
     "g-portrait": frozenset({"visible_if"}),
+    # `field` is the text field holding the order, one block key per line. Each
+    # row a <g-repeat> inside draws is a block of its own (a weapon with its
+    # two-handed and thrown lines); a <g-order-item> is a fixed one, `key`
+    # naming it in the stored order.
+    "g-order": frozenset({"field"}),
+    "g-order-item": frozenset({"key", "visible_if"}),
+    # `name` is one of the schema's `actions`, or `prompt` one of its
+    # `prompts`; `label` replaces its label.
+    "g-action": frozenset({"name", "prompt", "label", "visible_if"}),
 }
 
 #: Tags dropped with their contents rather than unwrapped. Keeping a <script>'s

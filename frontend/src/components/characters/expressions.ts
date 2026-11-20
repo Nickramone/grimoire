@@ -51,6 +51,7 @@ export type ExprNode =
   | ['compare', ComparisonOp, ExprNode, ExprNode]
   | ['binary', ArithmeticOp, ExprNode, ExprNode]
   | ['call', FunctionName, ExprNode[]]
+  | ['each', EachForm, ExprNode[]]
 
 type ExprFunction = (...args: ExprValue[]) => ExprValue
 
@@ -278,6 +279,57 @@ const FUNCTIONS = {
     }
     return false
   },
+
+  // One item of a list by position: at(classes, 0), at(levels, -1, 'die').
+  // Counts from 0, a negative index from the end. A third argument reads that
+  // property - a list row's column, or a picked entry's own property with the
+  // character's per-entry notes on top, as ref() reads it. Without one the item
+  // itself comes back, so ref(at(classes, 0), 'hit_die') works too. Out of
+  // range, a non-list or a missing property reads as '', like ref().
+  at: (
+    value: ExprValue,
+    index: ExprValue,
+    prop: ExprValue = null,
+    entries: ExprValue = undefined
+  ) => {
+    if (!Array.isArray(value)) return ''
+    let position = Math.floor(toNumber(index))
+    if (position < 0) position += value.length
+    if (position < 0 || position >= value.length) return ''
+    let item = value[position]
+    if (prop === null || prop === undefined) return item ?? ''
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return ''
+    if ('_ref' in item || (item as Row)._inline) {
+      const found = resolveRefs(item, entries)
+      if (!found.length) return ''
+      item = found[0]
+    }
+    return (item as Row)[String(prop)] ?? ''
+  },
+
+  // The value a level reaches in a 'level:value' table: by_level('1:2,3:3,6:4', 5)
+  // is 3. Pairs are separated by commas and the highest level not above `level`
+  // wins. A numeric value comes back as a number, anything else as text
+  // ('1:long,5:short'). Below the first level, an empty table or a non-text
+  // reads as '', which is 0 in arithmetic; a malformed pair is skipped.
+  by_level: (table: ExprValue, level: ExprValue) => {
+    if (typeof table !== 'string') return ''
+    const reached = Math.floor(toNumber(level))
+    let bestLevel: number | null = null
+    let bestValue = ''
+    for (const pair of table.split(',')) {
+      const sep = pair.indexOf(':')
+      if (sep < 0) continue
+      const key = pair.slice(0, sep).trim()
+      if (!/^-?\d+$/.test(key)) continue
+      const atLevel = Number(key)
+      if (atLevel <= reached && (bestLevel === null || atLevel >= bestLevel)) {
+        bestLevel = atLevel
+        bestValue = pair.slice(sep + 1).trim()
+      }
+    }
+    return /^-?\d+(\.\d+)?$/.test(bestValue) ? toNumber(bestValue) : bestValue
+  },
 }
 
 type FunctionName = keyof typeof FUNCTIONS
@@ -306,6 +358,7 @@ const ENTRY_AWARE: Partial<Record<FunctionName, number>> = {
   sum_refs: 3,
   count_refs: 4,
   sum_qty: 4,
+  at: 4,
 }
 
 function resolveRefs(value: ExprValue, entries: ExprValue): Row[] {
@@ -332,6 +385,75 @@ function resolveRefs(value: ExprValue, entries: ExprValue): Row[] {
 function listRows(value: ExprValue): Row[] {
   if (!Array.isArray(value)) return []
   return value.filter((row): row is Row => !!row && typeof row === 'object' && !Array.isArray(row))
+}
+
+// --- per-row forms ----------------------------------------------------------
+// `sum_each(equipment, row.ac_bonus, row.equipped)` works a formula out once per
+// row of a list - a `list` field's rows, or the entries a `content_list` picks
+// with the character's per-entry values on top - and folds the results. The
+// second and later arguments are evaluated per row, with `row` naming that row
+// and every other name still reading the character. They are formulas rather
+// than quoted strings so validation still sees the field names they read.
+
+/** The name a per-row formula reads its row through; it shadows a field. */
+export const ROW_NAME = 'row'
+
+/** Rows a single form visits; the rest are ignored. Nested forms multiply. */
+export const MAX_EACH_ROWS = 1000
+
+const EACH_FORMS = ['sum_each', 'max_each', 'min_each', 'count_each'] as const
+type EachForm = (typeof EACH_FORMS)[number]
+
+function isEachForm(name: string): name is EachForm {
+  return (EACH_FORMS as readonly string[]).includes(name)
+}
+
+function eachRows(value: ExprValue, entries: ExprValue): Row[] {
+  const items: ExprValue[] = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? [value]
+      : []
+  const isRef = items.some(
+    (item) =>
+      !!item &&
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      ('_ref' in item || !!(item as Row)._inline)
+  )
+  return (isRef ? resolveRefs(items, entries) : listRows(items)).slice(0, MAX_EACH_ROWS)
+}
+
+function evalEach(name: EachForm, args: ExprNode[], context: ExprContext | undefined): ExprValue {
+  if (!args.length) return 0
+  const rows = eachRows(evalNode(args[0], context), context?._entries as ExprValue)
+  let formula: ExprNode | null
+  let where: ExprNode | null
+  let rest: ExprNode[]
+  if (name === 'count_each') {
+    formula = null
+    where = args[1] ?? null
+    rest = args.slice(2)
+  } else {
+    if (args.length < 2) return 0
+    formula = args[1]
+    where = args[2] ?? null
+    rest = args.slice(3)
+  }
+  // Only max_each/min_each take one more argument: what an empty list yields.
+  if (rest.length > (name === 'max_each' || name === 'min_each' ? 1 : 0)) return 0
+
+  const results: number[] = []
+  for (const row of rows) {
+    const rowContext: ExprContext = { ...(context ?? {}), [ROW_NAME]: row }
+    if (where && !truthy(evalNode(where, rowContext))) continue
+    results.push(formula ? toNumber(evalNode(formula, rowContext)) : 1)
+  }
+  if (name === 'sum_each' || name === 'count_each') {
+    return results.reduce((total, value) => total + value, 0)
+  }
+  if (!results.length) return rest.length ? evalNode(rest[0], context) : 0
+  return name === 'max_each' ? Math.max(...results) : Math.min(...results)
 }
 
 // --- parser ---------------------------------------------------------------
@@ -449,6 +571,7 @@ function createParser(tokens: Token[]) {
         }
         expectOp(')')
         const fn = value.toLowerCase()
+        if (isEachForm(fn)) return ['each', fn, args]
         if (!Object.prototype.hasOwnProperty.call(FUNCTIONS, fn)) {
           throw new ExpressionError(`Unknown function ${value}`)
         }
@@ -555,6 +678,8 @@ function evalNode(node: ExprNode, context: ExprContext | undefined): ExprValue {
         return 0
       }
     }
+    case 'each':
+      return evalEach(node[1], node[2], context)
     case 'binary': {
       const op = node[1]
       const left = toNumber(evalNode(node[2], context))

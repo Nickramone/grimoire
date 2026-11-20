@@ -6,6 +6,7 @@ import type { ComponentProps } from 'react'
 import LayoutRenderer from './LayoutRenderer'
 import type { LayoutNode } from './LayoutRenderer'
 import { CharacterMediaContext } from './characterMedia'
+import { PromptLauncher } from './sheetPrompts'
 
 vi.mock('../../api', () => ({
   characters: {
@@ -279,6 +280,43 @@ describe('LayoutRenderer — Phase 2', () => {
     ])
   })
 
+  it('shows a readonly column inside a repeat without letting it be typed into', () => {
+    const readonlyDoc = {
+      ...DOC,
+      fields: {
+        ...DOC.fields,
+        equipment: {
+          type: 'list',
+          columns: [
+            { key: 'name', type: 'text', label: 'Name', readonly: true },
+            { key: 'qty', type: 'number', label: 'Qty' },
+          ],
+        },
+      },
+    }
+    render(
+      <LayoutRenderer
+        ast={[
+          {
+            tag: 'g-repeat',
+            attrs: { over: 'equipment' },
+            children: [
+              { tag: 'g-field', attrs: { name: 'name' }, children: [] },
+              { tag: 'g-field', attrs: { name: 'qty' }, children: [] },
+            ],
+          },
+        ]}
+        document={readonlyDoc}
+        data={{ equipment: rows }}
+        computed={{}}
+        onChange={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Sword')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('Sword')).not.toBeInTheDocument()
+    expect(screen.getByDisplayValue('2')).toBeInTheDocument()
+  })
+
   it('renders nothing for a repeat over a field that is not a list', () => {
     const { container } = renderDoc([
       { tag: 'g-repeat', attrs: { over: 'spell_dc' }, children: [] },
@@ -317,6 +355,282 @@ describe('LayoutRenderer — Phase 2', () => {
       },
     ])
     expect(screen.queryByText('magic')).not.toBeInTheDocument()
+  })
+
+  it('draws only the rows its condition picks, reading the row as row', () => {
+    renderDoc([
+      {
+        tag: 'g-repeat',
+        attrs: { over: 'equipment', where: 'row.qty > 1' },
+        children: [{ tag: 'g-value', attrs: { formula: 'row.name' }, children: [] }],
+      },
+    ])
+    expect(screen.getByText('Rope')).toBeInTheDocument()
+    expect(screen.queryByText('Sword')).not.toBeInTheDocument()
+  })
+})
+
+describe('LayoutRenderer — a repeat over picked entries', () => {
+  const DOC = {
+    fields: {
+      strength: { type: 'number', label: 'Strength' },
+      hero_name: { type: 'text', label: 'Name' },
+      magic_items: {
+        type: 'content_list',
+        content_type: 'magic_item',
+        allow_freeform: true,
+        per_entry_fields: { equipped: { type: 'checkbox', label: 'Equipped' } },
+      },
+    },
+    computed: {},
+  }
+  const entries = {
+    'sword-1': { name: '+1 Sword', attack_bonus: 1 },
+    cloak: { name: 'Cloak', attack_bonus: 0 },
+  }
+  const items = [
+    { _ref: 'sword-1', _per: { equipped: true } },
+    { _ref: 'cloak', _per: { equipped: true } },
+    { _ref: 'gone', _per: { equipped: true } },
+    { _inline: true, name: 'Homebrew Blade', attack_bonus: 5, _per: { equipped: true } },
+  ]
+  const repeat = (where: string, children: LayoutNode[]): LayoutNode[] => [
+    { tag: 'g-repeat', attrs: { over: 'magic_items', where }, children },
+  ]
+  const renderEntries = (ast: LayoutNode[], props: RendererProps = {}) =>
+    render(
+      <LayoutRenderer
+        ast={ast}
+        document={DOC}
+        data={{ strength: 3, hero_name: 'Vex', magic_items: items }}
+        computed={{}}
+        entries={entries}
+        {...props}
+      />
+    )
+
+  it('reads each entry with its per-entry values as row', () => {
+    renderEntries(
+      repeat('row.equipped && row.attack_bonus && not row._inline', [
+        { tag: 'g-value', attrs: { formula: 'row.name' }, children: [] },
+        { tag: 'g-value', attrs: { formula: 'signed(strength + row.attack_bonus)' }, children: [] },
+      ])
+    )
+    expect(screen.getByText('+1 Sword')).toBeInTheDocument()
+    expect(screen.getByText('+4')).toBeInTheDocument()
+    expect(screen.queryByText('Cloak')).not.toBeInTheDocument()
+    expect(screen.queryByText('Homebrew Blade')).not.toBeInTheDocument()
+  })
+
+  it("draws an entry's text as Markdown, inside a row that opens", () => {
+    renderEntries(
+      repeat('row.attack_bonus == 1', [
+        {
+          tag: 'details',
+          attrs: {},
+          children: [
+            {
+              tag: 'summary',
+              attrs: {},
+              children: [{ tag: 'g-value', attrs: { formula: 'row.name' }, children: [] }],
+            },
+            {
+              tag: 'g-value',
+              attrs: { formula: "'Hits **harder**.'", markdown: '' },
+              children: [],
+            },
+            // Nothing to draw is drawn as nothing.
+            { tag: 'g-value', attrs: { formula: 'row.missing', markdown: '' }, children: [] },
+          ],
+        },
+      ])
+    )
+    expect(screen.getByText('+1 Sword')).toBeInTheDocument()
+    expect(screen.getByText('harder').tagName).toBe('STRONG')
+    expect(screen.queryByText('Hits **harder**.')).not.toBeInTheDocument()
+    expect(document.querySelectorAll('.wiki-markdown')).toHaveLength(1)
+  })
+
+  it('draws a freeform entry unless the condition leaves it out', () => {
+    renderEntries(
+      repeat('row._inline', [{ tag: 'g-value', attrs: { formula: 'row.name' }, children: [] }])
+    )
+    expect(screen.getByText('Homebrew Blade')).toBeInTheDocument()
+  })
+
+  it("does not lay an entry's properties over the character's", () => {
+    renderEntries(
+      repeat('row.attack_bonus == 1', [
+        { tag: 'g-value', attrs: { name: 'hero_name' }, children: [] },
+      ])
+    )
+    expect(screen.getByText('Vex')).toBeInTheDocument()
+  })
+
+  it("edits an entry's per-entry field", async () => {
+    const onChange = vi.fn()
+    renderEntries(
+      repeat('row.attack_bonus == 1', [
+        { tag: 'g-field', attrs: { name: 'equipped', label: '' }, children: [] },
+      ]),
+      { onChange }
+    )
+    await userEvent.click(screen.getByRole('checkbox'))
+    expect(onChange).toHaveBeenCalledWith('magic_items', [
+      { _ref: 'sword-1', _per: { equipped: false } },
+      items[1],
+      items[2],
+      items[3],
+    ])
+  })
+
+  it('shows nothing for a formula that does not parse', () => {
+    const { container } = renderEntries([
+      { tag: 'g-value', attrs: { formula: 'strength +' }, children: [] },
+    ])
+    expect(container.textContent).toBe('—')
+  })
+})
+
+describe('LayoutRenderer — pips per row', () => {
+  const DOC = {
+    fields: {
+      level: { type: 'number', label: 'Level' },
+      features: {
+        type: 'list',
+        columns: [
+          { key: 'name', type: 'text', label: 'Name' },
+          { key: 'uses', type: 'number', label: 'Uses' },
+          { key: 'used', type: 'number', label: 'Used' },
+        ],
+      },
+    },
+    computed: {},
+  }
+  const rows = [
+    { name: 'Rage', uses: 2, used: 1 },
+    { name: 'Second Wind', uses: 1, used: 0 },
+  ]
+  const pips = (attrs: Record<string, string>): LayoutNode[] => [
+    {
+      tag: 'g-repeat',
+      attrs: { over: 'features' },
+      children: [{ tag: 'g-pips', attrs, children: [] }],
+    },
+  ]
+  const renderDoc = (ast: LayoutNode[], props: RendererProps = {}) =>
+    render(
+      <LayoutRenderer
+        ast={ast}
+        document={DOC}
+        data={{ level: 3, features: rows }}
+        computed={{}}
+        {...props}
+      />
+    )
+
+  it('draws as many boxes as the row’s formula says, ticked from its own column', () => {
+    renderDoc(pips({ formula: 'row.uses', per: 'used', label: 'Uses' }))
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes).toHaveLength(3)
+    expect(boxes.map((box) => (box as HTMLInputElement).checked)).toEqual([true, false, false])
+  })
+
+  it('reads the character’s values in the formula too', () => {
+    renderDoc(pips({ formula: 'row.uses + level', per: 'used', label: 'Uses' }))
+    expect(screen.getAllByRole('checkbox')).toHaveLength(5 + 4)
+  })
+
+  it('writes a tick into its own row', async () => {
+    const onChange = vi.fn()
+    renderDoc(pips({ formula: 'row.uses', per: 'used', label: 'Uses' }), { onChange })
+    await userEvent.click(screen.getAllByRole('checkbox')[2])
+    expect(onChange).toHaveBeenCalledWith('features', [
+      { name: 'Rage', uses: 2, used: 1 },
+      { name: 'Second Wind', uses: 1, used: 1 },
+    ])
+  })
+
+  it('cannot be ticked read-only', () => {
+    renderDoc(pips({ formula: 'row.uses', per: 'used', label: 'Uses' }), {
+      onChange: vi.fn(),
+      readOnly: true,
+    })
+    for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled()
+  })
+
+  it('draws no boxes for a formula that does not parse', () => {
+    renderDoc(pips({ formula: 'row.uses +', per: 'used', label: 'Uses' }))
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+  })
+
+  it('falls back to the character’s field when per names no column', () => {
+    renderDoc(pips({ count: '2', per: 'missing', value: 'level', label: 'Level' }))
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes).toHaveLength(4)
+    expect(boxes.every((box) => (box as HTMLInputElement).checked)).toBe(true)
+  })
+})
+
+describe('LayoutRenderer — pips per picked entry', () => {
+  const DOC = {
+    fields: {
+      level: { type: 'number', label: 'Level' },
+      features: {
+        type: 'content_list',
+        content_type: 'feature',
+        per_entry_fields: { used: { type: 'number', label: 'Used', default: 0 } },
+      },
+    },
+    computed: {},
+  }
+  const entries = {
+    rage: { name: 'Rage', uses: 2 },
+    wind: { name: 'Second Wind', uses: 1 },
+  }
+  const items = [
+    { _ref: 'rage', _per: { used: 2 } },
+    { _ref: 'wind', _per: {} },
+  ]
+  const ast: LayoutNode[] = [
+    {
+      tag: 'g-repeat',
+      attrs: { over: 'features', where: 'row.uses' },
+      children: [
+        {
+          tag: 'g-pips',
+          attrs: { formula: 'row.uses + level', per: 'used', label: 'Uses' },
+          children: [],
+        },
+      ],
+    },
+  ]
+  const renderEntries = (props: RendererProps = {}) =>
+    render(
+      <LayoutRenderer
+        ast={ast}
+        document={DOC}
+        data={{ level: 1, features: items }}
+        computed={{}}
+        entries={entries}
+        {...props}
+      />
+    )
+
+  it("draws each entry's boxes from its formula, ticked from its per-entry field", () => {
+    renderEntries()
+    const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+    expect(boxes.map((box) => box.checked)).toEqual([true, true, false, false, false])
+  })
+
+  it("writes a tick into the entry's per-entry field", async () => {
+    const onChange = vi.fn()
+    renderEntries({ onChange })
+    await userEvent.click(screen.getAllByRole('checkbox')[4])
+    expect(onChange).toHaveBeenCalledWith('features', [
+      items[0],
+      { _ref: 'wind', _per: { used: 2 } },
+    ])
   })
 })
 
@@ -539,6 +853,162 @@ describe('LayoutRenderer — one box per option', () => {
   })
 })
 
+describe('LayoutRenderer — one box over some rows', () => {
+  const doc = {
+    ...DOCUMENT,
+    fields: {
+      ...DOCUMENT.fields,
+      equipment: {
+        type: 'content_list',
+        content_type: 'item',
+        allow_freeform: true,
+        per_entry_fields: {
+          qty: { type: 'number' },
+          equipped: { type: 'checkbox' },
+        },
+      },
+      packs: {
+        type: 'list',
+        columns: [
+          { key: 'name', type: 'text' },
+          { key: 'carried', type: 'checkbox' },
+        ],
+      },
+    },
+  }
+  const entries = {
+    'shield-phb': { name: 'Shield', category: 'Shield' },
+    'plate-phb': { name: 'Plate', category: 'Heavy Armor' },
+  }
+  const check = (attrs: Record<string, string> = {}): LayoutNode[] => [
+    {
+      tag: 'g-check',
+      attrs: {
+        field: 'equipment',
+        per: 'equipped',
+        where: "row.category == 'Shield'",
+        label: 'Shield equipped',
+        ...attrs,
+      },
+      children: [],
+    },
+  ]
+  const plate = { _ref: 'plate-phb', _per: { equipped: true } }
+
+  it('is ticked when a matching row is', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      data: { equipment: [plate, { _ref: 'shield-phb', _per: { equipped: true } }] },
+    })
+    expect(screen.getByLabelText('Shield equipped')).toBeChecked()
+  })
+
+  it('ignores rows the condition leaves out', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      data: { equipment: [plate, { _ref: 'shield-phb' }] },
+    })
+    expect(screen.getByLabelText('Shield equipped')).not.toBeChecked()
+  })
+
+  it('ticks only the first matching row, keeping its other values', async () => {
+    const onChange = vi.fn()
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      onChange,
+      data: {
+        equipment: [plate, { _ref: 'shield-phb', _per: { qty: 2 } }, { _ref: 'shield-phb' }],
+      },
+    })
+    await userEvent.click(screen.getByLabelText('Shield equipped'))
+    expect(onChange).toHaveBeenCalledWith('equipment', [
+      plate,
+      { _ref: 'shield-phb', _per: { qty: 2, equipped: true } },
+      { _ref: 'shield-phb' },
+    ])
+  })
+
+  it('clears every matching row', async () => {
+    const onChange = vi.fn()
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      onChange,
+      data: {
+        equipment: [
+          plate,
+          { _ref: 'shield-phb', _per: { equipped: true } },
+          { _ref: 'shield-phb', _per: { equipped: true } },
+        ],
+      },
+    })
+    await userEvent.click(screen.getByLabelText('Shield equipped'))
+    expect(onChange).toHaveBeenCalledWith('equipment', [
+      plate,
+      { _ref: 'shield-phb', _per: { equipped: false } },
+      { _ref: 'shield-phb', _per: { equipped: false } },
+    ])
+  })
+
+  it('reads a freeform row’s own values', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      data: {
+        equipment: [{ _inline: true, name: 'Kite', category: 'Shield', _per: { equipped: true } }],
+      },
+    })
+    expect(screen.getByLabelText('Shield equipped')).toBeChecked()
+  })
+
+  it('writes a list column', async () => {
+    const onChange = vi.fn()
+    renderLayout(
+      check({ field: 'packs', per: 'carried', where: "row.name == 'Rope'", label: 'Rope' }),
+      { document: doc, onChange, data: { packs: [{ name: 'Torch' }, { name: 'Rope' }] } }
+    )
+    await userEvent.click(screen.getByLabelText('Rope'))
+    expect(onChange).toHaveBeenCalledWith('packs', [
+      { name: 'Torch' },
+      { name: 'Rope', carried: true },
+    ])
+  })
+
+  it('is disabled with no matching row', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      onChange: vi.fn(),
+      data: { equipment: [plate] },
+    })
+    expect(screen.getByLabelText('Shield equipped')).toBeDisabled()
+  })
+
+  it('cannot be changed read-only', () => {
+    renderLayout(check(), {
+      document: doc,
+      entries,
+      onChange: vi.fn(),
+      readOnly: true,
+      data: { equipment: [{ _ref: 'shield-phb' }] },
+    })
+    expect(screen.getByLabelText('Shield equipped')).toBeDisabled()
+  })
+
+  it('draws nothing for a property that is not a checkbox', () => {
+    const { container } = renderLayout(check({ per: 'qty' }), {
+      document: doc,
+      entries,
+      onChange: vi.fn(),
+      data: { equipment: [{ _ref: 'shield-phb' }] },
+    })
+    expect(container.querySelector('input')).toBeNull()
+  })
+})
+
 describe('LayoutRenderer — collapsible sections', () => {
   const section = (attrs = {}) => [
     {
@@ -749,5 +1219,137 @@ describe('LayoutRenderer — boxes to tick off', () => {
         '/api/characters/c1/images/arms?v=arms-0123456789abcdef.png'
       )
     })
+  })
+})
+
+describe('LayoutRenderer — actions', () => {
+  const doc = {
+    ...DOCUMENT,
+    fields: {
+      ...DOCUMENT.fields,
+      hp: { type: 'number' },
+      resources: {
+        type: 'list',
+        columns: [
+          { key: 'used', type: 'number' },
+          { key: 'recovery', type: 'text' },
+        ],
+      },
+    },
+    actions: [
+      {
+        name: 'long_rest',
+        label: 'Long rest',
+        confirm: 'Take a long rest?',
+        steps: [
+          { set: 'hp', to: '20' },
+          { each: 'resources', where: "row.recovery == 'long'", set: { used: '0' } },
+        ],
+      },
+    ],
+  }
+  const data = {
+    hp: 4,
+    resources: [
+      { used: 2, recovery: 'long' },
+      { used: 1, recovery: 'short' },
+    ],
+  }
+  const button = (attrs: Record<string, string> = {}): LayoutNode[] => [
+    { tag: 'g-action', attrs: { name: 'long_rest', ...attrs }, children: [] },
+  ]
+
+  it('runs every step once confirmed, writing each field through onChange', async () => {
+    const onChange = vi.fn()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderLayout(button(), { document: doc, data, onChange })
+    await userEvent.click(screen.getByRole('button', { name: 'Long rest' }))
+    expect(confirm).toHaveBeenCalledWith('Take a long rest?')
+    expect(onChange).toHaveBeenCalledWith('hp', 20)
+    expect(onChange).toHaveBeenCalledWith('resources', [
+      { used: 0, recovery: 'long' },
+      { used: 1, recovery: 'short' },
+    ])
+    confirm.mockRestore()
+  })
+
+  it('does nothing when the confirmation is declined', async () => {
+    const onChange = vi.fn()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderLayout(button({ label: 'Rest' }), { document: doc, data, onChange })
+    await userEvent.click(screen.getByRole('button', { name: 'Rest' }))
+    expect(onChange).not.toHaveBeenCalled()
+    confirm.mockRestore()
+  })
+
+  it('is disabled on a sheet the viewer cannot edit', () => {
+    renderLayout(button(), { document: doc, data, onChange: vi.fn(), readOnly: true })
+    expect(screen.getByRole('button', { name: 'Long rest' })).toBeDisabled()
+  })
+
+  it('draws nothing for an action the sheet does not declare', () => {
+    renderLayout(button({ name: 'nope' }), { document: doc, data, onChange: vi.fn() })
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+
+describe('LayoutRenderer — prompts', () => {
+  const doc = {
+    ...DOCUMENT,
+    fields: { ...DOCUMENT.fields, level: { type: 'number' } },
+    prompts: {
+      level_up: {
+        label: 'Level up',
+        steps: [{ key: 'hp', type: 'number' }],
+        apply: [{ set: 'level', to: 'level + 1' }],
+      },
+    },
+    actions: [
+      {
+        name: 'gain',
+        label: 'Gain a level',
+        steps: [{ set: 'level', to: 'level + 1' }, { prompt: 'level_up' }],
+      },
+    ],
+  }
+  const draw = (
+    attrs: Record<string, string>,
+    open: ((r: unknown) => void) | null,
+    readOnly = false
+  ) =>
+    render(
+      <PromptLauncher.Provider value={open}>
+        <LayoutRenderer
+          ast={[{ tag: 'g-action', attrs, children: [] }]}
+          document={doc}
+          data={{ level: 3 }}
+          onChange={vi.fn()}
+          readOnly={readOnly}
+        />
+      </PromptLauncher.Provider>
+    )
+
+  it('opens a prompt named on the button, with its label', async () => {
+    const open = vi.fn()
+    draw({ prompt: 'level_up' }, open)
+    await userEvent.click(screen.getByRole('button', { name: 'Level up' }))
+    expect(open).toHaveBeenCalledWith({ prompt: 'level_up' })
+  })
+
+  it("opens an action's prompts after its writes", async () => {
+    const open = vi.fn()
+    draw({ name: 'gain' }, open)
+    await userEvent.click(screen.getByRole('button', { name: 'Gain a level' }))
+    expect(open).toHaveBeenCalledWith({ prompt: 'level_up' })
+  })
+
+  it('is disabled where no prompt can open, or the sheet is read only', () => {
+    draw({ prompt: 'level_up' }, null)
+    expect(screen.getByRole('button', { name: 'Level up' })).toBeDisabled()
+  })
+
+  it('draws nothing for a prompt the sheet does not declare', () => {
+    draw({ prompt: 'nope' }, vi.fn())
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })

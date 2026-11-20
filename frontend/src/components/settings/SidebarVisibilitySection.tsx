@@ -7,6 +7,7 @@ import { useInstantSettings } from './useInstantSettings'
 const ITEMS = [
   { key: 'hide_library', labelKey: 'appSettings.sidebarVisibility.hideLibrary' },
   { key: 'hide_armory', labelKey: 'appSettings.sidebarVisibility.hideArmory' },
+  { key: 'hide_compendium', labelKey: 'appSettings.sidebarVisibility.hideCompendium' },
   { key: 'hide_maps', labelKey: 'appSettings.sidebarVisibility.hideMaps' },
   { key: 'hide_tokens', labelKey: 'appSettings.sidebarVisibility.hideTokens' },
   { key: 'hide_audio', labelKey: 'appSettings.sidebarVisibility.hideAudio' },

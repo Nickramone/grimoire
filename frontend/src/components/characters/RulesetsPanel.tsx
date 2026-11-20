@@ -20,6 +20,8 @@ import {
 import type { Schema } from '../../api'
 import Spinner from '../Spinner'
 import RulesetEntryDialog from './RulesetEntryDialog'
+import ContentEntryDetail from './ContentEntryDetail'
+import type { ContentTypeDefinition } from './ContentEntryDetail'
 import InstalledPacks from './InstalledPacks'
 import {
   goldBtn,
@@ -90,6 +92,10 @@ export default function RulesetsPanel() {
   const [entries, setEntries] = useState<RulesetEntry[]>([])
   const [types, setTypes] = useState<Schema<'ContentTypeSummary'>[]>([])
   const [editing, setEditing] = useState<Editing | null>(null)
+  // The entry expanded in the list (read-only detail), with its fetched data.
+  const [viewing, setViewing] = useState<{ id: string; data?: Record<string, unknown> } | null>(
+    null
+  )
   const [addingType, setAddingType] = useState('')
 
   const load = useCallback(async () => {
@@ -208,14 +214,33 @@ export default function RulesetsPanel() {
     }
   }
 
+  const fetchEntryData = async (entry: RulesetEntry) => {
+    const full = await rulesetsApi.getEntry(open!.id, entry.id)
+    return (full.data || {}) as Record<string, unknown>
+  }
+
   const editEntry = async (entry: RulesetEntry) => {
     try {
-      const full = await rulesetsApi.getEntry(open!.id, entry.id)
       setEditing({
         contentType: entry.content_type,
-        entry: { ...entry, data: (full.data || {}) as Record<string, unknown> },
+        entry: { ...entry, data: await fetchEntryData(entry) },
       })
     } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  const toggleEntry = async (entry: RulesetEntry) => {
+    if (viewing?.id === entry.id) {
+      setViewing(null)
+      return
+    }
+    setViewing({ id: entry.id })
+    try {
+      const data = await fetchEntryData(entry)
+      setViewing((v) => (v?.id === entry.id ? { id: entry.id, data } : v))
+    } catch (e) {
+      setViewing(null)
       setError((e as Error).message)
     }
   }
@@ -320,36 +345,62 @@ export default function RulesetsPanel() {
             style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}
           >
             {entries.map((entry) => (
-              <li
-                key={entry.id}
-                style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, padding: 10 }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{entry.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {entry.content_type}
-                    {entry.forked_from ? ` · ${t('rulesets.forked')}` : ''}
-                  </div>
+              <li key={entry.id} style={{ ...card, padding: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    onClick={() => toggleEntry(entry)}
+                    aria-expanded={viewing?.id === entry.id}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      font: 'inherit',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{entry.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {entry.content_type}
+                      {entry.forked_from ? ` · ${t('rulesets.forked')}` : ''}
+                    </div>
+                  </button>
+                  {entry.editable ? (
+                    <>
+                      <button
+                        onClick={() => editEntry(entry)}
+                        aria-label={t('a11y.mediaDetail.editNamed', { name: entry.name })}
+                        title={t('common.edit')}
+                        style={iconBtn}
+                      >
+                        <LuPencil size={15} />
+                      </button>
+                      <button
+                        onClick={() => removeEntry(entry)}
+                        aria-label={t('a11y.characters.deleteNamed', { name: entry.name })}
+                        title={t('rulesets.deleteEntry')}
+                        style={iconBtn}
+                      >
+                        <LuTrash2 size={15} />
+                      </button>
+                    </>
+                  ) : null}
                 </div>
-                {entry.editable ? (
-                  <>
-                    <button
-                      onClick={() => editEntry(entry)}
-                      aria-label={t('a11y.mediaDetail.editNamed', { name: entry.name })}
-                      title={t('common.edit')}
-                      style={iconBtn}
-                    >
-                      <LuPencil size={15} />
-                    </button>
-                    <button
-                      onClick={() => removeEntry(entry)}
-                      aria-label={t('a11y.characters.deleteNamed', { name: entry.name })}
-                      title={t('rulesets.deleteEntry')}
-                      style={iconBtn}
-                    >
-                      <LuTrash2 size={15} />
-                    </button>
-                  </>
+                {viewing?.id === entry.id ? (
+                  viewing.data ? (
+                    <ContentEntryDetail
+                      entry={{ data: viewing.data }}
+                      typeDefinition={
+                        (types.find((type) => type.name === entry.content_type) ||
+                          {}) as ContentTypeDefinition
+                      }
+                    />
+                  ) : (
+                    <Spinner />
+                  )
                 ) : null}
               </li>
             ))}

@@ -178,6 +178,10 @@ TTRPG_GUEST_REACHABLE = {
     # Pins on a map page (issue #578): the page's own edit rule, as for its text.
     "/api/campaigns/{campaign_id}/wiki/{page_id}/pins": "POST",
     "/api/campaigns/{campaign_id}/wiki/{page_id}/pins/{pin_id}": "DELETE PATCH",
+    # Notes on a page: anyone who can read the page, guests included; the
+    # handler checks the page's own read rule and the note's visibility.
+    "/api/campaigns/{campaign_id}/wiki/{page_id}/annotations": "GET POST",
+    "/api/campaigns/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}": "DELETE PATCH",
     "/api/characters": "GET POST",
     "/api/characters/import": "POST",
     # Another tool's character, through an admin-installed importer, into the
@@ -201,6 +205,12 @@ TTRPG_GUEST_REACHABLE = {
     "/api/characters/{character_id}/portrait": "DELETE GET POST",
     # A sheet's image fields: owner-only writes, readable like the sheet.
     "/api/characters/{character_id}/images/{field}": "DELETE GET POST",
+    # Compendium images, linked from entry descriptions: readable like the entries.
+    "/api/content/assets/{asset_path:path}": "GET",
+    # The compendium lists what the catalog routes below already serve.
+    "/api/content/compendium": "GET",
+    "/api/content/compendium/{content_type}/{entry_id}": "GET",
+    "/api/content/compendium/schemas": "GET",
     "/api/content/packs": "GET",
     "/api/content/{schema_id}/resolve": "GET",
     "/api/content/{schema_id}/types": "GET",

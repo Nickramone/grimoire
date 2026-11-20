@@ -149,7 +149,8 @@ describe('Sidebar navigation visibility', () => {
     renderSidebar({ stats: { ...baseStats, armory_books: 4 } })
     const links = screen.getAllByRole('link').map((l) => l.getAttribute('href'))
     expect(links.indexOf('/armory')).toBe(links.indexOf('/library') + 1)
-    expect(links.indexOf('/maps')).toBe(links.indexOf('/armory') + 1)
+    // The fork's Compendium (and the GM's Bestiary) sit between the Armory and Maps.
+    expect(links.indexOf('/maps')).toBeGreaterThan(links.indexOf('/armory'))
   })
 
   it('leaves an empty Armory to admins, and a hidden one to no one', () => {
@@ -253,6 +254,25 @@ describe('Sidebar navigation visibility', () => {
   it('hides maps link when hide_maps is true', () => {
     renderSidebar({ uiSettings: { hide_maps: true } })
     expect(screen.queryByText('Maps')).toBeNull()
+  })
+
+  it('hides the compendium link when hide_compendium is true', () => {
+    renderSidebar({ uiSettings: { hide_compendium: true } })
+    expect(screen.queryByText('Compendium')).toBeNull()
+    expect(screen.getByText('Library')).toBeInTheDocument()
+  })
+
+  it('shows the bestiary to a GM or admin only, and hides it with the compendium', () => {
+    const { unmount } = renderSidebar({ user: { ...baseUser, role: 'gm' } })
+    expect(screen.getByRole('link', { name: 'Bestiary' })).toHaveAttribute('href', '/bestiary')
+    unmount()
+    renderSidebar({ user: { ...baseUser, role: 'player' } })
+    expect(screen.queryByText('Bestiary')).toBeNull()
+  })
+
+  it('hides the bestiary when hide_compendium is true', () => {
+    renderSidebar({ user: { ...baseUser, role: 'admin' }, uiSettings: { hide_compendium: true } })
+    expect(screen.queryByText('Bestiary')).toBeNull()
   })
 
   it('shows the Tags link pointing at /tags (issue #235)', () => {

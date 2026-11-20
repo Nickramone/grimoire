@@ -104,6 +104,7 @@ function walk(
         place(attrs.name, here)
         break
       case 'g-option':
+      case 'g-check':
         place(attrs.field, here)
         break
       case 'g-pips':
@@ -114,6 +115,9 @@ function walk(
         break
       case 'g-repeat':
         place(attrs.over, here)
+        break
+      case 'g-order':
+        place(attrs.field, here)
         break
     }
 

@@ -1834,6 +1834,10 @@ Because a player edits this stripped body, a player saving an edit would otherwi
 | `/api/campaigns/:id/wiki/:page_id/pins` | POST | anyone who can edit the page | Add a pin to a [map page](#map-pages) (`400` on any other type). Body: `{x, y, label?, target_page_id?, target_title?, icon?, icon_color?, visibility?}`. The target is a page the caller can see, by id, or by title - a title naming no page the caller can see creates a stub with the map page's visibility, as a `[[link]]` does. `visibility: "gm"` is GM only (`403`). Returns the pin |
 | `/api/campaigns/:id/wiki/:page_id/pins/:pin_id` | PATCH | anyone who can edit the page and see the pin | Move or edit a pin; every field optional. `target_page_id: ""` unlinks it; `target_title` relinks by title. `404` for a pin the caller cannot see. Returns the pin |
 | `/api/campaigns/:id/wiki/:page_id/pins/:pin_id` | DELETE | anyone who can edit the page and see the pin | Remove a pin |
+| `/api/campaigns/:id/wiki/:page_id/annotations` | GET | anyone who can read the page | The notes on the page this caller can see, oldest first: `[{id, page_id, body, visibility, hidden_by_gm, author_id, author_name, is_mine, can_edit, can_hide, created_at, updated_at}]`. `404` for a page the caller cannot read (fork) |
+| `/api/campaigns/:id/wiki/:page_id/annotations` | POST | anyone who can read the page | Leave a note. Body: `{body, visibility?}`; `body` is plain text, 1-4000 characters; `visibility` is `party` (default: everyone who can read the page), `gm` (author and campaign GM) or `self` (author). A server admin sees every note. No edit right is needed and the page is not changed. Returns the note (fork) |
+| `/api/campaigns/:id/wiki/:page_id/annotations/:annotation_id` | PATCH | the author; the GM or an admin for `hidden_by_gm` | Every field optional. `body` and `visibility` are the author's alone (`403`); `hidden_by_gm` hides a `party` note from the party (GM or admin, `403` otherwise or on another visibility); its author, the GM and admins still see it. `404` for a note the caller cannot see (fork) |
+| `/api/campaigns/:id/wiki/:page_id/annotations/:annotation_id` | DELETE | the author | Delete your note (`403` for anyone else). Notes go with their page when it is deleted (fork) |
 | `/api/campaigns/:id/wiki/:page_id/hide` | POST | per visibility | [Hide](#hidden-pages) the page from the caller's own view. Available on any page they can see, including ones they cannot edit or delete, and permitted on an archived campaign. `409` in a personal campaign, which has no hidden pages |
 | `/api/campaigns/:id/wiki/:page_id/hide` | DELETE | any member | Un-hide a page the caller had hidden. Clears only their own row; a page hidden because an ancestor is hidden has no row of its own, so this is a no-op for it. Allowed in a personal campaign even though hiding is not - clearing state is always safe, and refusing would strand a row written before that guard existed |
 
@@ -2402,13 +2406,14 @@ field names to remove, which is how a field goes back to its `default_from`
 value after the player typed over it - separate from `data`, because a `null`
 there already means "cleared" mid-edit.
 
-Two reserved keys may ride in `data` beside the fields, each checked strictly
+Three reserved keys may ride in `data` beside the fields, each checked strictly
 rather than stored as sent:
 
 | Key | Shape | Purpose |
 |---|---|---|
 | `_overrides` | `{computed name: value}` | The player's own value for a computed value. It replaces the formula, and everything depending on it follows. Names must be computed values; values must be short scalars. Sent whole - leaving a name out resets it |
-| `_granted` | `{picking field: {target field: [value, ...]}}` | What each `on_pick` rule added, so changing the pick can take it back off. The source must carry `on_pick` and each target must be a declared field |
+| `_granted` | `{source: {target field: [value, ...]}}` | What each `on_pick` rule added, so changing the pick can take it back off. The source is the picking content_ref field, or `field:ref` for one row of a content_list with `on_pick` (each row is a pick of its own, and removing it takes back only its grants). The field must carry `on_pick` and each target must be a declared field |
+| `_pending_prompts` | `[{prompt, source?, ref?}, ...]` | The sheet's `prompts` the player put off, shown as choices still to make. `prompt` must be one the sheet declares; `source` (a field) and `ref` (an entry id) name the pick that opened it. At most 20, sent whole |
 
 **Schema fields:** `id`, `schema_id`, `name`, `system`, `description`,
 `version`, `source_id`, `source_url`, `source_version`, `is_community`,
@@ -2611,7 +2616,13 @@ catalogue is unreachable.
 Field types are `text`, `number`, `textarea`, `checkbox`, `select`,
 `multiselect`, and `list`. Formulas are a small arithmetic/comparison/logic
 language with a closed function table (`floor`, `ceil`, `round`, `abs`, `min`,
-`max`, `sum`, `len`, `if`, `clamp`, `signed`, plus the list functions below).
+`max`, `sum`, `len`, `if`, `clamp`, `signed`, `by_level`, plus the list
+functions below). `by_level(table, level)` reads a `'level:value'` table such
+as `'1:2,3:3,6:4'`: the pair with the highest level not above `level` wins, so
+`by_level(ref(feature, 'uses_by_level'), class_level)` is a feature's uses at
+that level. A numeric value comes back as a number, anything else as text
+(`'1:long,5:short'`); below the first level it reads as `''`, which is 0 in
+arithmetic.
 They are **parsed, never executed** - there is no `eval` anywhere in the engine
 - and a formula referencing an unknown name is rejected at install rather than
 failing at render.
@@ -2639,7 +2650,7 @@ Every row is rebuilt from the declared columns on save, so a key the schema does
 not define is dropped - the same rule top-level fields follow. A missing cell
 falls back to its column's `default`. A list is capped at 500 rows.
 
-Five functions read across rows, taking the **column name as a string** (a bare
+These functions read across rows, taking the **column name as a string** (a bare
 name would resolve against the character before the function saw it):
 
 | Function | Returns |
@@ -2650,6 +2661,25 @@ name would resolve against the character before the function saw it):
 | `any_where(list, 'col')` | Whether any row matches |
 | `column(list, 'col')` | Every value of one column, for `sum()`/`min()`/`max()` |
 | `contains(value, x)` | Whether a multiselect holds `x`, or text contains it |
+| `at(list, i)` / `at(list, i, 'col')` | One item by position, from 0; a negative index counts from the end: `at(levels, -1, 'die')`. With a column it reads that cell, or a catalog entry's property as `ref` does (`at(classes, 0, 'hit_die')`). Out of range reads as `''` |
+
+When one column is not enough - a total that depends on two columns, a filter
+on more than one, or a row's value combined with the character's - four
+**per-row forms** work a formula out once per row. Their second and later
+arguments are formulas, not strings: inside them `row` names the current row
+(a list row, or a catalog entry with the character's per-entry values on top)
+and every other name still reads the character.
+
+| Form | Returns |
+|---|---|
+| `sum_each(list, formula, where?)` | Total of `formula` over the rows where `where` is true (all rows without it): `sum_each(magic_items, row.ac_bonus, row.equipped && row.attuned)` |
+| `max_each(list, formula, where?, empty?)` | Largest `formula` over the matching rows, or `empty` (default `0`) when none match: `max_each(equipment, row.ac_base + min(dex_mod, row.dex_cap), row.equipped, 10 + dex_mod)` |
+| `min_each(list, formula, where?, empty?)` | Smallest, likewise |
+| `count_each(list, where?)` | How many rows match |
+
+`list` may be a `list` field, a `content_list`, or a single `content_ref`.
+Inside the forms `row` shadows a field called `row`; a nested form sees its own
+row. A form visits at most 1,000 rows.
 
 #### Conditional fields - `visible_if`
 
@@ -2716,7 +2746,25 @@ and returned as derived `layout_ast` / `styles_css`:
 Directives are `g-field`, `g-computed`, `g-label`, `g-value`, `g-section`,
 `g-if`, and `g-repeat`. Inside a `g-repeat` over a list field, a `g-field`
 naming one of that list's columns addresses **that row's** cell, so a custom
-layout can draw an editable table of its own. Everything else is a closed allowlist of structural
+layout can draw an editable table of its own. A `g-repeat` may also go over a
+`content_list`: each pass reads the entry as `row` (the catalog entry with the
+character's per-entry values on top; a freeform entry as written, `_inline`
+included), and a `g-field` naming a per-entry field edits that entry's value.
+`where` on a `g-repeat` is a condition on `row` choosing the rows drawn
+(`where="row.equipped && row.attack_bonus"`), and `formula` on a `g-value`
+shows an expression's value instead of a named one
+(`<g-value formula="signed(proficiency + row.attack_bonus)" />`), a display
+only; with `markdown` it draws text as Markdown, as the catalog draws an
+entry's description (`<details><summary><g-value formula="row.name" /></summary>
+<g-value formula="row.description" markdown /></details>` for a row that opens).
+`<g-order field="attack_order">` lets the player drag what it holds into
+an order of their own, by a handle beside each block: every row a `g-repeat`
+inside draws is one block (whatever lines it draws), a
+`<g-order-item key="spell">` is one fixed block, and a `g-if` that holds lends
+its children. The order is stored in the text field `field` as the blocks'
+keys, one per line (`equipment:ref:<entry id>`, `#2` on a second copy of the
+same entry; a list row by its first column); a block the stored order does not
+know yet comes first. Everything else is a closed allowlist of structural
 tags. **The template never becomes markup**: it is parsed to an AST server-side
 and rendered as React elements, so no schema string ever reaches `innerHTML`.
 Event handlers, `<script>`, `<style>`, `<iframe>`, `<input>` and friends, and
@@ -2776,7 +2824,7 @@ browses the content types their copy declares.
 | `/api/content/packs` | GET | user | Installed packs with their licence and credit. `?schema_id=` filters |
 | `/api/content/packs/reload` | POST | **admin** | Re-read every pack from disk |
 | `/api/content/:schema_id/types` | GET | user | The content types this user's schema declares, each with an entry count |
-| `/api/content/:schema_id/:content_type` | GET | user | Browse: `search`, `filter[field]=value`, `sort`, `page`, `page_size` |
+| `/api/content/:schema_id/:content_type` | GET | user | Browse: `search`, `filter[field]=value` (repeated: any of the values), `sort`, `page`, `page_size` |
 | `/api/content/:schema_id/:content_type/:entry_id` | GET | user | One entry in full |
 | `/api/content/:schema_id/resolve?ids=a,b,c` | GET | user | Resolve many references at once, for rendering a sheet |
 
@@ -2841,7 +2889,48 @@ kit); `content_list` takes many (spells known, feats). Both name the
 
 `per_entry_fields` are the **character's own** notes on an entry - prepared,
 equipped, uses remaining. They are ordinary field definitions, validated and
-coerced like any other.
+coerced like any other. Two conditions read the entry as `row` (the catalog
+entry with the per-entry values on top) beside the character's own names:
+`visible_if` draws the field only where it holds, and `disabled_if` shows it
+read-only where it holds - an "attuned" box only on items that need
+attunement, and no new one past the limit:
+
+```json
+"attuned": {
+  "type": "checkbox",
+  "visible_if": "row.attunement",
+  "disabled_if": "not row.attuned && count_refs(magic_items, 'attuned') >= 3"
+}
+```
+
+A per-entry field can itself be a `content_ref`: a pick made on the row, such as
+the base weapon of a generic "+1 Weapon". It opens the catalog like any other
+pick, its entry comes back in the character's `entries` beside the top-level
+ones, and a formula reads it through the row:
+`sum_each(magic_items, ref(row.base_weapon, 'damage_bonus'))`.
+
+```json
+{
+  "magic_items": {
+    "type": "content_list", "content_type": "magic_item",
+    "per_entry_fields": {
+      "base_weapon": {
+        "type": "content_ref", "content_type": "item",
+        "filter": { "category": ["Melee Weapon", "Ranged Weapon"] },
+        "default_from": "row.base_item_ref"
+      }
+    }
+  }
+}
+```
+
+- `filter` (on any `content_ref` or `content_list`) fixes the browser's filters:
+  each key is a field of the content type, each value one value or a list of
+  values any of which matches. Those fields offer no facet of their own. The
+  catalog endpoint takes the same shape as a repeated `filter[field]=value`.
+- `default_from` on a per-entry field is worked out once, when the entry is
+  added, with the added entry as `row`. For a per-entry `content_ref` a text
+  result is the id of the entry to pick; an empty result leaves it unset.
 
 **Stored shape.** A reference, never a copy:
 

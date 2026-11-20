@@ -40,6 +40,10 @@ class RulesetCreate(BaseModel):
     description: str = ""
     # Null asks for a server ruleset, which needs an admin.
     campaign_id: Optional[str] = None
+    # A personal ruleset is the caller's alone: only they read and edit it,
+    # whatever their role. Content a GM keeps from the table (a bestiary,
+    # prepared encounters) lives here. Excludes ``campaign_id``.
+    personal: bool = False
     license: str = ""
     license_url: str = ""
     attribution: str = ""
