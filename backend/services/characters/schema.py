@@ -847,6 +847,8 @@ def _validate_prompts(
     - `entries`: `count` catalog entries, narrowed as an `entry` step's -
       the spells a level teaches. Its answer is a list, which a `pick` or an
       `unpick` takes entry by entry.
+      Either may have an `entry_note`, a formula reading the candidate as
+      `entry` whose text shows beside its name - a spell's level.
     - `number`: a number, starting from `default`, with a button for `average`.
     - `select`: one of `options`.
 
@@ -933,6 +935,13 @@ def _validate_prompts(
                 if "filter" in step:
                     _validate_formula(
                         step["filter"], f"{where} 'filter'", base | {PROMPT_ENTRY_NAME}, images
+                    )
+                if "entry_note" in step:
+                    _validate_formula(
+                        step["entry_note"],
+                        f"{where} 'entry_note'",
+                        base | {PROMPT_ENTRY_NAME},
+                        images,
                     )
             elif kind == "number":
                 for formula in ("default", "average"):

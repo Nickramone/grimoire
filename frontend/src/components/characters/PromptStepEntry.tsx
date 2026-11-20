@@ -5,7 +5,7 @@ import Spinner from '../Spinner'
 import ContentEntryDetail from './ContentEntryDetail'
 import type { ContentTypeDefinition } from './ContentEntryDetail'
 import { fieldInput, helpText, iconBtn } from './characterStyles'
-import { loadEntryOptions, stepCount } from './sheetPrompts'
+import { entryNote, loadEntryOptions, stepCount } from './sheetPrompts'
 import type { EntryAnswer } from './sheetPrompts'
 import { optionLabel, optionList } from './promptStepShared'
 import type { StepControlProps } from './promptStepShared'
@@ -118,6 +118,7 @@ export default function EntryStep({
         {shown.map((entry) => {
           const key = `${entry._source || ''}:${entry._ref}`
           const name = entry.name || entry._ref
+          const note = entryNote(step, entry, context)
           const expanded = open === key
           const selected = chosen.has(entry._ref)
           const full = multiple && !selected && remaining === 0
@@ -133,6 +134,18 @@ export default function EntryStep({
                     onChange={() => toggle(entry)}
                   />
                   {name}
+                  {note ? (
+                    <span
+                      style={{
+                        color: 'var(--text-muted)',
+                        fontSize: 12,
+                        marginLeft: 6,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {note}
+                    </span>
+                  ) : null}
                 </label>
                 {describable ? (
                   <button

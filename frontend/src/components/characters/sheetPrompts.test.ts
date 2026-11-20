@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  entryNote,
   findPrompt,
   isComplete,
   loadEntryOptions,
@@ -676,6 +677,10 @@ describe('stepLabel', () => {
     expect(stepLabel(step, { kind: 'Metamagic' })).toBe('Replace one Metamagic?')
     expect(stepLabel(step, { kind: '' })).toBe('Replace an option?')
     expect(stepLabel({ ...step, label_formula: 'missing(' }, {})).toBe('Replace an option?')
+    const pick: PromptStep = { key: 'spell', type: 'entry', entry_note: "concat('Lv. ', entry.level)" }
+    expect(entryNote(pick, { _ref: 'bless', level: 1 }, {})).toBe('Lv. 1')
+    expect(entryNote({ ...pick, entry_note: 'missing(' }, { _ref: 'bless' }, {})).toBe('')
+    expect(entryNote({ key: 'x', type: 'entry' }, { _ref: 'bless' }, {})).toBe('')
   })
 })
 
