@@ -34,6 +34,15 @@ export interface ContentEntryDetailProps {
  * to catalog entries, so the component that draws a character's fields draws an
  * entry's too.
  */
+function isBlank(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  )
+}
+
 export default function ContentEntryDetail({ entry, typeDefinition }: ContentEntryDetailProps) {
   const fields = typeDefinition.fields || {}
   const identity = typeDefinition.identity_field || 'name'
@@ -53,7 +62,14 @@ export default function ContentEntryDetail({ entry, typeDefinition }: ContentEnt
     >
       {Object.entries(fields)
         // The name is already the row's heading; repeating it wastes a cell.
-        .filter(([name]) => name !== identity)
+        // A field a schema marks `visible_if: "false"` is bookkeeping for the
+        // sheet's formulas, and an empty value only adds a dash.
+        .filter(
+          ([name, definition]) =>
+            name !== identity &&
+            (definition as { visible_if?: unknown }).visible_if !== 'false' &&
+            !isBlank(entry.data?.[name])
+        )
         .map(([name, definition]) => (
           <div
             key={name}
