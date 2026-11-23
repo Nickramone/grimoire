@@ -498,6 +498,11 @@ _ENTRY_AWARE: frozenset = frozenset({"ref", "sum_refs", "count_refs", "sum_qty",
 #: shadows a field of the same name.
 ROW_NAME = "row"
 
+#: Inside a per-row form, the row of the scope around it (an enclosing form's
+#: row, or a `<g-repeat>`'s), so a nested form can match its rows against it:
+#: `count_each(items, row._ref == outer.source_ref)`.
+OUTER_NAME = "outer"
+
 #: Rows a single form will visit; past it the remaining rows are ignored. A
 #: list field is far shorter in practice, and nested forms multiply.
 MAX_EACH_ROWS = 1000
@@ -536,6 +541,8 @@ def _eval_each(name: str, args: list, context: dict) -> Any:
     results: list = []
     for row in rows:
         row_context = {**context, ROW_NAME: row}
+        if ROW_NAME in context:
+            row_context[OUTER_NAME] = context[ROW_NAME]
         if where is not None and not _truthy(_eval_node(where, row_context)):
             continue
         results.append(1 if formula is None else _to_number(_eval_node(formula, row_context)))
@@ -880,8 +887,8 @@ def evaluate(source: Any, context: dict, default: Any = 0) -> Any:
 def referenced_names(node: tuple) -> set[str]:
     """Every top-level field name an AST reads, for dependency ordering.
 
-    Inside a per-row form's row formulas `row` names the row, not a field, so
-    it is left out there.
+    Inside a per-row form's row formulas `row` and `outer` name rows, not
+    fields, so they are left out there.
     """
     found: set[str] = set()
     stack: list[tuple[Any, bool]] = [(node, False)]
@@ -892,7 +899,7 @@ def referenced_names(node: tuple) -> set[str]:
                 stack.extend((item, in_row) for item in current)
             continue
         if current[0] == "name":
-            if not (in_row and current[1][0] == ROW_NAME):
+            if not (in_row and current[1][0] in (ROW_NAME, OUTER_NAME)):
                 found.add(current[1][0])
             continue
         if current[0] == "call" and current[1] in _EACH_FORMS and current[2]:

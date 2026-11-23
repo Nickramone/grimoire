@@ -545,6 +545,27 @@ describe('per-row forms', () => {
     expect(evaluate('sum_each(groups, max_each(row.items, row.x))', { groups })).toBe(7)
   })
 
+  it('names the row around a nested form outer', () => {
+    const spells = [
+      { name: 'a', src: 'wand' },
+      { name: 'b', src: 'ring' },
+      { name: 'c', src: '' },
+    ]
+    const items = [
+      { id: 'wand', on: true },
+      { id: 'ring', on: false },
+    ]
+    expect(
+      evaluate('count_each(spells, count_each(items, row.id == outer.src and row.on) > 0)', {
+        spells,
+        items,
+      })
+    ).toBe(1)
+    expect(
+      evaluate('count_each(items, row.id == outer.src)', { items, row: { src: 'ring' } })
+    ).toBe(1)
+  })
+
   it('ignores rows past the limit', () => {
     const rows = Array.from({ length: MAX_EACH_ROWS + 50 }, () => ({ x: 1 }))
     expect(evaluate('sum_each(gear, row.x)', { gear: rows })).toBe(MAX_EACH_ROWS)

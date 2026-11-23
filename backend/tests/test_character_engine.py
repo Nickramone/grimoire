@@ -1622,6 +1622,16 @@ class TestEachForms:
         context = {"groups": [{"items": [{"x": 1}, {"x": 2}]}, {"items": [{"x": 5}]}]}
         assert svc.evaluate("sum_each(groups, max_each(row.items, row.x))", context) == 7
 
+    def test_outer_names_the_row_around_a_nested_form(self):
+        context = {
+            "spells": [{"name": "a", "src": "wand"}, {"name": "b", "src": "ring"}, {"name": "c", "src": ""}],
+            "items": [{"id": "wand", "on": True}, {"id": "ring", "on": False}],
+        }
+        formula = "count_each(spells, count_each(items, row.id == outer.src and row.on) > 0)"
+        assert svc.evaluate(formula, context) == 1
+        # Under a repeat's row the outermost form sees that row as `outer`.
+        assert svc.evaluate("count_each(items, row.id == outer.src)", {**context, "row": {"src": "ring"}}) == 1
+
     def test_rows_past_the_limit_are_ignored(self):
         from backend.services.characters import expressions
 
@@ -1632,6 +1642,8 @@ class TestEachForms:
         ast = svc.parse("max_each(gear, row.ac_base + dexterity_mod, row.equipped, base)")
         assert svc.referenced_names(ast) == {"gear", "dexterity_mod", "base"}
         assert svc.referenced_names(svc.parse("row.x + 1")) == {"row"}
+        assert svc.referenced_names(svc.parse("sum_each(gear, outer.x)")) == {"gear"}
+        assert svc.referenced_names(svc.parse("outer.x")) == {"outer"}
 
     def test_a_schema_may_use_row_inside_a_form(self):
         document = _schema(

@@ -2679,7 +2679,8 @@ and every other name still reads the character.
 
 `list` may be a `list` field, a `content_list`, or a single `content_ref`.
 Inside the forms `row` shadows a field called `row`; a nested form sees its own
-row. A form visits at most 1,000 rows.
+row, and `outer` names the row around it - the enclosing form's, or a
+`<g-repeat>`'s: `count_each(magic_items, row._ref == outer.source_ref)`. A form visits at most 1,000 rows.
 
 #### Conditional fields - `visible_if`
 

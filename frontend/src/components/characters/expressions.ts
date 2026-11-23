@@ -398,6 +398,13 @@ function listRows(value: ExprValue): Row[] {
 /** The name a per-row formula reads its row through; it shadows a field. */
 export const ROW_NAME = 'row'
 
+/**
+ * Inside a per-row form, the row of the scope around it - an enclosing form's
+ * row, or a `<g-repeat>`'s - so a nested form can match its rows against it:
+ * `count_each(items, row._ref == outer.source_ref)`.
+ */
+export const OUTER_NAME = 'outer'
+
 /** Rows a single form visits; the rest are ignored. Nested forms multiply. */
 export const MAX_EACH_ROWS = 1000
 
@@ -446,6 +453,7 @@ function evalEach(name: EachForm, args: ExprNode[], context: ExprContext | undef
   const results: number[] = []
   for (const row of rows) {
     const rowContext: ExprContext = { ...(context ?? {}), [ROW_NAME]: row }
+    if (context && ROW_NAME in context) rowContext[OUTER_NAME] = context[ROW_NAME]
     if (where && !truthy(evalNode(where, rowContext))) continue
     results.push(formula ? toNumber(evalNode(formula, rowContext)) : 1)
   }
