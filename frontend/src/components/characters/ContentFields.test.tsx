@@ -178,8 +178,36 @@ describe('ContentRefField', () => {
 
   it('shows a freeform entry read-only without its controls', () => {
     renderRef({ value: { _inline: true, name: 'Homebrew' }, readOnly: true })
-    expect(screen.getByDisplayValue('Homebrew')).toBeDisabled()
+    expect(screen.getByText('Homebrew')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('Homebrew')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+  })
+
+  it("opens a read-only pick's detail from the box, in a window", async () => {
+    renderRef({ value: { _ref: 'fireball' }, readOnly: true })
+    await userEvent.click(screen.getByRole('button', { name: 'Show Fireball' }))
+    const dialog = screen.getByRole('dialog', { name: 'Fireball' })
+    expect(dialog).toHaveTextContent('evocation')
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it("opens a read-only custom entry's own values", async () => {
+    renderRef({ value: { _inline: true, name: 'Homebrew', school: 'chaos' }, readOnly: true })
+    await userEvent.click(screen.getByRole('button', { name: 'Show Homebrew' }))
+    expect(screen.getByRole('dialog', { name: 'Homebrew' })).toHaveTextContent('chaos')
+  })
+
+  it('opens nothing for a read-only pick whose entry is not installed', () => {
+    renderRef({ value: { _ref: 'gone' }, readOnly: true })
+    expect(screen.getByRole('button', { name: 'gone' })).toBeDisabled()
+  })
+
+  it('opens the detail from its own button while the box still picks', async () => {
+    renderRef({ value: { _ref: 'fireball' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Show Fireball' }))
+    expect(screen.getByRole('dialog', { name: 'Fireball' })).toHaveTextContent('evocation')
+    expect(mockBrowse).not.toHaveBeenCalled()
   })
 
   it('reads text saved before the field was a pick as a custom entry', async () => {
