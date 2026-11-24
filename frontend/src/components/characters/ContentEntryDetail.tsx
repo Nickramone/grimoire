@@ -34,8 +34,11 @@ export interface ContentEntryDetailProps {
  * to catalog entries, so the component that draws a character's fields draws an
  * entry's too.
  */
-function isBlank(value: unknown): boolean {
+function isBlank(value: unknown, type?: string): boolean {
   return (
+    // An unticked checkbox says the entry lacks the property (a shield is not
+    // Finesse): the detail lists what an entry has, as a dash would add nothing.
+    (type === 'checkbox' && value !== true) ||
     value === undefined ||
     value === null ||
     value === '' ||
@@ -63,12 +66,13 @@ export default function ContentEntryDetail({ entry, typeDefinition }: ContentEnt
       {Object.entries(fields)
         // The name is already the row's heading; repeating it wastes a cell.
         // A field a schema marks `visible_if: "false"` is bookkeeping for the
-        // sheet's formulas, and an empty value only adds a dash.
+        // sheet's formulas, and an empty value or an unticked
+        // checkbox only adds a dash.
         .filter(
           ([name, definition]) =>
             name !== identity &&
             (definition as { visible_if?: unknown }).visible_if !== 'false' &&
-            !isBlank(entry.data?.[name])
+            !isBlank(entry.data?.[name], definition.type)
         )
         .map(([name, definition]) => (
           <div

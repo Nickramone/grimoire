@@ -8,6 +8,8 @@ const typeDefinition = {
     prerequisite: { type: 'text', label: 'Prerequisite' },
     prereq_level: { type: 'number', label: 'Prerequisite Level' },
     ability_options: { type: 'text', label: 'Ability Options', visible_if: 'false' },
+    finesse: { type: 'checkbox', label: 'Finesse' },
+    light: { type: 'checkbox', label: 'Light' },
   },
 }
 
@@ -40,5 +42,16 @@ describe('ContentEntryDetail', () => {
       />
     )
     expect(screen.queryByText('Ability Options')).toBeNull()
+  })
+
+  it('leaves out an unticked checkbox and keeps a ticked one', () => {
+    render(
+      <ContentEntryDetail
+        entry={{ data: { name: 'Dagger', finesse: true, light: false } }}
+        typeDefinition={typeDefinition}
+      />
+    )
+    expect(screen.getByText('Finesse')).toBeInTheDocument()
+    expect(screen.queryByText('Light')).toBeNull()
   })
 })
