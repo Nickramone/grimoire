@@ -291,6 +291,31 @@ describe('ContentListField', () => {
     expect(select.closest('td')).toHaveStyle({ width: '170px' })
   })
 
+  it('adds an in_title value to the name and opens the detail_entry beneath the row', async () => {
+    const definition = {
+      ...DEFINITION,
+      per_entry_fields: {
+        chosen: { type: 'text', label: 'Chosen', in_title: true, visible_if: 'false' },
+        chosen_ref: {
+          type: 'text',
+          label: 'Chosen entry',
+          detail_entry: 'spell',
+          visible_if: 'false',
+        },
+      },
+    }
+    renderList({
+      definition,
+      contentTypes: { spell: TYPE },
+      value: [{ _ref: 'fireball', _per: { chosen: 'Shield', chosen_ref: 'shield' } }],
+    })
+    expect(screen.getByText('Fireball: Shield')).toBeInTheDocument()
+    expect(screen.queryByText('Chosen')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByText('Fireball: Shield'))
+    expect(screen.getByText('evocation')).toBeInTheDocument()
+    expect(screen.getByText('abjuration')).toBeInTheDocument()
+  })
+
   it('adds a reference from the browser', async () => {
     const onChange = vi.fn()
     renderList({ value: [], onChange })

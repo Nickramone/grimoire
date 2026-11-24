@@ -174,6 +174,37 @@ export default function ContentListField({
     rows.some((row) => isShown(row, perDefinition))
   )
 
+  // A per-entry field with `in_title` adds its value to the row's name - the
+  // style a "Fighting Style" feature was given, "Fighting Style: Defense" - and
+  // one with `detail_entry` (a content type) holds the id of an entry whose
+  // whole text opens beneath the row's own: the feat that style is. Either is
+  // usually hidden as a column with `visible_if: "false"`.
+  const titleOf = (row: ContentRefValue, base: string): string => {
+    const extra = Object.entries(perFields)
+      .filter(([, perDefinition]) => (perDefinition as EntryValues).in_title)
+      .map(([key]) => row?._per?.[key])
+      .filter((value) => value !== undefined && value !== null && value !== '' && value !== false)
+      .map(String)
+    return extra.length ? `${base}: ${extra.join(', ')}` : base
+  }
+  const detailEntries = (row: ContentRefValue) =>
+    Object.entries(perFields).flatMap(([key, perDefinition]) => {
+      const type = (perDefinition as EntryValues).detail_entry
+      const id = row?._per?.[key]
+      if (typeof type !== 'string' || !type || id === undefined || id === null || id === '') {
+        return []
+      }
+      const found = entries[String(id)]
+      if (!found || typeof found !== 'object') return []
+      return [
+        {
+          key,
+          entry: found as EntryValues,
+          typeDefinition: (contentTypes[type] || {}) as ContentTypeDefinition,
+        },
+      ]
+    })
+
   // A per-entry select's `options_filter` keeps the options this row offers,
   // read with the entry as `row` and the option's value as `option`: one
   // "choice" field whose options differ from feature to feature. The value
@@ -288,7 +319,9 @@ export default function ContentListField({
                             >
                               {expanded ? '▾' : '▸'}
                             </span>
-                            <span>{row.name || t('characters.customEntry')}</span>
+                            <span>
+                              {titleOf(row, String(row.name || t('characters.customEntry')))}
+                            </span>
                           </span>
                           {!columns.length && summaryOf(row, typeDefinition) ? (
                             <span
@@ -320,7 +353,12 @@ export default function ContentListField({
                             >
                               {expanded ? '▾' : '▸'}
                             </span>
-                            <span>{(entry?.name as string | undefined) || row?._ref}</span>
+                            <span>
+                              {titleOf(
+                                row,
+                                String((entry?.name as string | undefined) || row?._ref)
+                              )}
+                            </span>
                             {missing ? (
                               <span
                                 style={{ color: 'var(--warning)', fontSize: 11, marginLeft: 6 }}
@@ -365,10 +403,23 @@ export default function ContentListField({
                         {entry ? (
                           // The whole entry - a feat's description, a spell's
                           // text - drawn by the component the browser uses.
-                          <ContentEntryDetail
-                            entry={{ data: entry }}
-                            typeDefinition={typeDefinition}
-                          />
+                          <>
+                            <ContentEntryDetail
+                              entry={{ data: entry }}
+                              typeDefinition={typeDefinition}
+                            />
+                            {detailEntries(row).map((chosen) => (
+                              <div key={chosen.key} style={{ marginTop: 8 }}>
+                                <div style={{ fontWeight: 600, fontSize: 13, padding: '0 8px' }}>
+                                  {String(chosen.entry.name ?? '')}
+                                </div>
+                                <ContentEntryDetail
+                                  entry={{ data: chosen.entry }}
+                                  typeDefinition={chosen.typeDefinition}
+                                />
+                              </div>
+                            ))}
+                          </>
                         ) : (
                           // A freeform entry is the player's to fill in.
                           <div style={inlineEditor}>
