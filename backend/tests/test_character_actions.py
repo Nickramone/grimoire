@@ -100,6 +100,36 @@ def test_bad_actions_are_refused(actions, message):
         _schema(actions)
 
 
+def test_revert_and_pop_take_back_what_a_level_added():
+    """Undoing a level: the record its prompt kept, then the row it appended."""
+    undo = {
+        "name": "undo",
+        "label": "Undo level up",
+        "confirm": "Take back the last level?",
+        "steps": [
+            {"revert": "concat('level:', len(resources))"},
+            {"pop": "resources"},
+            {"pop": "items"},
+        ],
+    }
+    assert _schema([undo])["actions"] == [undo]
+
+
+@pytest.mark.parametrize(
+    "step, message",
+    [
+        ({"revert": "missing + 1"}, "unknown name: missing"),
+        ({"revert": "(("}, "not a valid expression"),
+        ({"pop": "hp"}, "not a list or a content_list"),
+        ({"pop": "nope"}, "unknown field 'nope'"),
+        ({"pop": "resources", "revert": "'x'"}, "exactly one of"),
+    ],
+)
+def test_bad_revert_and_pop_are_refused(step, message):
+    with pytest.raises(svc.SchemaError, match=message):
+        _schema([{"name": "a", "label": "x", "steps": [step]}])
+
+
 def test_too_many_steps_are_refused():
     steps = [{"set": "hp", "to": "1"}] * 51
     with pytest.raises(svc.SchemaError, match="more than 50 steps"):

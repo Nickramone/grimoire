@@ -5,6 +5,7 @@ import { GRANTED_KEY, asList as listOf, grantInto, parallelList, perEntryAt } fr
 import type { ResolvedRefs } from './onPick'
 import { planAction } from './sheetActions'
 import type { ActionStep } from './sheetActions'
+import { PENDING_PROMPTS_KEY, withRecord } from './sheetRecords'
 import type { FieldDefinition } from './FieldRenderer'
 
 /**
@@ -22,7 +23,7 @@ import type { FieldDefinition } from './FieldRenderer'
 
 type Values = Record<string, unknown>
 
-export const PENDING_PROMPTS_KEY = '_pending_prompts'
+export { PENDING_PROMPTS_KEY }
 
 // The most catalog entries an `entry` step reads, in pages of the catalog's
 // largest size. A feat list is a few hundred; a filter narrows the rest.
@@ -86,6 +87,10 @@ export interface SheetPrompt {
   apply: PromptApplyStep[]
   // Writes made when the prompt is put aside, in place of keeping it for later.
   on_skip?: ActionStep[]
+  // A formula, worked out when the prompt opens, naming the record what it
+  // adds is kept under - `level:3` - so an action's `revert` can take it back.
+  // The prompts its `apply` opens record under the same key.
+  record?: string
 }
 
 /** A prompt waiting to be shown: which one, and the pick that opened it. */
@@ -96,6 +101,8 @@ export type PromptRequest = {
   source?: string
   ref?: string
   row?: Values | null
+  // The record a prompt before it in the chain was keeping: this one adds to it.
+  record?: string
 }
 
 /** An `entry` step's answer: the catalog entry, its id and its properties. */
@@ -118,6 +125,9 @@ export interface PromptDocument extends ExpressionDocument {
 export const PromptLauncher = createContext<((request: PromptRequest) => void) | null>(null)
 
 const FAILED = Symbol('failed')
+
+// The longest record key, as the server keeps it.
+const MAX_RECORD_KEY = 100
 
 function isObject(value: unknown): value is Values {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -477,6 +487,8 @@ export type PromptGrant = {
   // Slot by slot beside `pairs`: the per-entry values each entry takes.
   lists?: Record<string, unknown[]>
   source?: string
+  // The record it is kept under, in place of a pick's `source`.
+  record?: string
 }
 
 /**
@@ -496,6 +508,7 @@ export function planPrompt(
     answers,
     row,
     source,
+    record,
   }: {
     document: PromptDocument | null | undefined
     data: Values | null | undefined
@@ -503,6 +516,8 @@ export function planPrompt(
     answers: Answers
     row?: Values | null
     source?: string
+    // The record key what it adds is kept under, in place of `source`.
+    record?: string
   }
 ): { patch: Values; picks: PromptPick[]; prompts: string[]; grants: PromptGrant[] } {
   const fields = document?.fields || {}
@@ -530,6 +545,9 @@ export function planPrompt(
   const prompts: string[] = []
   const grants: PromptGrant[] = []
   const granted: Record<string, string[]> = {}
+  // Rows `unpick` took out that were there before the prompt: kept in the
+  // record, to be put back.
+  const dropped: Record<string, Values[]> = {}
   const current = (name: string): unknown => (name in patch ? patch[name] : data?.[name])
 
   for (const step of steps) {
@@ -557,13 +575,15 @@ export function planPrompt(
       }
       const pairs = ids.map((id, i): [string, string] => [id, names[i] || ''])
       if (pairs.length) {
-        const recordedUnder = step.source || source
+        // A grant naming its own `source` is that pick's, as ever.
+        const recordedUnder = step.source || (record ? undefined : source)
         grants.push({
           target: step.grant,
           pairs,
           carried,
           ...(Object.keys(lists).length ? { lists } : {}),
           ...(recordedUnder ? { source: recordedUnder } : {}),
+          ...(!step.source && record ? { record } : {}),
         })
       }
       continue
@@ -617,6 +637,9 @@ export function planPrompt(
         const held = granted[field] || []
         const at = held.indexOf(entry._ref)
         if (at >= 0) granted[field] = held.filter((_, i) => i !== at)
+        else if (record && isObject(rows[index])) {
+          dropped[field] = [...(dropped[field] || []), rows[index] as Values]
+        }
       }
       continue
     }
@@ -640,6 +663,10 @@ export function planPrompt(
         if (Object.keys(per).length) picked._per = per
         if (definition.type === 'content_ref') {
           picks.push({ field, value: picked, entry })
+          // Kept only in a record: taking it back clears the field, which
+          // takes back what the pick granted. A pick's own record of what it
+          // granted lists entries in lists, not a single pick's value.
+          if (record) granted[field] = [entry._ref]
         } else if (definition.type === 'content_list') {
           // Each pick into the same list sees the ones before it.
           const before = picks.filter((pick) => pick.field === field).pop()
@@ -655,6 +682,11 @@ export function planPrompt(
     }
   }
 
+  // Kept in the record, when the prompt keeps one.
+  if (record) {
+    Object.assign(patch, withRecord(data, record, { granted, dropped }))
+    return { patch, picks, prompts, grants }
+  }
   // Recorded under the pick that opened the prompt, so picking something
   // else there takes back what the prompt added along with the pick's own.
   if (source && Object.keys(granted).length) {
@@ -706,6 +738,8 @@ export async function planGrants(
   const patch: Values = {}
   const all = { ...((data?.[GRANTED_KEY] || {}) as Record<string, Record<string, string[]>>) }
   let recordedAny = false
+  // What grants kept in a record added, by record key and target.
+  const kept: Record<string, Record<string, string[]>> = {}
   for (const grant of grants) {
     const definition = fields[grant.target]
     if (!definition) continue
@@ -722,6 +756,10 @@ export async function planGrants(
     })
     if (!list) continue
     patch[grant.target] = list
+    if (grant.record && added.length) {
+      const own = (kept[grant.record] ||= {})
+      own[grant.target] = [...(own[grant.target] || []), ...added]
+    }
     if (grant.source && added.length) {
       const fromSource = { ...(all[grant.source] || {}) }
       fromSource[grant.target] = [...(fromSource[grant.target] || []), ...added]
@@ -730,7 +768,29 @@ export async function planGrants(
     }
   }
   if (recordedAny) patch[GRANTED_KEY] = all
+  let records: Values | null | undefined = data
+  for (const [key, granted] of Object.entries(kept)) {
+    Object.assign(patch, withRecord(records, key, { granted }))
+    records = { ...(records || {}), ...patch }
+  }
   return patch
+}
+
+/**
+ * The record key a prompt keeps what it adds under: the one the prompt
+ * before it in the chain was keeping, or else its own `record` worked out
+ * against the sheet as it opened. None is ''.
+ */
+export function promptRecord(
+  prompt: SheetPrompt | undefined,
+  request: PromptRequest | undefined,
+  context: Values
+): string {
+  if (request?.record) return request.record
+  if (!prompt || typeof prompt.record !== 'string' || !prompt.record.trim()) return ''
+  const value = evaluate<symbol>(prompt.record, context, FAILED)
+  if (value === FAILED || value === null || value === undefined) return ''
+  return String(value).trim().slice(0, MAX_RECORD_KEY)
 }
 
 function samePrompt(a: PromptRequest, b: PromptRequest): boolean {

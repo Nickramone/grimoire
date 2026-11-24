@@ -592,6 +592,8 @@ def _coerce_all(document: dict, submitted: dict) -> dict:
         cleaned[PENDING_PROMPTS_KEY] = _coerce_pending_prompts(
             document, submitted[PENDING_PROMPTS_KEY]
         )
+    if RECORDS_KEY in submitted:
+        cleaned[RECORDS_KEY] = _coerce_records(fields, submitted[RECORDS_KEY], content_types)
     return cleaned
 
 
@@ -625,6 +627,68 @@ _MAX_GRANTED_VALUES = 200
 _MAX_GRANTED_SOURCE = 300
 PENDING_PROMPTS_KEY = "_pending_prompts"
 _MAX_PENDING_PROMPTS = 20
+RECORDS_KEY = "_records"
+#: Twenty levels and then some: a record per level gained is the case.
+_MAX_RECORDS = 40
+_MAX_RECORD_KEY = 100
+_MAX_RECORD_ROWS = 50
+_RECORD_TARGETS = ("content_list", "content_ref", "multiselect")
+
+
+def _coerce_records(fields: dict, value: Any, content_types: dict) -> dict:
+    """Clean what prompts kept in their records, so an action can take it back.
+
+    Shaped `{key: {"granted": {target: [value, ...]}, "dropped": {target:
+    [row, ...]}}}` - "level 3 added the Fey Touched feat and Arcana, and took
+    Light out of spells". `granted` is a list of strings per field, as
+    `_granted` holds them: entry ids or freeform names in a content_list or a
+    content_ref, values of a multiselect. `dropped` holds content_list rows,
+    cleaned as the field's own rows are. Anything else is dropped.
+    """
+    if not isinstance(value, dict):
+        return {}
+    cleaned: dict = {}
+    for key, record in list(value.items())[:_MAX_RECORDS]:
+        if not isinstance(key, str) or not key or len(key) > _MAX_RECORD_KEY:
+            continue
+        if not isinstance(record, dict):
+            continue
+        kept: dict = {}
+        granted: dict = {}
+        granted_by_target = record.get("granted")
+        for target, values in (
+            granted_by_target if isinstance(granted_by_target, dict) else {}
+        ).items():
+            definition = fields.get(target)
+            if (
+                not isinstance(definition, dict)
+                or definition.get("type", "text") not in _RECORD_TARGETS
+                or not isinstance(values, list)
+            ):
+                continue
+            strings = [str(item)[:200] for item in values if isinstance(item, (str, int))]
+            if strings:
+                granted[target] = strings[:_MAX_GRANTED_VALUES]
+        dropped: dict = {}
+        rows_by_target = record.get("dropped")
+        for target, rows in (rows_by_target if isinstance(rows_by_target, dict) else {}).items():
+            definition = fields.get(target)
+            if (
+                not isinstance(definition, dict)
+                or definition.get("type") != "content_list"
+                or not isinstance(rows, list)
+            ):
+                continue
+            rows = svc.coerce_value(definition, rows[:_MAX_RECORD_ROWS], content_types)
+            if rows:
+                dropped[target] = rows
+        if granted:
+            kept["granted"] = granted
+        if dropped:
+            kept["dropped"] = dropped
+        if kept:
+            cleaned[key] = kept
+    return cleaned
 
 
 def _coerce_pending_prompts(document: dict, value: Any) -> list:

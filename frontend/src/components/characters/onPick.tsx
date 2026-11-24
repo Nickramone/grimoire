@@ -159,7 +159,7 @@ function optionValues(definition: PickField | undefined): string[] {
 
 // Whether a content-list item is the one a grant recorded under `key`: a
 // reference by its id, a freeform entry by its name.
-function matchesKey(value: unknown, key: string): boolean {
+export function matchesKey(value: unknown, key: string): boolean {
   if (!value || typeof value !== 'object') return false
   const item = value as Values
   if (item._ref !== undefined && item._ref !== null) return String(item._ref) === key

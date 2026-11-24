@@ -10,6 +10,7 @@ import {
   pendingPrompts,
   planGrants,
   planPrompt,
+  promptRecord,
   startPrompt,
   stepLabel,
   stepOptions,
@@ -737,5 +738,90 @@ describe('pending prompts', () => {
       _pending_prompts: [{ prompt: 'level_up' }],
     })
     expect(withoutPendingFrom(data, 'background')).toEqual({})
+  })
+})
+
+describe('a prompt keeping a record', () => {
+  const ALERT = { _ref: 'alert', _source: 'xphb', name: 'Alert' }
+  const TOUGH = { _ref: 'tough', name: 'Tough' }
+  const prompt: SheetPrompt = {
+    label: 'Level up',
+    record: "concat('level:', level + 1)",
+    steps: [
+      { key: 'feat', type: 'entry', content_type: 'feat' },
+      { key: 'origin', type: 'entry', content_type: 'feat' },
+      { key: 'drop', type: 'entry', content_type: 'feat' },
+    ],
+    apply: [
+      { add: 'skills', values: "'Arcana,History'" },
+      { pick: 'feats', entry: 'answer.feat' },
+      { pick: 'origin', entry: 'answer.origin' },
+      { unpick: 'feats', entry: 'answer.drop' },
+      { grant: 'skills', from: "'insight'" },
+      { grant: 'skills', from: "'History'", source: 'origin' },
+      { prompt: 'spells' },
+    ],
+  }
+
+  it('works out its key when it opens, or keeps the one the prompt before it kept', () => {
+    expect(promptRecord(prompt, { prompt: 'level_up' }, SHEET)).toBe('level:4')
+    expect(promptRecord(prompt, { prompt: 'x', record: 'level:2' }, SHEET)).toBe('level:2')
+    expect(promptRecord(LEVEL_UP, { prompt: 'level_up' }, SHEET)).toBe('')
+    expect(promptRecord({ ...prompt, record: 'missing(' }, undefined, SHEET)).toBe('')
+  })
+
+  it('keeps what it adds in the record, in place of the pick that opened it', () => {
+    const plan = planPrompt(prompt, {
+      document: DOCUMENT,
+      data: {
+        skills: ['Arcana'],
+        feats: [{ _ref: 'tough', _per: { from_level: 1 } }],
+        _records: { 'level:3': { granted: { skills: ['insight'] } } },
+      },
+      context: SHEET,
+      answers: { feat: ALERT, origin: ALERT, drop: TOUGH },
+      record: 'level:4',
+    })
+    expect(plan.patch).toEqual({
+      skills: ['Arcana', 'History'],
+      _records: {
+        'level:3': { granted: { skills: ['insight'] } },
+        'level:4': {
+          granted: { skills: ['History'], feats: ['alert'], origin: ['alert'] },
+          dropped: { feats: [{ _ref: 'tough', _per: { from_level: 1 } }] },
+        },
+      },
+    })
+    expect(plan.patch).not.toHaveProperty('_granted')
+    // A grant naming its own source stays that pick's.
+    expect(plan.grants.map((grant) => [grant.source, grant.record])).toEqual([
+      [undefined, 'level:4'],
+      ['origin', undefined],
+    ])
+    expect(plan.prompts).toEqual(['spells'])
+  })
+
+  it('keeps what its grants add in the record too', async () => {
+    const patch = await planGrants(
+      [
+        {
+          target: 'skills',
+          pairs: [
+            ['insight', ''],
+            ['Arcana', ''],
+          ],
+          carried: {},
+          record: 'level:4',
+        },
+      ],
+      {
+        document: DOCUMENT,
+        data: { skills: ['Arcana'], _records: { 'level:4': { granted: { feats: ['alert'] } } } },
+      }
+    )
+    expect(patch).toEqual({
+      skills: ['Arcana', 'insight'],
+      _records: { 'level:4': { granted: { feats: ['alert'], skills: ['insight'] } } },
+    })
   })
 })

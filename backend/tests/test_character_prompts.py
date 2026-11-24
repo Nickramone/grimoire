@@ -7,7 +7,7 @@ keeps the list of prompts the player put off; the sheet asks and writes.
 """
 import pytest
 
-from backend.routers.characters.core import _coerce_pending_prompts
+from backend.routers.characters.core import _coerce_pending_prompts, _coerce_records
 from backend.services import characters as svc
 
 LEVEL_UP = {
@@ -343,3 +343,64 @@ class TestPendingPrompts:
 
     def test_a_sheet_without_prompts_keeps_none(self):
         assert _coerce_pending_prompts({"fields": {}}, [{"prompt": "lineage"}]) == []
+
+
+def test_a_prompt_may_keep_a_record():
+    prompts = {"level_up": {**LEVEL_UP, "record": "concat('level:', level + 1)"}, "lineage": LINEAGE}
+    validated = _validate(_document(prompts))
+    assert validated["prompts"]["level_up"]["record"] == "concat('level:', level + 1)"
+
+
+@pytest.mark.parametrize(("record", "message"), [("nope + 1", "unknown name: nope"), ("((", "not a valid")])
+def test_a_bad_record_is_refused(record, message):
+    prompts = {"level_up": {**LEVEL_UP, "record": record}, "lineage": LINEAGE}
+    with pytest.raises(svc.SchemaError, match=message):
+        _validate(_document(prompts))
+
+
+class TestCoerceRecords:
+    """What prompts kept under a record: narrow, as `_granted` is."""
+
+    FIELDS = _document()["fields"]
+
+    def _coerce(self, value):
+        return _coerce_records(self.FIELDS, value, _document()["content_types"])
+
+    def test_keeps_additions_and_rows_taken_out(self):
+        value = {
+            "level:3": {
+                "granted": {"feats": ["alert"], "origin": ["tough"], "skills": ["a", 2]},
+                "dropped": {"feats": [{"_ref": "lucky", "_per": {"from_level": 1}}]},
+            }
+        }
+        assert self._coerce(value) == {
+            "level:3": {
+                "granted": {"feats": ["alert"], "origin": ["tough"], "skills": ["a", "2"]},
+                "dropped": {"feats": [{"_ref": "lucky", "_per": {"from_level": 1}}]},
+            }
+        }
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "not a mapping",
+            {"level:1": "not a mapping"},
+            {"": {"granted": {"skills": ["a"]}}},
+            {"x" * 101: {"granted": {"skills": ["a"]}}},
+            # Targets must be fields a record can take back from.
+            {"level:1": {"granted": {"nowhere": ["a"]}}},
+            {"level:1": {"granted": {"hp_max": ["a"]}}},
+            {"level:1": {"granted": {"skills": "a"}}},
+            {"level:1": {"granted": ["skills"]}},
+            # Only a content_list's rows are put back.
+            {"level:1": {"dropped": {"skills": [{"_ref": "a"}]}}},
+            {"level:1": {"dropped": {"feats": "row"}}},
+            {"level:1": {}},
+        ],
+    )
+    def test_drops_anything_outside_the_shape(self, value):
+        assert self._coerce(value) == {}
+
+    def test_keeps_at_most_forty_records(self):
+        value = {f"level:{n}": {"granted": {"skills": ["a"]}} for n in range(50)}
+        assert len(self._coerce(value)) == 40

@@ -559,6 +559,12 @@ def _validate_write_steps(
     - `{"append": list, "values": {column: formula}}` adds a row to a list.
     - `{"prompt": name}` opens one of the sheet's prompts once the writes are
       made.
+    - `{"revert": formula}` takes back what a prompt kept in the record the
+      formula names (a prompt's `record`, `level:3`): the entries it picked or
+      granted come off - a pick's own grants with it - the values it added to
+      a multiselect too, and the rows it took out go back. Working out to a
+      key with no record, it changes nothing.
+    - `{"pop": list}` takes the last row off a list or a content_list.
 
     A prompt's `apply` may also:
 
@@ -614,7 +620,7 @@ def _validate_write_steps(
                 raise SchemaError(f"{where} writes {key!r}, which {target!r} does not have")
             _validate_formula(source, f"{where} {key!r}", names_known, images)
 
-    verbs_allowed = ["each", "append", "prompt"] + (
+    verbs_allowed = ["each", "append", "prompt", "revert", "pop"] + (
         ["add", "pick", "unpick", "grant"] if prompt_verbs else []
     )
     for step_index, step in enumerate(steps):
@@ -630,6 +636,9 @@ def _validate_write_steps(
         if verb == "prompt":
             if not isinstance(target, str) or target not in prompts:
                 raise SchemaError(f"{where} opens unknown prompt {target!r}")
+            continue
+        if verb == "revert":
+            _validate_formula(target, f"{where} 'revert'", known, images)
             continue
         if not isinstance(target, str) or target not in fields:
             raise SchemaError(f"{where} targets unknown field {target!r}")
@@ -648,6 +657,11 @@ def _validate_write_steps(
             if "where" in step:
                 _validate_formula(step["where"], f"{where} 'where'", row_known, images)
             _cells(step.get("set"), keys, target, f"{where} 'set'", row_known)
+        elif verb == "pop":
+            if field_type not in ("list", "content_list"):
+                raise SchemaError(
+                    f"{where} takes a row off {target!r}, which is not a list or a content_list"
+                )
         elif verb == "append":
             keys = _row_keys(target, where, appendable=True)
             _cells(step.get("values"), keys, target, f"{where} 'values'", known)
@@ -855,6 +869,10 @@ def _validate_prompts(
 
     A step's `label_formula`, when it works out to some text, is shown in
     place of its `label` - the kind of option a class replaces.
+
+    A prompt's `record`, a formula worked out when it opens, names the record
+    (`level:3`) it keeps what its `apply` adds in - and the prompts it opens
+    too - so an action's `revert` step can take it all back.
     """
     prompts = _require_dict(prompts, "'prompts'")
     if len(prompts) > MAX_PROMPTS:
@@ -868,6 +886,8 @@ def _validate_prompts(
         what = f"Prompt {name!r}"
         prompt = _require_dict(prompt, what)
         _validate_label(prompt.get("label"), what, MAX_PROMPT_LABEL)
+        if "record" in prompt:
+            _validate_formula(prompt["record"], f"{what} 'record'", base, images)
 
         steps = prompt.get("steps")
         if not isinstance(steps, list) or not steps:

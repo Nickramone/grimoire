@@ -23,6 +23,7 @@ import {
   pendingPrompts,
   planPrompt,
   planGrants,
+  promptRecord,
   PromptLauncher,
   sheetContext,
   startPrompt,
@@ -535,13 +536,16 @@ export default function CharacterDetailView() {
     const definition = findPrompt(document, request?.prompt)
     setPrompts((prev) => prev.slice(1))
     if (!request || !definition) return
+    // A prompt keeping a record - a level gained - keeps what it adds there,
+    // and so do the prompts it opens next.
+    const record = promptRecord(definition, request, promptSheet)
     const plan = planPrompt(definition, {
       document,
       data: dataRef.current,
       context: promptSheet,
       answers,
       row: request.row,
-      source: grantSource(request),
+      ...(record ? { record } : { source: grantSource(request) }),
     })
     // Grants ask the catalog which ids it has, as a pick's grants do.
     const granted = plan.grants.length
@@ -556,7 +560,10 @@ export default function CharacterDetailView() {
     // a feat's prompt joining the queue after this one.
     for (const pick of plan.picks) await onChange(pick.field, pick.value, { entry: pick.entry })
     if (plan.prompts.length) {
-      setPrompts((prev) => [...prev, ...plan.prompts.map((prompt) => ({ prompt }))])
+      setPrompts((prev) => [
+        ...prev,
+        ...plan.prompts.map((prompt) => (record ? { prompt, record } : { prompt })),
+      ])
     }
   }
 

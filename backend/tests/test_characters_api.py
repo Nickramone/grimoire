@@ -957,6 +957,25 @@ class TestOverridesAndGrants:
         ).json()
         assert body["data"]["_granted"] == {"background": {"skills": ["Arcana"]}}
 
+    def test_stores_what_a_record_kept(self, client, admin_headers, character):
+        """A prompt's record - a level gained - so an action can take it back."""
+        records = {
+            "level:2": {
+                "granted": {"skills": ["History"], "background": ["sage"]},
+                "dropped": {"backgrounds": [{"_ref": "acolyte"}]},
+            },
+            "level:3": {"granted": {"speed": ["40"]}},
+        }
+        body = self._update(
+            client, admin_headers, character, data={"_records": records}
+        ).json()
+        assert body["data"]["_records"] == {
+            "level:2": {
+                "granted": {"skills": ["History"], "background": ["sage"]},
+                "dropped": {"backgrounds": [{"_ref": "acolyte"}]},
+            }
+        }
+
     def test_other_underscore_keys_are_still_dropped(self, client, admin_headers, character):
         body = self._update(
             client, admin_headers, character, data={"_anything": {"a": 1}}

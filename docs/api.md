@@ -2406,7 +2406,7 @@ field names to remove, which is how a field goes back to its `default_from`
 value after the player typed over it - separate from `data`, because a `null`
 there already means "cleared" mid-edit.
 
-Three reserved keys may ride in `data` beside the fields, each checked strictly
+Four reserved keys may ride in `data` beside the fields, each checked strictly
 rather than stored as sent:
 
 | Key | Shape | Purpose |
@@ -2414,6 +2414,7 @@ rather than stored as sent:
 | `_overrides` | `{computed name: value}` | The player's own value for a computed value. It replaces the formula, and everything depending on it follows. Names must be computed values; values must be short scalars. Sent whole - leaving a name out resets it |
 | `_granted` | `{source: {target field: [value, ...]}}` | What each `on_pick` rule added, so changing the pick can take it back off. The source is the picking content_ref field, or `field:ref` for one row of a content_list with `on_pick` (each row is a pick of its own, and removing it takes back only its grants). The field must carry `on_pick` and each target must be a declared field |
 | `_pending_prompts` | `[{prompt, source?, ref?}, ...]` | The sheet's `prompts` the player put off, shown as choices still to make. `prompt` must be one the sheet declares; `source` (a field) and `ref` (an entry id) name the pick that opened it. At most 20, sent whole |
+| `_records` | `{key: {granted?: {target field: [value, ...]}, dropped?: {content_list field: [row, ...]}}}` | What a prompt with `record` (and the prompts it opens) added under its key - `level:3` - so an action's `revert` step can take it all back: `granted` lists entry ids or names of a content_list or content_ref and values of a multiselect, `dropped` the content_list rows its `unpick` took out, cleaned as the field's own rows. At most 40 keys of up to 100 characters; anything else is dropped |
 
 **Schema fields:** `id`, `schema_id`, `name`, `system`, `description`,
 `version`, `source_id`, `source_url`, `source_version`, `is_community`,

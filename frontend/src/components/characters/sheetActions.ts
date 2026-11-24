@@ -1,6 +1,7 @@
 import { evaluate } from './expressions'
 import type { ExprContext } from './expressions'
 import type { FieldDefinition } from './FieldRenderer'
+import { planPop, planRevert } from './sheetRecords'
 
 /**
  * A sheet's `actions`: named buttons that change several values at once - a
@@ -13,6 +14,10 @@ import type { FieldDefinition } from './FieldRenderer'
  * steps do not see each other's writes, so their order only matters when two
  * write the same value - the later wins, and steps on the same list apply in
  * turn.
+ *
+ * `revert` and `pop` take things back: `revert` everything a prompt recorded
+ * under the key its formula works out to (see `sheetRecords`), `pop` the last
+ * row of a list. Both work on the values as the steps before them left them.
  */
 
 type Values = Record<string, unknown>
@@ -25,6 +30,10 @@ export interface ActionStep {
   append?: string
   values?: Record<string, string>
   prompt?: string
+  // A formula naming the record to take back, `level:3`.
+  revert?: string
+  // A list whose last row is taken off.
+  pop?: string
 }
 
 export interface SheetAction {
@@ -106,6 +115,18 @@ export function planAction(
 
   for (const step of Array.isArray(action?.steps) ? action.steps : []) {
     if (!step || typeof step !== 'object') continue
+
+    if (typeof step.revert === 'string') {
+      const key = work(step.revert, context)
+      if (key === FAILED || key === null || key === undefined || key === '') continue
+      Object.assign(patch, planRevert(document, { ...(data || {}), ...patch }, String(key)))
+      continue
+    }
+
+    if (typeof step.pop === 'string') {
+      Object.assign(patch, planPop(document, { ...(data || {}), ...patch }, step.pop))
+      continue
+    }
 
     if (typeof step.each === 'string') {
       const name = step.each

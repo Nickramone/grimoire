@@ -709,11 +709,18 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
       const editable = Boolean(
         !readOnly && (action ? onChange : true) && (!opens.length || ctx.openPrompt)
       )
-      const run = () => {
+      const run = async () => {
         if (action) {
           if (action.confirm && !window.confirm(action.confirm)) return
           const patch = planAction(action, { document: schemaDocument, data, context, entries })
-          for (const [field, value] of Object.entries(patch)) onChange?.(field, value)
+          // The bookkeeping first - what each pick granted, the records - so a
+          // list's own follow-up reads it as the action left it; each change
+          // in turn, so one follow-up does not write over the next.
+          const order = Object.entries(patch).sort(
+            ([a], [b]) => Number(!a.startsWith('_')) - Number(!b.startsWith('_'))
+          )
+          // The view's onChange is async; the type here says only that it is called.
+          for (const [field, value] of order) await Promise.resolve(onChange?.(field, value))
         }
         for (const promptName of opens) ctx.openPrompt?.({ prompt: promptName })
       }

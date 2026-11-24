@@ -48,6 +48,7 @@ function StubSheet({
       <button onClick={() => onChange('species', { _ref: 'elf' }, { entry: ELF })}>pick elf</button>
       <button onClick={() => open?.({ prompt: 'feat_up' })}>gain a feat</button>
       <button onClick={() => open?.({ prompt: 'level_gain' })}>gain a level</button>
+      <button onClick={() => open?.({ prompt: 'recorded_up' })}>gain a recorded level</button>
       <button onClick={() => onChange('boons', [{ _ref: 'elf' }], { entry: ELF })}>add boon</button>
       <button onClick={() => onChange('boons', [])}>drop boon</button>
       <button onClick={() => onChange('focused', true)}>focus</button>
@@ -124,6 +125,21 @@ const DOCUMENT = {
         { pick: 'feats', entry: 'answer.feat', values: { from_level: 'level' } },
         { pick: 'origin_feat', entry: 'answer.feat' },
       ],
+    },
+    recorded_up: {
+      label: 'Recorded level',
+      record: "concat('level:', level + 1)",
+      steps: [{ key: 'feat', type: 'entry', content_type: 'feat' }],
+      apply: [
+        { pick: 'feats', entry: 'answer.feat', values: { from_level: 'level + 1' } },
+        { pick: 'origin_feat', entry: 'answer.feat' },
+        { prompt: 'recorded_more' },
+      ],
+    },
+    recorded_more: {
+      label: 'More of the level',
+      steps: [{ key: 'skill', type: 'select', options: ['Stealth'] }],
+      apply: [{ add: 'skills', values: 'answer.skill' }],
     },
     level_gain: {
       label: 'Level gained',
@@ -276,6 +292,25 @@ describe('CharacterDetailView — prompts', () => {
       page: 1,
       page_size: 200,
     })
+  })
+
+  it('keeps what a recording prompt and the prompts it opens add under its record', async () => {
+    await renderView()
+    await userEvent.click(screen.getByText('gain a recorded level'))
+    await userEvent.click(await screen.findByLabelText('Alert'))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByRole('dialog', { name: 'More of the level' })).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Stealth'))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(lastSaved().data.skills).toEqual(['Perception', 'Stealth']))
+    const saved = lastSaved().data
+    expect(saved._records).toEqual({
+      'level:5': {
+        granted: { feats: ['alert'], origin_feat: ['alert'], skills: ['Stealth'] },
+      },
+    })
+    // The pick's own grants stay under the pick.
+    expect(saved._granted).toEqual({ origin_feat: { skills: ['Perception'] } })
   })
 
   it('grants what a prompt names, as references the catalog has, under the source given', async () => {
