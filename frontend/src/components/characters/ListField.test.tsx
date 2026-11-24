@@ -99,6 +99,13 @@ describe('ListField', () => {
     expect(downs[downs.length - 1]).toBeDisabled()
   })
 
+  it('drops the move buttons when the schema says the order is fixed', () => {
+    renderList({ definition: { ...DEFINITION, reorderable: false } })
+    expect(screen.queryByLabelText(/Move row up/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Move row down/i)).not.toBeInTheDocument()
+    expect(screen.getAllByLabelText(/Remove row/i).length).toBeGreaterThan(0)
+  })
+
   it('offers no editing affordances when read-only', () => {
     renderList({ readOnly: true })
     expect(screen.queryByText(/Add row/i)).not.toBeInTheDocument()
