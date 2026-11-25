@@ -1020,6 +1020,35 @@ def _validate_prompts(
             _validate_write_steps(
                 prompt["on_skip"], f"{what} 'on_skip'", fields, known, images, prompts=names
             )
+        _validate_prompt_pages(prompt, what, name, names)
+
+
+def _validate_prompt_pages(prompt: dict, what: str, name: str, names: set[str]) -> None:
+    """Check how a prompt is asked a page at a time.
+
+    `paged` shows one page at a time; a step's `page` names the page it is on
+    (alone on its own when it has none). `pages` describes them by name: a
+    `label`, and `later` - the prompt kept among the choices to make when the
+    player skips that page.
+    """
+    if "paged" in prompt and not isinstance(prompt["paged"], bool):
+        raise SchemaError(f"{what} 'paged' must be true or false")
+    for step in prompt["steps"]:
+        page = step.get("page")
+        if page is not None and (not isinstance(page, str) or not _NAME_RE.match(page)):
+            raise SchemaError(f"{what} step {step.get('key')!r} needs a 'page' that is a valid identifier")
+    if "pages" not in prompt:
+        return
+    pages = _require_dict(prompt["pages"], f"{what} 'pages'")
+    for page, definition in pages.items():
+        where = f"{what} page {page!r}"
+        if not isinstance(page, str) or not _NAME_RE.match(page):
+            raise SchemaError(f"{where} needs a name that is a valid identifier")
+        definition = _require_dict(definition, where)
+        _validate_label(definition.get("label"), where, MAX_PROMPT_LABEL, required=False)
+        later = definition.get("later")
+        if later is not None and (later not in names or later == name):
+            raise SchemaError(f"{where} 'later' names unknown prompt {later!r}")
 
 
 def _validate_computed(name: str, definition: Any) -> tuple:

@@ -33,6 +33,8 @@ const ENTRY_MAX_PAGES = 10
 export type PromptStepType = 'choose' | 'distribute' | 'entry' | 'entries' | 'number' | 'select'
 
 export interface PromptStep {
+  // The page of a paged prompt it is shown on; alone on its own without one.
+  page?: string
   key: string
   type: PromptStepType
   label?: string
@@ -87,10 +89,27 @@ export interface SheetPrompt {
   apply: PromptApplyStep[]
   // Writes made when the prompt is put aside, in place of keeping it for later.
   on_skip?: ActionStep[]
+  // Asked a page at a time: the steps grouped by their `page`.
+  paged?: boolean
+  // The pages by name: a label, and the prompt kept for later when skipped.
+  pages?: Record<string, PromptPage>
   // A formula, worked out when the prompt opens, naming the record what it
   // adds is kept under - `level:3` - so an action's `revert` can take it back.
   // The prompts its `apply` opens record under the same key.
   record?: string
+}
+
+/** One page of a paged prompt, as the sheet describes it. */
+export interface PromptPage {
+  label?: string
+  // The prompt kept among the choices to make when the player skips the page.
+  later?: string
+}
+
+/** A page as shown: its name and the steps showing on it, in order. */
+export interface ShownPage {
+  id: string
+  steps: PromptStep[]
 }
 
 /** A prompt waiting to be shown: which one, and the pick that opened it. */
@@ -103,6 +122,8 @@ export type PromptRequest = {
   row?: Values | null
   // The record a prompt before it in the chain was keeping: this one adds to it.
   record?: string
+  // Opened again by Back: the answers it was confirmed with and the pages skipped.
+  resume?: { answers: Answers; skipped: string[] }
 }
 
 /** An `entry` step's answer: the catalog entry, its id and its properties. */
@@ -362,7 +383,10 @@ export function isAnswered(
   }
 }
 
-/** Whether every step showing has its answer. */
+/**
+ * Whether every step showing has its answer - but those on the pages the
+ * player skipped, left for later.
+ */
 export function isComplete(
   prompt: SheetPrompt,
   context: Values,
@@ -371,18 +395,53 @@ export function isComplete(
   data: Values | null | undefined,
   row?: Values | null,
   // By step key: how many entries each `entries` step found to choose from.
-  available: Record<string, number> = {}
+  available: Record<string, number> = {},
+  skipped: readonly string[] = []
 ): boolean {
   const steps = visibleSteps(prompt, context, answers, row)
   const seen: Answers = {}
   for (const step of steps) {
     const ctx = promptContext(context, seen, row)
-    if (!isAnswered(step, answers[step.key], ctx, document, data, available[step.key])) {
+    if (
+      !skipped.includes(stepPage(prompt, step)) &&
+      !isAnswered(step, answers[step.key], ctx, document, data, available[step.key])
+    ) {
       return false
     }
     seen[step.key] = answers[step.key]
   }
   return steps.length > 0
+}
+
+/** The page a step is on: its `page`, or one of its own; one page when not paged. */
+export function stepPage(prompt: SheetPrompt, step: PromptStep): string {
+  if (!prompt.paged) return ''
+  return typeof step.page === 'string' && step.page ? step.page : `step:${step.key}`
+}
+
+/**
+ * The pages showing for these answers, in the order their first step comes:
+ * a page none of whose steps shows is passed over.
+ */
+export function shownPages(prompt: SheetPrompt, steps: PromptStep[]): ShownPage[] {
+  const pages: ShownPage[] = []
+  for (const step of steps) {
+    const id = stepPage(prompt, step)
+    const page = pages.find((item) => item.id === id)
+    if (page) page.steps.push(step)
+    else pages.push({ id, steps: [step] })
+  }
+  return pages
+}
+
+/** The prompts kept for later by the pages skipped, once each. */
+export function laterPrompts(prompt: SheetPrompt, skipped: readonly string[]): string[] {
+  const later: string[] = []
+  for (const id of skipped) {
+    const name = prompt.pages?.[id]?.later
+    if (name && !later.includes(name)) later.push(name)
+  }
+  return later
 }
 
 /** A `number` step's starting value, from its `default` formula. */
@@ -884,6 +943,9 @@ function stored(request: PromptRequest): PromptRequest {
   const kept: PromptRequest = { prompt: request.prompt }
   if (request.source) kept.source = request.source
   if (request.source && request.ref) kept.ref = request.ref
+  // The record it adds to - a level's - is kept with it, so it is taken back
+  // with that level even when chosen later.
+  if (request.record) kept.record = request.record
   return kept
 }
 

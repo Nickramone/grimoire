@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LuCheck } from 'react-icons/lu'
+import { LuCheck, LuChevronLeft, LuChevronRight } from 'react-icons/lu'
 import { goldBtn, ghostBtn, scrim, card, helpText } from './characterStyles'
 import {
+  isAnswered,
   isComplete,
+  laterPrompts,
   loadCatalog,
   numberDefault,
   promptContext,
+  shownPages,
   stepLabel,
   visibleSteps,
 } from './sheetPrompts'
@@ -27,15 +30,21 @@ export interface PromptDialogProps {
   row?: Values | null
   sourceLabel?: string
   browse?: BrowseEntries
-  onConfirm?: (answers: Answers) => void
+  // Confirmed: the answers, the pages skipped and the prompts they keep for later.
+  onConfirm?: (answers: Answers, skipped: string[], later: string[]) => void
   onSkip?: () => void
+  // Back from the first page: to the prompt confirmed before this one.
+  onBack?: () => void
+  // Opened again by Back: the answers given and the pages skipped, on its last page.
+  resume?: { answers: Answers; skipped: string[] }
 }
 
 /**
- * Asks the questions of one of the sheet's `prompts`, all on one page: the
- * steps showing for the answers given so far, each with its own control.
- * Confirming needs every step showing answered; skipping is always allowed,
- * and the sheet keeps the prompt to open again later.
+ * Asks the questions of one of the sheet's `prompts`: the steps showing for
+ * the answers given so far, each with its own control - all on one page, or a
+ * page at a time when the prompt is `paged`, with Back and Next. Confirming
+ * needs every step showing answered but those on the pages skipped; skipping
+ * the whole prompt is always allowed, and the sheet keeps it to open later.
  *
  * Like the `choose` dialog it extends, it knows nothing about what it asks:
  * every question, option and limit comes from the sheet's data.
@@ -50,10 +59,13 @@ export default function PromptDialog({
   browse,
   onConfirm,
   onSkip,
+  onBack,
+  resume,
 }: PromptDialogProps) {
   const { t } = useTranslation()
   // Numbers start from their worked-out default, which counts as an answer.
   const [answers, setAnswers] = useState<Answers>(() => {
+    if (resume) return { ...resume.answers }
     const start: Answers = {}
     for (const step of prompt.steps || []) {
       if (step?.type !== 'number') continue
@@ -91,6 +103,10 @@ export default function PromptDialog({
 
   // How many entries each `entries` step found: it asks for no more.
   const [available, setAvailable] = useState<Record<string, number>>({})
+  // The page showing - the last, when Back opens the prompt again - and the
+  // pages skipped to choose later.
+  const [pageIndex, setPageIndex] = useState(resume ? Number.MAX_SAFE_INTEGER : 0)
+  const [skipped, setSkipped] = useState<string[]>(resume?.skipped || [])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -101,7 +117,11 @@ export default function PromptDialog({
   }, [onSkip])
 
   const steps = visibleSteps(prompt, context, answers, row)
-  const complete = isComplete(prompt, context, answers, document, data, row, available)
+  const pages = shownPages(prompt, steps)
+  const current = Math.max(0, Math.min(pageIndex, pages.length - 1))
+  const page = pages[current]
+  const last = current >= pages.length - 1
+  const complete = isComplete(prompt, context, answers, document, data, row, available, skipped)
   const answer = (key: string, value: unknown) =>
     setAnswers((prev) => {
       const next = { ...prev }
@@ -110,12 +130,45 @@ export default function PromptDialog({
       return next
     })
 
-  // Each step reads the answers of the steps showing before it.
+  // Each step reads the answers of the steps showing before it, on any page.
+  const contexts: Record<string, ReturnType<typeof promptContext>> = {}
   const before: Answers = {}
-  const rendered = steps.map((step) => {
-    const stepContext = promptContext(context, { ...before }, row)
-    const heading = stepLabel(step, stepContext)
+  for (const step of steps) {
+    contexts[step.key] = promptContext(context, { ...before }, row)
     before[step.key] = answers[step.key]
+  }
+  const skippedHere = !!page && skipped.includes(page.id)
+  const pageDone =
+    !!page &&
+    (skippedHere ||
+      page.steps.every((step) =>
+        isAnswered(step, answers[step.key], contexts[step.key], document, data, available[step.key])
+      ))
+  const pageInfo = page ? prompt.pages?.[page.id] : undefined
+  const canSkipPage = !!pageInfo?.later && !skippedHere
+  const paging = !!prompt.paged && pages.length > 1
+
+  const goTo = (index: number) => {
+    // A skipped page come back to is asked again.
+    const target = pages[index]
+    if (target) setSkipped((prev) => prev.filter((id) => id !== target.id))
+    setPageIndex(index)
+  }
+  const skipPage = () => {
+    if (!page) return
+    for (const step of page.steps) answer(step.key, undefined)
+    setSkipped((prev) => (prev.includes(page.id) ? prev : [...prev, page.id]))
+    if (!last) setPageIndex(current + 1)
+  }
+  const confirmAll = () => {
+    // Only the pages still showing count as skipped.
+    const shown = skipped.filter((id) => pages.some((item) => item.id === id))
+    onConfirm?.(answers, shown, laterPrompts(prompt, shown))
+  }
+
+  const rendered = (page?.steps || []).map((step) => {
+    const stepContext = contexts[step.key]
+    const heading = stepLabel(step, stepContext)
     return (
       <section key={step.key} style={{ display: 'grid', gap: 6 }}>
         {heading ? <h3 style={{ margin: 0, fontSize: 14 }}>{heading}</h3> : null}
@@ -159,28 +212,65 @@ export default function PromptDialog({
       >
         <div>
           <h2 style={{ margin: 0, fontSize: 16 }}>{prompt.label}</h2>
+          {paging ? (
+            <p style={helpText}>
+              {[
+                pageInfo?.label,
+                t('characters.promptPageOf', { current: current + 1, total: pages.length }),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
           {sourceLabel ? (
             <p style={helpText}>{t('characters.chooseFrom', { source: sourceLabel })}</p>
           ) : null}
         </div>
 
         <div style={{ display: 'grid', gap: 16, overflowY: 'auto', paddingRight: 2 }}>
-          {rendered}
+          {skippedHere ? <p style={helpText}>{t('characters.promptPageSkipped')}</p> : rendered}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          {current > 0 || onBack ? (
+            <button
+              type="button"
+              onClick={() => (current > 0 ? goTo(current - 1) : onBack?.())}
+              style={{ ...ghostBtn, marginRight: 'auto' }}
+            >
+              <LuChevronLeft size={14} />
+              {t('characters.promptBack')}
+            </button>
+          ) : null}
           <button type="button" onClick={onSkip} style={ghostBtn}>
             {t('characters.chooseLater')}
           </button>
-          <button
-            type="button"
-            onClick={() => onConfirm?.(answers)}
-            disabled={!complete}
-            style={complete ? goldBtn : { ...goldBtn, opacity: 0.55, cursor: 'default' }}
-          >
-            <LuCheck size={14} />
-            {t('characters.promptConfirm')}
-          </button>
+          {canSkipPage ? (
+            <button type="button" onClick={skipPage} style={ghostBtn}>
+              {t('characters.promptSkipPage')}
+            </button>
+          ) : null}
+          {last ? (
+            <button
+              type="button"
+              onClick={confirmAll}
+              disabled={!complete}
+              style={complete ? goldBtn : { ...goldBtn, opacity: 0.55, cursor: 'default' }}
+            >
+              <LuCheck size={14} />
+              {t('characters.promptConfirm')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => goTo(current + 1)}
+              disabled={!pageDone}
+              style={pageDone ? goldBtn : { ...goldBtn, opacity: 0.55, cursor: 'default' }}
+            >
+              {t('characters.promptNext')}
+              <LuChevronRight size={14} />
+            </button>
+          )}
         </div>
       </div>
     </div>

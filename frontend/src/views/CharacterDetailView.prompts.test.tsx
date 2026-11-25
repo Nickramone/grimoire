@@ -49,6 +49,7 @@ function StubSheet({
       <button onClick={() => open?.({ prompt: 'feat_up' })}>gain a feat</button>
       <button onClick={() => open?.({ prompt: 'level_gain' })}>gain a level</button>
       <button onClick={() => open?.({ prompt: 'recorded_up' })}>gain a recorded level</button>
+      <button onClick={() => open?.({ prompt: 'paged_up' })}>gain a paged level</button>
       <button onClick={() => onChange('boons', [{ _ref: 'elf' }], { entry: ELF })}>add boon</button>
       <button onClick={() => onChange('boons', [])}>drop boon</button>
       <button onClick={() => onChange('focused', true)}>focus</button>
@@ -135,6 +136,17 @@ const DOCUMENT = {
         { pick: 'origin_feat', entry: 'answer.feat' },
         { prompt: 'recorded_more' },
       ],
+    },
+    paged_up: {
+      label: 'Paged level',
+      paged: true,
+      record: "concat('level:', level + 1)",
+      steps: [
+        { key: 'feat', type: 'entry', content_type: 'feat', page: 'feat' },
+        { key: 'skill', type: 'select', options: ['Stealth'], page: 'skill' },
+      ],
+      pages: { skill: { label: 'Skill', later: 'recorded_more' } },
+      apply: [{ pick: 'feats', entry: 'answer.feat', values: { from_level: 'level + 1' } }],
     },
     recorded_more: {
       label: 'More of the level',
@@ -311,6 +323,55 @@ describe('CharacterDetailView — prompts', () => {
     })
     // The pick's own grants stay under the pick.
     expect(saved._granted).toEqual({ origin_feat: { skills: ['Perception'] } })
+  })
+
+  it('goes Back from a prompt to the one confirmed before it, the sheet put back', async () => {
+    await renderView()
+    await userEvent.click(screen.getByText('gain a recorded level'))
+    await userEvent.click(await screen.findByLabelText('Alert'))
+    // The first prompt of a chain has nothing to go back to.
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByRole('dialog', { name: 'More of the level' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('dialog', { name: 'Recorded level' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Alert')).toBeChecked()
+    // What it picked and granted is taken back: none of it was there before.
+    await waitFor(() =>
+      expect(lastSaved().unset).toEqual(
+        expect.arrayContaining(['feats', 'origin_feat', 'skills', '_records'])
+      )
+    )
+    expect(lastSaved().data.feats).toBeUndefined()
+    // Asked again, it goes on as the first time.
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByRole('dialog', { name: 'More of the level' })).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Stealth'))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(lastSaved().data.skills).toEqual(['Perception', 'Stealth']))
+    expect(lastSaved().data._records).toEqual({
+      'level:5': {
+        granted: { feats: ['alert'], origin_feat: ['alert'], skills: ['Stealth'] },
+      },
+    })
+  })
+
+  it('keeps a skipped page for later as the prompt it names, under the same record', async () => {
+    await renderView()
+    await userEvent.click(screen.getByText('gain a paged level'))
+    await userEvent.click(await screen.findByLabelText('Alert'))
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Skill · 2 of 2')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Skip, choose later' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() =>
+      expect(lastSaved().data._pending_prompts).toEqual([
+        { prompt: 'recorded_more', record: 'level:5' },
+      ])
+    )
+    expect(lastSaved().data.feats).toEqual([
+      expect.objectContaining({ _ref: 'alert', _per: { from_level: 5 } }),
+    ])
   })
 
   it('grants what a prompt names, as references the catalog has, under the source given', async () => {

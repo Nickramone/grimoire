@@ -191,6 +191,58 @@ def test_bad_follow_ups_are_refused(on_change, on_skip, message):
         _follow_up_schema(on_change, on_skip)
 
 
+def _paged_schema(**changes):
+    prompt = {
+        "label": "Origin",
+        "paged": True,
+        "steps": [
+            {"key": "species", "type": "select", "options": ["Elf", "Gnome"], "page": "species"},
+            {"key": "size", "type": "select", "options": ["Small", "Medium"], "page": "species"},
+            {"key": "focus", "type": "select", "options": ["Bless", "Hex"]},
+        ],
+        "pages": {"species": {"label": "Species", "later": "species_later"}},
+        "apply": [{"set": "focus_on", "to": "answer.focus"}],
+    }
+    prompt.update(changes)
+    later = {
+        "label": "Species",
+        "steps": [{"key": "species", "type": "select", "options": ["Elf", "Gnome"]}],
+        "apply": [{"set": "focus_on", "to": "answer.species"}],
+    }
+    return svc.validate_schema({
+        "id": "paged-demo",
+        "name": "Paged Demo",
+        "fields": {"focus_on": {"type": "text"}},
+        "prompts": {"origin": prompt, "species_later": later},
+    })
+
+
+def test_a_paged_prompt_is_kept():
+    document = _paged_schema()
+    assert document["prompts"]["origin"]["pages"]["species"]["later"] == "species_later"
+    assert document["prompts"]["origin"]["steps"][0]["page"] == "species"
+
+
+@pytest.mark.parametrize(
+    "changes, message",
+    [
+        ({"paged": "yes"}, "'paged' must be"),
+        ({"pages": {"species": {"later": "missing"}}}, "unknown prompt 'missing'"),
+        ({"pages": {"species": {"later": "origin"}}}, "unknown prompt 'origin'"),
+        ({"pages": {"species": {"label": ""}}}, "page 'species' needs a 'label'"),
+        ({"pages": {"bad page": {}}}, "valid identifier"),
+        ({"pages": []}, "'pages'"),
+        (
+            {"steps": [{"key": "focus", "type": "select", "options": ["Bless"], "page": "a b"}]},
+            "needs a 'page'",
+        ),
+    ],
+)
+def test_bad_pages_are_refused(changes, message):
+    with pytest.raises(svc.SchemaError, match=message):
+        _paged_schema(**changes)
+
+
 @pytest.mark.parametrize("key", ["layout_html", "mobile_layout_html"])
 def test_g_action_naming_an_unknown_action_is_refused(key):
     document = {

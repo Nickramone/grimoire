@@ -78,7 +78,11 @@ describe('PromptDialog', () => {
     // +1/+1 spends every point: no third.
     expect(screen.getByRole('button', { name: 'One more for Strength' })).toBeDisabled()
     await userEvent.click(confirm())
-    expect(onConfirm).toHaveBeenCalledWith({ hp: 6, kind: 'asi', asi: { str: 1, dex: 1 } })
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({
+      hp: 6,
+      kind: 'asi',
+      asi: { str: 1, dex: 1 },
+    })
   })
 
   it('takes a number typed by hand, within its bounds', async () => {
@@ -95,7 +99,7 @@ describe('PromptDialog', () => {
     )
     await userEvent.type(screen.getByLabelText('Hit points'), '8')
     await userEvent.click(confirm())
-    expect(onConfirm).toHaveBeenCalledWith({ hp: 8 })
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({ hp: 8 })
   })
 
   it('lets a number below its min be typed on the way to one above it', async () => {
@@ -117,7 +121,7 @@ describe('PromptDialog', () => {
     await userEvent.type(input, '12')
     expect(input).toHaveValue(12)
     await userEvent.click(confirm())
-    expect(onConfirm).toHaveBeenCalledWith({ hp: 12 })
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({ hp: 12 })
   })
 
   it('brings a number out of bounds back within them when the input loses focus', async () => {
@@ -140,7 +144,7 @@ describe('PromptDialog', () => {
     await userEvent.tab()
     expect(input).toHaveValue(20)
     await userEvent.click(confirm())
-    expect(onConfirm).toHaveBeenCalledWith({ hp: 20 })
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({ hp: 20 })
   })
 
   it('offers the catalog entries the filters let through', async () => {
@@ -168,7 +172,7 @@ describe('PromptDialog', () => {
     expect(screen.queryByLabelText('Boon of Speed')).not.toBeInTheDocument()
     expect(browse).toHaveBeenCalledWith('feat', { category: 'G' }, 1, 200)
     await userEvent.click(confirm())
-    expect(onConfirm).toHaveBeenCalledWith({
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({
       hp: 6,
       kind: 'feat',
       feat: { level: 1, name: 'Alert', _ref: 'alert', _source: 'xphb' },
@@ -209,7 +213,7 @@ describe('PromptDialog', () => {
     expect(screen.getByLabelText('Guidance')).toBeEnabled()
     await userEvent.click(screen.getByLabelText('Guidance'))
     await userEvent.click(confirm())
-    expect(onConfirm).toHaveBeenCalledWith({
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({
       spells: [
         { name: 'Light', _ref: 'light', _source: undefined },
         { name: 'Guidance', _ref: 'guidance', _source: undefined },
@@ -260,7 +264,7 @@ describe('PromptDialog', () => {
     await userEvent.click(screen.getByLabelText('Pact of the Blade'))
     await userEvent.click(await screen.findByLabelText('Devil Sight'))
     await userEvent.click(confirm())
-    expect(onConfirm).toHaveBeenCalledWith({
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({
       opts: [
         { requires: '', name: 'Pact of the Blade', _ref: 'blade', _source: undefined },
         { requires: '', name: 'Devil Sight', _ref: 'sight', _source: undefined },
@@ -302,6 +306,124 @@ describe('PromptDialog', () => {
     expect(screen.queryByLabelText('High Elf')).not.toBeInTheDocument()
     expect(confirm()).toBeDisabled()
     expect(browse).toHaveBeenCalledTimes(1)
+  })
+
+  describe('a page at a time', () => {
+    const PAGED: SheetPrompt = {
+      label: 'Level up',
+      paged: true,
+      steps: [
+        { key: 'kind', type: 'select', label: 'Kind', options: ['ASI', 'Feat'], page: 'growth' },
+        {
+          key: 'what',
+          type: 'select',
+          label: 'Which feat',
+          options: ['Alert', 'Tough'],
+          page: 'growth',
+          visible_if: "answer.kind == 'Feat'",
+        },
+        { key: 'origin', type: 'select', label: 'Origin', options: ['Acolyte', 'Sage'] },
+        {
+          key: 'tool',
+          type: 'select',
+          label: 'Tool',
+          options: ['Lute'],
+          visible_if: "answer.kind == 'ASI'",
+        },
+      ],
+      pages: { growth: { label: 'Growth' }, 'step:origin': { later: 'origin_later' } },
+      apply: [],
+    }
+    const next = () => screen.getByRole('button', { name: 'Next' })
+    const back = () => screen.getByRole('button', { name: 'Back' })
+
+    it('goes page by page, Next once the page is answered, Back keeping the answers', async () => {
+      const onConfirm = vi.fn()
+      render(
+        <PromptDialog
+          prompt={PAGED}
+          document={DOCUMENT}
+          data={{}}
+          context={SHEET}
+          onConfirm={onConfirm}
+        />
+      )
+      expect(screen.getByText('Growth · 1 of 2')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+      expect(next()).toBeDisabled()
+      await userEvent.click(screen.getByLabelText('Feat'))
+      // A step the page's answers call for shows on the same page.
+      expect(next()).toBeDisabled()
+      await userEvent.click(screen.getByLabelText('Tough'))
+      await userEvent.click(next())
+      // The Tool step is hidden: its page is passed over.
+      expect(screen.getByText('2 of 2')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Tough')).not.toBeInTheDocument()
+      await userEvent.click(back())
+      expect(screen.getByLabelText('Tough')).toBeChecked()
+      await userEvent.click(next())
+      await userEvent.click(screen.getByLabelText('Sage'))
+      await userEvent.click(confirm())
+      expect(onConfirm).toHaveBeenCalledWith(
+        { kind: 'Feat', what: 'Tough', origin: 'Sage' },
+        [],
+        []
+      )
+    })
+
+    it('skips a page naming a prompt for later, and asks it again when come back to', async () => {
+      const onConfirm = vi.fn()
+      render(
+        <PromptDialog
+          prompt={PAGED}
+          document={DOCUMENT}
+          data={{}}
+          context={SHEET}
+          onConfirm={onConfirm}
+        />
+      )
+      // The first page names no prompt for later: it cannot be skipped.
+      expect(screen.queryByRole('button', { name: 'Skip, choose later' })).not.toBeInTheDocument()
+      await userEvent.click(screen.getByLabelText('Feat'))
+      await userEvent.click(screen.getByLabelText('Alert'))
+      await userEvent.click(next())
+      await userEvent.click(screen.getByLabelText('Acolyte'))
+      await userEvent.click(screen.getByRole('button', { name: 'Skip, choose later' }))
+      expect(screen.getByText('Skipped: it waits among the choices to make.')).toBeInTheDocument()
+      expect(confirm()).toBeEnabled()
+      await userEvent.click(back())
+      await userEvent.click(next())
+      // Come back to, the page is asked again, its answer let go.
+      expect(screen.getByLabelText('Acolyte')).not.toBeChecked()
+      expect(confirm()).toBeDisabled()
+      await userEvent.click(screen.getByRole('button', { name: 'Skip, choose later' }))
+      await userEvent.click(confirm())
+      expect(onConfirm).toHaveBeenCalledWith(
+        { kind: 'Feat', what: 'Alert' },
+        ['step:origin'],
+        ['origin_later']
+      )
+    })
+
+    it('opens again on its last page with its answers, Back from the first page going further', async () => {
+      const onBack = vi.fn()
+      render(
+        <PromptDialog
+          prompt={PAGED}
+          document={DOCUMENT}
+          data={{}}
+          context={SHEET}
+          onBack={onBack}
+          resume={{ answers: { kind: 'Feat', what: 'Alert' }, skipped: ['step:origin'] }}
+        />
+      )
+      expect(screen.getByText('2 of 2')).toBeInTheDocument()
+      expect(confirm()).toBeEnabled()
+      await userEvent.click(back())
+      expect(screen.getByLabelText('Alert')).toBeChecked()
+      await userEvent.click(back())
+      expect(onBack).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('asks an entries step for no more than the catalog offers', async () => {
@@ -506,7 +628,7 @@ describe('PromptDialog', () => {
     await userEvent.click(screen.getByLabelText('History'))
     expect(screen.getByLabelText('Insight')).toBeDisabled()
     await userEvent.click(confirm())
-    expect(onConfirm).toHaveBeenCalledWith({ skills: ['History'] })
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({ skills: ['History'] })
   })
 
   it('can always be put off, by button or Escape', async () => {

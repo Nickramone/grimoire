@@ -725,6 +725,14 @@ describe('pending prompts', () => {
     expect(pendingPrompts(patch)).toHaveLength(1)
   })
 
+  it('keeps the record it adds to, and none of what Back reopens it with', () => {
+    const patch = withPending(
+      {},
+      { prompt: 'species_later', record: 'level:1', resume: { answers: {}, skipped: [] } }
+    )
+    expect(patch).toEqual({ _pending_prompts: [{ prompt: 'species_later', record: 'level:1' }] })
+  })
+
   it('forgets it once answered, and every prompt of a field picked again', () => {
     const data = {
       _pending_prompts: [

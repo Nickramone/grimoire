@@ -694,9 +694,9 @@ def _coerce_records(fields: dict, value: Any, content_types: dict) -> dict:
 def _coerce_pending_prompts(document: dict, value: Any) -> list:
     """Clean the list of prompts the player put off.
 
-    Each is `{"prompt": name, "source": field, "ref": entry id}`: the sheet's
-    prompt, and - when a pick opened it - the field picked and the entry, so
-    reopening it reads the same entry. A prompt the sheet no longer declares
+    Each is `{"prompt": name, "source": field, "ref": entry id, "record": key}`:
+    the sheet's prompt, and - when a pick opened it - the field picked and the
+    entry, so reopening it reads the same entry; and the record it adds to. A prompt the sheet no longer declares
     is dropped, as is a source that is not a field.
     """
     prompts = document.get("prompts")
@@ -717,6 +717,11 @@ def _coerce_pending_prompts(document: dict, value: Any) -> list:
             ref = item.get("ref")
             if isinstance(ref, (str, int)) and not isinstance(ref, bool) and str(ref):
                 kept["ref"] = str(ref)[:200]
+        # The record it adds to - a level's, for a page of a Level up skipped -
+        # so choosing it later still keeps what it adds with that level.
+        record = item.get("record")
+        if isinstance(record, str) and record.strip():
+            kept["record"] = record.strip()[:_MAX_RECORD_KEY]
         if kept not in cleaned:
             cleaned.append(kept)
     return cleaned

@@ -337,6 +337,22 @@ class TestPendingPrompts:
             ],
         ) == [{"prompt": "lineage"}]
 
+    def test_keeps_the_record_it_adds_to(self):
+        assert _coerce_pending_prompts(
+            self.document,
+            [
+                {"prompt": "lineage", "record": " level:1 "},
+                {"prompt": "level_up", "record": ""},
+                {"prompt": "level_up", "source": "species", "ref": "elf", "record": ["level:2"]},
+                {"prompt": "lineage", "record": "x" * 300},
+            ],
+        ) == [
+            {"prompt": "lineage", "record": "level:1"},
+            {"prompt": "level_up"},
+            {"prompt": "level_up", "source": "species", "ref": "elf"},
+            {"prompt": "lineage", "record": "x" * 100},
+        ]
+
     def test_keeps_at_most_twenty(self):
         many = [{"prompt": "lineage", "source": "species", "ref": str(i)} for i in range(30)]
         assert len(_coerce_pending_prompts(self.document, many)) == 20

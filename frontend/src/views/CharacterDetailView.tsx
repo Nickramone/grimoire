@@ -79,6 +79,16 @@ const TYPED_FIELDS = new Set(['text', 'number', 'textarea'])
  * longer installed must still open — it renders read-only from stored data
  * rather than 404ing.
  */
+// A prompt confirmed in a chain: what Back needs to ask it again.
+type ChainStep = {
+  request: PromptRequest
+  answers: Answers
+  skipped: string[]
+  // The sheet before it was confirmed, and the queue it was at the head of.
+  data: Values
+  queue: PromptRequest[]
+}
+
 export default function CharacterDetailView() {
   const { characterId = '' } = useParams()
   const navigate = useNavigate()
@@ -97,6 +107,14 @@ export default function CharacterDetailView() {
   // The sheet's prompts waiting to be shown, after any choice: a level's hit
   // points and feat, a background's ability increases.
   const [prompts, setPrompts] = useState<PromptRequest[]>([])
+  // The prompts confirmed one after another while the queue still had one to
+  // show: each with the sheet as it stood before it, so Back can put the sheet
+  // back and ask it again. Let go once the queue is empty.
+  const [chain, setChain] = useState<ChainStep[]>([])
+  const confirmingRef = useRef(false)
+  const [settled, setSettled] = useState(0)
+  // Bumped when Back opens a prompt again, so its dialog starts afresh.
+  const [reopened, setReopened] = useState(0)
   // Entries the player just picked, overlaid on the resolved ones until the
   // next save brings them back from the server. Without it a derived value -
   // "a wizard casts spells" - would lag the pick by a round trip.
@@ -531,11 +549,28 @@ export default function CharacterDetailView() {
       ? rowSource(request.source, request.ref)
       : request.source
 
-  const confirmPrompt = async (answers: Answers) => {
+  const confirmPrompt = async (answers: Answers, skipped: string[] = [], later: string[] = []) => {
     const request = prompts[0]
     const definition = findPrompt(document, request?.prompt)
     setPrompts((prev) => prev.slice(1))
     if (!request || !definition) return
+    confirmingRef.current = true
+    const step: ChainStep = { request, answers, skipped, data: dataRef.current, queue: prompts }
+    setChain((prev) => [...prev, step])
+    try {
+      await applyConfirmed(request, definition, answers, later)
+    } finally {
+      confirmingRef.current = false
+      setSettled((n) => n + 1)
+    }
+  }
+
+  const applyConfirmed = async (
+    request: PromptRequest,
+    definition: NonNullable<ReturnType<typeof findPrompt>>,
+    answers: Answers,
+    later: string[]
+  ) => {
     // A prompt keeping a record - a level gained - keeps what it adds there,
     // and so do the prompts it opens next.
     const record = promptRecord(definition, request, promptSheet)
@@ -556,6 +591,12 @@ export default function CharacterDetailView() {
         })
       : {}
     applyPatch({ ...plan.patch, ...granted, ...withoutPending(dataRef.current, request) })
+    // The pages skipped wait among the choices to make, as the prompts the
+    // sheet names for them, adding to the same record when they are chosen.
+    for (const prompt of later) {
+      const patch = withPending(dataRef.current, record ? { prompt, record } : { prompt })
+      if (Object.keys(patch).length) applyPatch(patch)
+    }
     // Each pick goes the way a pick by hand goes, so its own on_pick runs -
     // a feat's prompt joining the queue after this one.
     for (const pick of plan.picks) await onChange(pick.field, pick.value, { entry: pick.entry })
@@ -565,6 +606,43 @@ export default function CharacterDetailView() {
         ...plan.prompts.map((prompt) => (record ? { prompt, record } : { prompt })),
       ])
     }
+  }
+
+  // The chain ends when nothing is left to ask: Back reaches no further.
+  useEffect(() => {
+    if (!confirmingRef.current && !prompts.length && !choices.length) {
+      setChain((prev) => (prev.length ? [] : prev))
+    }
+  }, [prompts, choices, settled])
+
+  // The sheet put back as it was: what differs set again, what was not there
+  // handed back to its automatic value.
+  const restoreData = (before: Values) => {
+    const now = dataRef.current
+    const patch: Values = {}
+    const gone: string[] = []
+    for (const key of new Set([...Object.keys(now), ...Object.keys(before)])) {
+      if (!(key in before)) gone.push(key)
+      else if (JSON.stringify(now[key]) !== JSON.stringify(before[key])) patch[key] = before[key]
+    }
+    if (Object.keys(patch).length) applyPatch(patch)
+    for (const key of gone) onReset(key)
+  }
+
+  // Back from a prompt's first page: the prompt confirmed before it is taken
+  // back - the sheet as it stood, the queue as it was - and asked again on its
+  // last page, with its answers.
+  const backPrompt = () => {
+    const step = chain[chain.length - 1]
+    if (!step || readOnly) return
+    setChain((prev) => prev.slice(0, -1))
+    restoreData(step.data)
+    setChoices([])
+    setPrompts([
+      { ...step.request, resume: { answers: step.answers, skipped: step.skipped } },
+      ...step.queue.slice(1),
+    ])
+    setReopened((n) => n + 1)
   }
 
   // Put off: kept under «Choices to make» only when a pick opened it. A prompt
@@ -947,7 +1025,7 @@ export default function CharacterDetailView() {
         {currentPrompt && currentDefinition ? (
           <PromptDialog
             // Keyed so the next prompt starts with no answers.
-            key={`${currentPrompt.prompt}:${currentPrompt.source || ''}:${prompts.length}`}
+            key={`${currentPrompt.prompt}:${currentPrompt.source || ''}:${prompts.length}:${reopened}`}
             prompt={currentDefinition}
             document={document}
             data={dataRef.current}
@@ -959,8 +1037,10 @@ export default function CharacterDetailView() {
                 : undefined
             }
             browse={browseEntries}
-            onConfirm={(answers) => void confirmPrompt(answers)}
+            onConfirm={(answers, skipped, later) => void confirmPrompt(answers, skipped, later)}
             onSkip={skipPrompt}
+            onBack={chain.length ? backPrompt : undefined}
+            resume={currentPrompt.resume}
           />
         ) : null}
 
