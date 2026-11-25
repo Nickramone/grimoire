@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LuSearch, LuX, LuPencil, LuInfo } from 'react-icons/lu'
 import ContentBrowser from './ContentBrowser'
 import ContentEntryDetail from './ContentEntryDetail'
-import { catalogFilters } from './catalogFilters'
+import { catalogFilters, catalogNote } from './catalogFilters'
 import ContentEntryDialog from './ContentEntryDialog'
 import type { ContentRefValue } from './ContentBrowser'
 import FieldRenderer from './FieldRenderer'
@@ -307,6 +307,7 @@ export default function ContentRefField({
           typeDefinition={typeDefinition}
           chosen={ref && !inline ? [ref] : []}
           fixedFilters={catalogFilters(definition, context)}
+          entryNote={catalogNote(definition, context)}
           onChoose={(picked, chosenEntry) => {
             setEditingInline(false)
             onChange?.(picked, { entry: chosenEntry })

@@ -384,10 +384,13 @@ describe('PromptDialog', () => {
       )
       // The first page names no prompt for later: it cannot be skipped.
       expect(screen.queryByRole('button', { name: 'Skip, choose later' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Choose later' })).toBeInTheDocument()
       await userEvent.click(screen.getByLabelText('Feat'))
       await userEvent.click(screen.getByLabelText('Alert'))
       await userEvent.click(next())
       await userEvent.click(screen.getByLabelText('Acolyte'))
+      // A page that can be skipped offers that one way to choose later.
+      expect(screen.queryByRole('button', { name: 'Choose later' })).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Skip, choose later' }))
       expect(screen.getByText('Skipped: it waits among the choices to make.')).toBeInTheDocument()
       expect(confirm()).toBeEnabled()

@@ -236,20 +236,23 @@ export default function PromptDialog({
             <button
               type="button"
               onClick={() => (current > 0 ? goTo(current - 1) : onBack?.())}
-              style={{ ...ghostBtn, marginRight: 'auto' }}
+              style={ghostBtn}
             >
               <LuChevronLeft size={14} />
               {t('characters.promptBack')}
             </button>
           ) : null}
-          <button type="button" onClick={onSkip} style={ghostBtn}>
-            {t('characters.chooseLater')}
-          </button>
+          {/* One way to leave a choice for later, beside Back: the page's own
+              when it can be skipped, else the whole prompt's. */}
           {canSkipPage ? (
-            <button type="button" onClick={skipPage} style={ghostBtn}>
+            <button type="button" onClick={skipPage} style={{ ...ghostBtn, marginRight: 'auto' }}>
               {t('characters.promptSkipPage')}
             </button>
-          ) : null}
+          ) : (
+            <button type="button" onClick={onSkip} style={{ ...ghostBtn, marginRight: 'auto' }}>
+              {t('characters.chooseLater')}
+            </button>
+          )}
           {last ? (
             <button
               type="button"

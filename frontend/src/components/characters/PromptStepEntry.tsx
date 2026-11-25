@@ -135,7 +135,9 @@ export default function EntryStep({
           style={fieldInput}
         />
       ) : null}
-      <ul style={{ ...optionList, maxHeight: 360, overflowY: 'auto' }}>
+      {/* A long list scrolls in its own box; an entry opened to read lets the
+          dialog's own scroll show it whole. */}
+      <ul style={open ? optionList : { ...optionList, maxHeight: 360, overflowY: 'auto' }}>
         {shown.map((entry) => {
           const key = `${entry._source || ''}:${entry._ref}`
           const name = entry.name || entry._ref

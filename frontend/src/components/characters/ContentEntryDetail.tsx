@@ -21,6 +21,8 @@ export interface ContentFieldDefinition extends FieldDefinition {
   filter?: Record<string, unknown>
   // Browser filters worked out from the character: field -> formula.
   filter_from?: Record<string, string>
+  // A note beside each entry's name in the browser, reading it as `entry`.
+  entry_note?: string
 }
 
 export interface ContentEntryDetailProps {

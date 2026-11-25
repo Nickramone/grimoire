@@ -74,6 +74,12 @@ describe('ContentBrowser', () => {
     expect(screen.getByText('Fireball — evocation 3')).toBeInTheDocument()
   })
 
+  it("shows the field's note beside each entry's name", async () => {
+    renderBrowser({ entryNote: (entry: Record<string, unknown>) => `Lv. ${entry.level}` })
+    expect(await screen.findByText('Lv. 3')).toBeInTheDocument()
+    expect(screen.getByText('Lv. 1')).toBeInTheDocument()
+  })
+
   it('shows how many entries matched', async () => {
     renderBrowser()
     expect(await screen.findByText(/2 entries/i)).toBeInTheDocument()

@@ -34,6 +34,8 @@ export interface ContentBrowserProps {
   // The field's own `filter`: always applied, and its fields offer no facet,
   // so a base weapon is picked from the weapons and nothing else.
   fixedFilters?: Record<string, unknown>
+  // The field's `entry_note`: a note beside each entry's name (a weapon's mastery).
+  entryNote?: (entry: Record<string, unknown>) => string
   // The reference to store, and the picked entry's own properties.
   onChoose?: (ref: { _ref: string; _source: string }, entry: Record<string, unknown>) => void
   onClose?: () => void
@@ -57,6 +59,7 @@ export default function ContentBrowser({
   multiple = false,
   chosen = [],
   fixedFilters,
+  entryNote,
   onChoose,
   onClose,
 }: ContentBrowserProps) {
@@ -70,6 +73,9 @@ export default function ContentBrowser({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [detail, setDetail] = useState<CatalogEntry | null>(null)
+
+  const noteOf = (entry: CatalogEntry) =>
+    entryNote ? entryNote({ ...(entry.data || {}), name: entry.name }) : ''
 
   const searchRef = useRef<HTMLInputElement>(null)
   // Serialised, so a definition rebuilt on every render does not reload.
@@ -279,7 +285,21 @@ export default function ContentBrowser({
                             minWidth: 0,
                           }}
                         >
-                          <div style={{ fontWeight: 600 }}>{entry.name}</div>
+                          <div style={{ fontWeight: 600 }}>
+                            {entry.name}
+                            {noteOf(entry) ? (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  fontSize: 12,
+                                  fontWeight: 400,
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                {noteOf(entry)}
+                              </span>
+                            ) : null}
+                          </div>
                           {entry.display ? (
                             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                               {entry.display}

@@ -229,6 +229,23 @@ def _validate_filter_from(field_name: str, definition: Any, known: set, images: 
         _validate_condition(formula, f"{what} filter_from {key!r}", known, images)
 
 
+def _validate_entry_note(field_name: str, definition: Any, known: set, images: Any) -> None:
+    """Check a catalog field's `entry_note`: a note beside each entry in the browser.
+
+    The formula reads the candidate as `entry` beside the character - a
+    weapon's mastery, `entry.mastery`.
+    """
+    if not isinstance(definition, dict) or "entry_note" not in definition:
+        return
+    what = f"Field {field_name!r}"
+    if definition.get("type") not in _CONTENT_TYPES_FIELDS:
+        raise SchemaError(f"{what} has an 'entry_note' but does not pick from a catalog")
+    note = definition["entry_note"]
+    if not isinstance(note, str) or not note.strip():
+        raise SchemaError(f"{what} 'entry_note' must be a non-empty expression")
+    _validate_formula(note, f"{what} 'entry_note'", known | {PROMPT_ENTRY_NAME}, images)
+
+
 def _derived_columns(definition: Any) -> list[dict]:
     """A list field's columns that work out their value with `default_from`."""
     if not isinstance(definition, dict) or definition.get("type") != "list":
@@ -1452,6 +1469,7 @@ def validate_schema(document: Any, *, scope: str = "gc-sheet") -> dict:
                     ) from exc
                 raise
         _validate_filter_from(field_name, definition, known, images)
+        _validate_entry_note(field_name, definition, known, images)
         _validate_column_formulas(field_name, definition, fields, computed, images)
 
     content_types = _require_dict(document.get("content_types", {}), "'content_types'")

@@ -27,3 +27,21 @@ export function catalogFilters(
   }
   return Object.keys(result).length ? result : undefined
 }
+
+/**
+ * A catalog field's `entry_note`, as a function of a candidate: the formula
+ * reads the entry as `entry` beside the character, and its text is shown next
+ * to the entry's name in the browser (a weapon's mastery). None without one.
+ */
+export function catalogNote(
+  definition: { entry_note?: unknown },
+  context?: Record<string, unknown>
+): ((entry: Record<string, unknown>) => string) | undefined {
+  const formula = definition.entry_note
+  if (typeof formula !== 'string' || !formula.trim()) return undefined
+  return (entry) => {
+    const value = evaluate<symbol>(formula, { ...(context || {}), entry } as never, FAILED)
+    if (value === FAILED || value === null || value === undefined) return ''
+    return String(value).trim()
+  }
+}
