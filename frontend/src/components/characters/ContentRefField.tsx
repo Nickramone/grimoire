@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LuSearch, LuX, LuPencil, LuInfo } from 'react-icons/lu'
 import ContentBrowser from './ContentBrowser'
 import ContentEntryDetail from './ContentEntryDetail'
+import { catalogFilters } from './catalogFilters'
 import ContentEntryDialog from './ContentEntryDialog'
 import type { ContentRefValue } from './ContentBrowser'
 import FieldRenderer from './FieldRenderer'
@@ -26,6 +27,8 @@ export interface ContentRefFieldProps {
   ) => void
   readOnly?: boolean
   hideLabel?: boolean
+  // The character as formulas read it, for the field's `filter_from`.
+  context?: Record<string, unknown>
 }
 
 /**
@@ -49,6 +52,7 @@ export default function ContentRefField({
   onChange,
   readOnly = false,
   hideLabel = false,
+  context,
 }: ContentRefFieldProps) {
   const { t } = useTranslation()
   const [browsing, setBrowsing] = useState(false)
@@ -302,7 +306,7 @@ export default function ContentRefField({
           contentType={definition.content_type!}
           typeDefinition={typeDefinition}
           chosen={ref && !inline ? [ref] : []}
-          fixedFilters={definition.filter}
+          fixedFilters={catalogFilters(definition, context)}
           onChoose={(picked, chosenEntry) => {
             setEditingInline(false)
             onChange?.(picked, { entry: chosenEntry })

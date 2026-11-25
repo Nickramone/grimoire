@@ -393,6 +393,22 @@ class TestPicksInsideARow:
         with pytest.raises(SchemaError, match="filter"):
             validate_schema(self._schema(filter=bad))
 
+    def test_a_filter_from_formula_reads_the_character(self):
+        from backend.services.characters.schema import validate_schema
+
+        document = self._schema(filter_from={"school": "concat(signature, ',', 'evocation')"})
+        assert validate_schema(document)["fields"]["spells"]["filter_from"]
+
+    @pytest.mark.parametrize(
+        "bad",
+        [{}, [], {"school": ""}, {"school": 3}, {"bad key": "signature"}, {"school": "ghost_field"}],
+    )
+    def test_a_malformed_filter_from_is_rejected(self, bad):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match="filter_from"):
+            validate_schema(self._schema(filter_from=bad))
+
     def test_a_per_entry_pick_must_name_a_declared_content_type(self):
         from backend.services.characters.schema import SchemaError, validate_schema
 

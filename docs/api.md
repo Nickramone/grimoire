@@ -2930,6 +2930,12 @@ ones, and a formula reads it through the row:
   each key is a field of the content type, each value one value or a list of
   values any of which matches. Those fields offer no facet of their own. The
   catalog endpoint takes the same shape as a repeated `filter[field]=value`.
+- `filter_from` (on the same fields) works filters out from the character:
+  each key is a field of the content type, each value a formula reading the
+  sheet, computed values included. Its result is a value, a list, or text naming
+  several values separated by commas; one that works out to nothing leaves that
+  key unfiltered. It adds to `filter`, so a list of class options can offer only
+  the kinds the character's classes name.
 - `default_from` on a per-entry field is worked out once, when the entry is
   added, with the added entry as `row`. For a per-entry `content_ref` a text
   result is the id of the entry to pick; an empty result leaves it unset.

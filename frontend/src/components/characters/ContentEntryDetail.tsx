@@ -19,6 +19,8 @@ export interface ContentFieldDefinition extends FieldDefinition {
   display_columns?: (string | { key: string; label?: string })[]
   // Fixed browser filters: a value, or a list of values any of which matches.
   filter?: Record<string, unknown>
+  // Browser filters worked out from the character: field -> formula.
+  filter_from?: Record<string, string>
 }
 
 export interface ContentEntryDetailProps {

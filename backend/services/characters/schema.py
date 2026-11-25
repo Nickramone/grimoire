@@ -204,6 +204,31 @@ def _validate_catalog_filter(what: str, catalog_filter: Any) -> None:
             )
 
 
+def _validate_filter_from(field_name: str, definition: Any, known: set, images: Any) -> None:
+    """Check a catalog field's `filter_from`: the browser's filters, from the character.
+
+    `{"option_type": "concat(ref(klass, 'option_type'), ',', ...)"}` opens the
+    picker on the entries whose `option_type` is one the character's classes
+    name. Each formula reads the character, computed values included, and works
+    out to a value, a list, or text naming several values separated by commas;
+    one that works out to nothing leaves that key unfiltered.
+    """
+    if not isinstance(definition, dict) or "filter_from" not in definition:
+        return
+    what = f"Field {field_name!r}"
+    if definition.get("type") not in _CONTENT_TYPES_FIELDS:
+        raise SchemaError(f"{what} has a 'filter_from' but does not pick from a catalog")
+    filter_from = definition["filter_from"]
+    if not isinstance(filter_from, dict) or not filter_from:
+        raise SchemaError(f"{what} 'filter_from' must be a non-empty object of field: formula")
+    for key, formula in filter_from.items():
+        if not _NAME_RE.match(str(key)):
+            raise SchemaError(f"{what} filter_from key {key!r} is not a valid identifier")
+        if not isinstance(formula, str) or not formula.strip():
+            raise SchemaError(f"{what} filter_from {key!r} must be a non-empty expression")
+        _validate_condition(formula, f"{what} filter_from {key!r}", known, images)
+
+
 def _derived_columns(definition: Any) -> list[dict]:
     """A list field's columns that work out their value with `default_from`."""
     if not isinstance(definition, dict) or definition.get("type") != "list":
@@ -1397,6 +1422,7 @@ def validate_schema(document: Any, *, scope: str = "gc-sheet") -> dict:
                         "values, which are worked out after it"
                     ) from exc
                 raise
+        _validate_filter_from(field_name, definition, known, images)
         _validate_column_formulas(field_name, definition, fields, computed, images)
 
     content_types = _require_dict(document.get("content_types", {}), "'content_types'")

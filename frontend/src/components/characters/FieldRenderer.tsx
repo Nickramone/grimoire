@@ -140,6 +140,7 @@ export default function FieldRenderer({
         onChange={onChange}
         readOnly={readOnly}
         hideLabel={hideLabel}
+        context={context}
       />
     )
   }
