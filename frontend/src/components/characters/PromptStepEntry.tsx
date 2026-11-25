@@ -5,7 +5,7 @@ import Spinner from '../Spinner'
 import ContentEntryDetail from './ContentEntryDetail'
 import type { ContentTypeDefinition } from './ContentEntryDetail'
 import { fieldInput, helpText, iconBtn } from './characterStyles'
-import { entryNote, loadEntryOptions, stepCount } from './sheetPrompts'
+import { entryFilter, entryNote, loadCatalog, stepCount } from './sheetPrompts'
 import type { EntryAnswer } from './sheetPrompts'
 import { optionLabel, optionList } from './promptStepShared'
 import type { StepControlProps } from './promptStepShared'
@@ -20,11 +20,12 @@ export default function EntryStep({
   context,
   document,
   browse,
+  loadEntries,
   onAnswer,
   onAvailable,
 }: StepControlProps) {
   const { t } = useTranslation()
-  const [entries, setEntries] = useState<EntryAnswer[] | null>(null)
+  const [catalog, setCatalog] = useState<EntryAnswer[] | null>(null)
   const [failed, setFailed] = useState('')
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState('')
@@ -40,38 +41,58 @@ export default function EntryStep({
       ? [value as EntryAnswer]
       : []
   const chosen = new Set(picked.map((entry) => String(entry._ref ?? '')))
-  const wanted = multiple ? Math.min(stepCount(step, context), entries?.length ?? Infinity) : 1
-  const remaining = Math.max(0, wanted - picked.length)
 
-  // Loaded once per opening: the filter reads the sheet and the answers as
-  // they were when the step first showed.
+  // The catalog is read once per opening; the `filter` is worked out again at
+  // each answer - the steps before, and this step's own, so an option whose
+  // prerequisite is ticked here shows at once.
   useEffect(() => {
     let cancelled = false
-    if (!browse || !step.content_type) {
-      setEntries([])
-      onAvailable?.(0)
-      return undefined
-    }
     const contentType = step.content_type
-    loadEntryOptions(step, context, (page, size) =>
-      browse(contentType, step.filters || {}, page, size)
-    )
+    const loading = loadEntries
+      ? loadEntries(step)
+      : browse && contentType
+        ? loadCatalog((page, size) => browse(contentType, step.filters || {}, page, size))
+        : Promise.resolve([])
+    loading
       .then((found) => {
-        if (cancelled) return
-        setEntries(found)
-        onAvailable?.(found.length)
+        if (!cancelled) setCatalog(found)
       })
       .catch((e: Error) => {
         if (cancelled) return
         setFailed(e.message)
-        setEntries([])
-        onAvailable?.(0)
+        setCatalog([])
       })
     return () => {
       cancelled = true
     }
+  }, [browse, loadEntries, step])
+
+  const passes = useMemo(() => entryFilter(step), [step])
+  const entries = useMemo(() => {
+    if (catalog === null) return null
+    const answers = (context.answer || {}) as Record<string, unknown>
+    const own = { ...context, answer: { ...answers, [step.key]: value } }
+    return catalog.filter((entry) => passes(entry, own))
+  }, [catalog, passes, context, step.key, value])
+
+  useEffect(() => {
+    if (entries !== null) onAvailable?.(entries.length)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [browse, step])
+  }, [entries?.length])
+
+  // A choice the filter no longer lets through - its prerequisite unticked, an
+  // earlier answer changed - is let go without a word.
+  useEffect(() => {
+    if (entries === null || !picked.length) return
+    const offered = new Set(entries.map((entry) => String(entry._ref ?? '')))
+    const kept = picked.filter((entry) => offered.has(String(entry._ref ?? '')))
+    if (kept.length === picked.length) return
+    onAnswer(multiple ? kept : undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries])
+
+  const wanted = multiple ? Math.min(stepCount(step, context), entries?.length ?? Infinity) : 1
+  const remaining = Math.max(0, wanted - picked.length)
 
   const shown = useMemo(() => {
     const terms = search.trim().toLowerCase()

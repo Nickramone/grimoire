@@ -217,6 +217,93 @@ describe('PromptDialog', () => {
     })
   })
 
+  it('offers at once an option whose prerequisite is ticked in the same step', async () => {
+    const prompt: SheetPrompt = {
+      ...LEVEL_UP,
+      steps: [
+        {
+          key: 'opts',
+          type: 'entries',
+          content_type: 'option',
+          count: 2,
+          filter: "entry.requires == '' or has_ref(answer.opts, entry.requires)",
+        },
+      ],
+    }
+    const browse = async () => ({
+      entries: [
+        { entry_id: 'blade', name: 'Pact of the Blade', data: { requires: '' } },
+        { entry_id: 'sight', name: 'Devil Sight', data: { requires: '' } },
+        { entry_id: 'thirst', name: 'Thirsting Blade', data: { requires: 'blade' } },
+      ],
+      total: 3,
+    })
+    const onConfirm = vi.fn()
+    render(
+      <PromptDialog
+        prompt={prompt}
+        document={DOCUMENT}
+        data={{}}
+        context={SHEET}
+        browse={browse}
+        onConfirm={onConfirm}
+      />
+    )
+    await userEvent.click(await screen.findByLabelText('Pact of the Blade'))
+    await userEvent.click(await screen.findByLabelText('Thirsting Blade'))
+    expect(confirm()).toBeEnabled()
+    // Its prerequisite unticked, it goes too, without a word.
+    await userEvent.click(screen.getByLabelText('Pact of the Blade'))
+    await waitFor(() => expect(screen.queryByLabelText('Thirsting Blade')).not.toBeInTheDocument())
+    expect(screen.getByRole('status')).toHaveTextContent('2 left to choose')
+    expect(confirm()).toBeDisabled()
+    await userEvent.click(screen.getByLabelText('Pact of the Blade'))
+    await userEvent.click(await screen.findByLabelText('Devil Sight'))
+    await userEvent.click(confirm())
+    expect(onConfirm).toHaveBeenCalledWith({
+      opts: [
+        { requires: '', name: 'Pact of the Blade', _ref: 'blade', _source: undefined },
+        { requires: '', name: 'Devil Sight', _ref: 'sight', _source: undefined },
+      ],
+    })
+  })
+
+  it('filters a step again when an earlier answer changes, reading the catalog once', async () => {
+    const prompt: SheetPrompt = {
+      ...LEVEL_UP,
+      steps: [
+        { key: 'species', type: 'entry', content_type: 'lineage', filter: "entry.species == ''" },
+        {
+          key: 'lineage',
+          type: 'entry',
+          content_type: 'lineage',
+          visible_if: 'answer.species',
+          filter: 'entry.species == answer.species.name',
+        },
+      ],
+    }
+    const browse = vi.fn(async () => ({
+      entries: [
+        { entry_id: 'elf', name: 'Elf', data: { species: '' } },
+        { entry_id: 'gnome', name: 'Gnome', data: { species: '' } },
+        { entry_id: 'high', name: 'High Elf', data: { species: 'Elf' } },
+        { entry_id: 'forest', name: 'Forest Gnome', data: { species: 'Gnome' } },
+      ],
+      total: 4,
+    }))
+    render(
+      <PromptDialog prompt={prompt} document={DOCUMENT} data={{}} context={SHEET} browse={browse} />
+    )
+    await userEvent.click(await screen.findByLabelText('Elf'))
+    await userEvent.click(await screen.findByLabelText('High Elf'))
+    expect(confirm()).toBeEnabled()
+    await userEvent.click(screen.getByLabelText('Gnome'))
+    expect(await screen.findByLabelText('Forest Gnome')).not.toBeChecked()
+    expect(screen.queryByLabelText('High Elf')).not.toBeInTheDocument()
+    expect(confirm()).toBeDisabled()
+    expect(browse).toHaveBeenCalledTimes(1)
+  })
+
   it('asks an entries step for no more than the catalog offers', async () => {
     const prompt: SheetPrompt = {
       ...LEVEL_UP,

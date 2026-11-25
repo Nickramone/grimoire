@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LuCheck } from 'react-icons/lu'
 import { goldBtn, ghostBtn, scrim, card, helpText } from './characterStyles'
-import { isComplete, numberDefault, promptContext, stepLabel, visibleSteps } from './sheetPrompts'
-import type { Answers, PromptDocument, SheetPrompt } from './sheetPrompts'
+import {
+  isComplete,
+  loadCatalog,
+  numberDefault,
+  promptContext,
+  stepLabel,
+  visibleSteps,
+} from './sheetPrompts'
+import type { Answers, EntryAnswer, PromptDocument, PromptStep, SheetPrompt } from './sheetPrompts'
 import PromptStepControl from './PromptStepControl'
 import type { BrowseEntries } from './promptStepShared'
 
@@ -56,6 +63,32 @@ export default function PromptDialog({
     return start
   })
 
+  // The catalog each `entry` step chooses from, read once when the dialog
+  // opens - every step's, shown yet or not - and filtered again at each answer.
+  const catalogs = useRef(new Map<string, Promise<EntryAnswer[]>>())
+  const loadEntries = useCallback(
+    (step: PromptStep): Promise<EntryAnswer[]> => {
+      const contentType = step.content_type || ''
+      if (!browse || !contentType) return Promise.resolve([])
+      const filters = step.filters || {}
+      const key = `${contentType} ${JSON.stringify(filters)}`
+      let loading = catalogs.current.get(key)
+      if (!loading) {
+        loading = loadCatalog((page, size) => browse(contentType, filters, page, size))
+        // A failed read is tried again by the next step asking for it.
+        loading.catch(() => catalogs.current.delete(key))
+        catalogs.current.set(key, loading)
+      }
+      return loading
+    },
+    [browse]
+  )
+  useEffect(() => {
+    for (const step of prompt.steps || []) {
+      if (step?.type === 'entry' || step?.type === 'entries') loadEntries(step).catch(() => {})
+    }
+  }, [prompt, loadEntries])
+
   // How many entries each `entries` step found: it asks for no more.
   const [available, setAvailable] = useState<Record<string, number>>({})
 
@@ -93,6 +126,7 @@ export default function PromptDialog({
           document={document}
           data={data}
           browse={browse}
+          loadEntries={loadEntries}
           onAnswer={(value) => answer(step.key, value)}
           onAvailable={(count) =>
             setAvailable((prev) =>

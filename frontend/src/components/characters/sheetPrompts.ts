@@ -1,6 +1,6 @@
 import { createContext } from 'react'
-import { buildContext, computeValues, evaluate, toNumber } from './expressions'
-import type { ExprContext, ExpressionDocument } from './expressions'
+import { buildContext, computeValues, evaluate, parse, toNumber } from './expressions'
+import type { ExprContext, ExprNode, ExpressionDocument } from './expressions'
 import { GRANTED_KEY, asList as listOf, grantInto, parallelList, perEntryAt } from './onPick'
 import type { ResolvedRefs } from './onPick'
 import { planAction } from './sheetActions'
@@ -436,6 +436,51 @@ export function passesFilter(step: PromptStep, entry: EntryAnswer, context: Expr
 }
 
 /**
+ * An `entry` step's `filter`, parsed once: a step's list is filtered again at
+ * each answer, so the formula is not read anew for every entry each time.
+ */
+export function entryFilter(
+  step: PromptStep
+): (entry: EntryAnswer, context: ExprContext) => boolean {
+  if (!step.filter) return () => true
+  let node: ExprNode
+  try {
+    node = parse(step.filter)
+  } catch {
+    return () => false
+  }
+  return (entry, context) => {
+    const value = evaluate<symbol>(node, { ...context, entry }, FAILED)
+    return value !== FAILED && Boolean(value)
+  }
+}
+
+/** Reads one page of one content type, with a step's fixed `filters`. */
+export type BrowsePage = (
+  page: number,
+  pageSize: number
+) => Promise<{
+  entries?: { entry_id: string; source?: string; name?: string; data?: unknown }[]
+  total?: number
+}>
+
+/**
+ * Every catalog entry of a content type the server lets through a step's fixed
+ * `filters`, read in pages - before its `filter` formula, which reads the
+ * answers and is worked out again as they change.
+ */
+export async function loadCatalog(browse: BrowsePage): Promise<EntryAnswer[]> {
+  const found: EntryAnswer[] = []
+  for (let page = 1; page <= ENTRY_MAX_PAGES; page += 1) {
+    const result = await browse(page, ENTRY_PAGE_SIZE)
+    const rows = result.entries || []
+    for (const row of rows) found.push(entryAnswer(row))
+    if (rows.length < ENTRY_PAGE_SIZE || page * ENTRY_PAGE_SIZE >= (result.total ?? 0)) break
+  }
+  return found
+}
+
+/**
  * Every entry an `entry` step offers: the catalog read in pages, with the
  * step's fixed `filters` asked of the server and its `filter` formula worked
  * out here, where the character is known.
@@ -443,25 +488,10 @@ export function passesFilter(step: PromptStep, entry: EntryAnswer, context: Expr
 export async function loadEntryOptions(
   step: PromptStep,
   context: ExprContext,
-  browse: (
-    page: number,
-    pageSize: number
-  ) => Promise<{
-    entries?: { entry_id: string; source?: string; name?: string; data?: unknown }[]
-    total?: number
-  }>
+  browse: BrowsePage
 ): Promise<EntryAnswer[]> {
-  const found: EntryAnswer[] = []
-  for (let page = 1; page <= ENTRY_MAX_PAGES; page += 1) {
-    const result = await browse(page, ENTRY_PAGE_SIZE)
-    const rows = result.entries || []
-    for (const row of rows) {
-      const entry = entryAnswer(row)
-      if (passesFilter(step, entry, context)) found.push(entry)
-    }
-    if (rows.length < ENTRY_PAGE_SIZE || page * ENTRY_PAGE_SIZE >= (result.total ?? 0)) break
-  }
-  return found
+  const passes = entryFilter(step)
+  return (await loadCatalog(browse)).filter((entry) => passes(entry, context))
 }
 
 /**

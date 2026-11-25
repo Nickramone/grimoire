@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { ExprContext } from './expressions'
-import type { PromptDocument, PromptStep } from './sheetPrompts'
+import type { EntryAnswer, PromptDocument, PromptStep } from './sheetPrompts'
 
 type Values = Record<string, unknown>
 
@@ -23,6 +23,9 @@ export interface StepControlProps {
   document: PromptDocument | null | undefined
   data: Values | null | undefined
   browse?: BrowseEntries
+  // The catalog an `entry` step chooses from, read once per dialog and shared
+  // by the steps reading the same content type with the same `filters`.
+  loadEntries?: (step: PromptStep) => Promise<EntryAnswer[]>
   onAnswer: (value: unknown) => void
   // An `entries` step says how many it found, so it asks for no more.
   onAvailable?: (count: number) => void
