@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
-import { planPick, planListChange, rowSource, applyChoice, fieldState, GRANTED_KEY } from './onPick'
+import {
+  planPick,
+  planListChange,
+  rowSource,
+  applyChoice,
+  fieldState,
+  GRANTED_KEY,
+  asList,
+} from './onPick'
 
 const SKILLS = ['Arcana', 'History', 'Insight', 'Religion', 'Stealth']
 
@@ -696,5 +704,21 @@ describe('planListChange — a pack grants its contents beside it', () => {
     })
     expect(patch.equipment).toEqual([{ _ref: 'rope', qty: 1 }])
     expect(patch[GRANTED_KEY]).toEqual({})
+  })
+})
+
+describe('asList', () => {
+  it('splits text on its commas, and takes a list item for item', () => {
+    expect(asList('a, b,,c')).toEqual(['a', 'b', 'c'])
+    expect(asList(['Fighting Style, Defense', 'Second Wind'])).toEqual([
+      'Fighting Style, Defense',
+      'Second Wind',
+    ])
+  })
+
+  it("reads a list's rows by their _ref, or by their name", () => {
+    const rows = [{ _ref: 'alert', name: 'Alert' }, { _inline: true, name: 'Lucky' }, 'tough']
+    expect(asList(rows)).toEqual(['alert', '', 'tough'])
+    expect(asList(rows, 'name')).toEqual(['Alert', 'Lucky', 'tough'])
   })
 })

@@ -154,6 +154,7 @@ def _with_apply(apply_step):
         (_with_apply({"grant": "skills", "from": "'a'", "names": "'a'"}), "content_list target"),
         (_with_apply({"grant": "feats", "from": "'a'", "carry": {"nope": "1"}}), "does not declare"),
         (_with_apply({"grant": "feats", "from": "'a'", "carry": []}), "'carry'"),
+        (_with_apply({"grant": "feats", "from": "'a'", "carry": {"name": "'b'"}}), "'names' sets"),
         (_with_apply({"grant": "feats", "from": "'a'", "source": "origin"}), "'source'"),
         (_with_apply({"grant": "feats", "from": "'a'", "values": {"nope": "1"}}), "per_entry"),
         (_with_apply({"grant": "feats", "from": "'a'", "values": {"from_level": "nowhere"}}),
@@ -175,7 +176,7 @@ def test_a_grant_step_reads_formulas_and_records_under_a_pick():
             "grant": "feats",
             "from": "row.feature_ids",
             "names": "row.feature_names",
-            "carry": {"name": "'x'"},
+            "carry": {"level": "1"},
             "source": "species",
         }
     )
