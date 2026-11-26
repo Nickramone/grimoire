@@ -488,15 +488,21 @@ def _validate_write_steps(
       step's answer) is picked entry by entry, each `values` formula reading
       the one being picked as `entry`;
     - `{"unpick": content_list, "entry": formula}` take out of a content_list
-      the row of the entry, or of each entry, a formula names, as a
-      row removed by hand, so what its `on_pick` granted goes with it - an
-      option given up for another;
+      the row of the entry, or of each entry, a formula names, as a row
+      removed by hand - an option given up for another. A reference is found
+      by its id, a freeform row by its name, in any case; the row is dropped
+      from every `_granted` record too, so a pick changed later does not take
+      back the same entry added again by hand;
     - `{"grant": field, "from": formula, "names": formula, "carry": {key:
       formula}, "source": field}` grant as an `on_pick` rule does, its
       properties worked out by formulas - a level's class features. `from`
       lists ids (or a multiselect's values); `names`, in the same order, are
       what each falls back to when the catalog has no such id; `carry` sets
-      values on those freeform entries. What it adds is recorded under
+      values on those freeform entries, other than `name`, which `names`
+      sets. A formula giving text is split on its commas, so a name holding
+      a comma must come in a list; a list is taken item for item, and a
+      content_list's rows by their `_ref` (in `from`) or `name` (in
+      `names`). What it adds is recorded under
       `source` (a content_ref with `on_pick`, so picking another class there
       takes it back), or else under the pick that opened the prompt.
     """
@@ -629,6 +635,8 @@ def _validate_prompt_grant(
             or {}
         )
         for key, formula in carry.items():
+            if key == "name":
+                raise SchemaError(f"{where} carries 'name', which 'names' sets")
             if key not in target_fields:
                 raise SchemaError(
                     f"{where} carries into {key!r}, which the target's content type "
@@ -719,7 +727,8 @@ def _validate_start_prompt(
     `when` still holds.
     """
     start = _require_dict(start, "'start_prompt'")
-    if start.get("prompt") not in prompt_names:
+    target = start.get("prompt")
+    if not isinstance(target, str) or target not in prompt_names:
         raise SchemaError(f"'start_prompt' opens unknown prompt {start.get('prompt')!r}")
     _validate_condition(start.get("when"), "'start_prompt' when", known, images)
 
@@ -797,7 +806,7 @@ def _validate_prompts(
             keys.add(key)
             where = f"{what} step {key!r}"
             kind = step.get("type")
-            if kind not in _PROMPT_STEP_TYPES:
+            if not isinstance(kind, str) or kind not in _PROMPT_STEP_TYPES:
                 allowed = ", ".join(sorted(_PROMPT_STEP_TYPES))
                 raise SchemaError(f"{where} needs a 'type': one of {allowed}")
             _validate_label(step.get("label"), where, MAX_PROMPT_LABEL, required=False)

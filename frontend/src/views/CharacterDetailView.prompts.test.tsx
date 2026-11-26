@@ -15,6 +15,8 @@ const mockGetSchema = vi.fn()
 const mockUpdate = vi.fn()
 const mockResolve = vi.fn()
 const mockBrowse = vi.fn()
+// The character the route names; a test may move to another.
+const route = vi.hoisted(() => ({ id: 'c1' }))
 
 vi.mock('../api', () => ({
   campaigns: { list: () => Promise.resolve([]) },
@@ -32,7 +34,7 @@ vi.mock('../api', () => ({
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
-  return { ...actual, useNavigate: () => vi.fn(), useParams: () => ({ characterId: 'c1' }) }
+  return { ...actual, useNavigate: () => vi.fn(), useParams: () => ({ characterId: route.id }) }
 })
 
 const ELF = { name: 'Elf', lineages: ['Drow', 'High Elf', 'Wood Elf'] }
@@ -48,6 +50,12 @@ function StubSheet({
       <button onClick={() => onChange('species', { _ref: 'elf' }, { entry: ELF })}>pick elf</button>
       <button onClick={() => open?.({ prompt: 'feat_up' })}>gain a feat</button>
       <button onClick={() => open?.({ prompt: 'level_gain' })}>gain a level</button>
+      <button onClick={() => open?.({ prompt: 'bonus_feat' })}>gain a bonus feat</button>
+      <button onClick={() => open?.({ prompt: 'origin_up' })}>take an origin</button>
+      <button onClick={() => open?.({ prompt: 'swap_feat' })}>swap a feat</button>
+      <button onClick={() => onChange('features', [{ _inline: true, name: 'Hand' }])}>
+        add a feature by hand
+      </button>
       <button onClick={() => onChange('focused', true)}>focus</button>
       <button onClick={() => onChange('hp', 0)}>drop to 0</button>
       <button onClick={() => onChange('focused', true, { written: true })}>action focus</button>
@@ -130,12 +138,37 @@ const DOCUMENT = {
         },
       ],
     },
+    bonus_feat: {
+      label: 'Bonus feat',
+      steps: [{ key: 'feat', type: 'entry', content_type: 'feat' }],
+      apply: [
+        { grant: 'feats', from: "'bonus'", names: "'Bonus Feat'" },
+        { pick: 'feats', entry: 'answer.feat' },
+      ],
+    },
+    origin_up: {
+      label: 'Origin',
+      steps: [{ key: 'feat', type: 'entry', content_type: 'feat' }],
+      apply: [
+        { pick: 'origin_feat', entry: 'answer.feat' },
+        { grant: 'features', from: "'x'", names: "'X'", source: 'origin_feat' },
+      ],
+    },
+    swap_feat: {
+      label: 'Swap a feat',
+      steps: [{ key: 'feat', type: 'entry', content_type: 'feat' }],
+      apply: [
+        { unpick: 'feats', entry: 'answer.feat' },
+        { grant: 'feats', from: "'lucky'", names: "'Lucky'" },
+      ],
+    },
   },
 }
 
 let stored: Record<string, unknown>
 beforeEach(() => {
   vi.clearAllMocks()
+  route.id = 'c1'
   stored = {}
   mockGet.mockImplementation(async () => ({
     id: 'c1',
@@ -161,14 +194,26 @@ beforeEach(() => {
   })
 })
 
+const view = () => (
+  <MemoryRouter>
+    <CharacterDetailView />
+  </MemoryRouter>
+)
 const renderView = async () => {
-  render(
-    <MemoryRouter>
-      <CharacterDetailView />
-    </MemoryRouter>
-  )
+  const result = render(view())
   await screen.findByText('pick elf')
+  return result
 }
+
+// The start prompt, had it opened, would be first in the queue: another
+// prompt showing proves the effect ran and left it shut.
+const expectNoStartPrompt = async () => {
+  await userEvent.click(screen.getByText('gain a feat'))
+  expect(await screen.findByRole('dialog', { name: 'New feat' })).toBeInTheDocument()
+  expect(screen.queryByRole('dialog', { name: 'Level gained' })).not.toBeInTheDocument()
+}
+
+const START = { ...DOCUMENT, start_prompt: { prompt: 'level_gain', when: 'len(feats) == 0' } }
 
 const lastSaved = () => mockUpdate.mock.calls.at(-1)![1]
 
@@ -182,11 +227,40 @@ describe('CharacterDetailView — prompts', () => {
   })
 
   it('leaves the start prompt shut once its condition fails', async () => {
-    mockGetSchema.mockResolvedValue({
-      document: { ...DOCUMENT, start_prompt: { prompt: 'level_gain', when: 'len(feats) == 0' } },
-    })
+    mockGetSchema.mockResolvedValue({ document: START })
     stored = { feats: [{ _ref: 'alert' }] }
     await renderView()
+    await expectNoStartPrompt()
+  })
+
+  it('leaves the start prompt shut for a GM let into the sheet', async () => {
+    mockGetSchema.mockResolvedValue({ document: START })
+    mockGet.mockImplementation(async () => ({
+      id: 'c1',
+      name: 'Vex',
+      schema_ref: 'demo',
+      data: stored,
+      owned: false,
+      editable: true,
+    }))
+    await renderView()
+    await expectNoStartPrompt()
+  })
+
+  it("does not open one character's start prompt on the next one's data", async () => {
+    mockGetSchema.mockResolvedValue({ document: START })
+    stored = { feats: [{ _ref: 'alert' }] }
+    const first = mockGet.getMockImplementation()!
+    mockGet.mockImplementation(async (id: string) =>
+      id === 'c2'
+        ? { id: 'c2', name: 'Wren', schema_ref: 'gone', schema_missing: true, data: {} }
+        : first(id)
+    )
+    const { rerender } = await renderView()
+    route.id = 'c2'
+    rerender(view())
+    expect(await screen.findByDisplayValue('Wren')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('pick elf')).not.toBeInTheDocument())
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -276,6 +350,93 @@ describe('CharacterDetailView — prompts', () => {
       origin_feat: { features: ['action-surge', 'Tactical Mind'] },
     })
     expect(mockResolve).toHaveBeenCalledWith('demo', ['action-surge', 'tactical-mind'])
+  })
+
+  it('keeps a grant into the list the same prompt picks into', async () => {
+    await renderView()
+    await userEvent.click(screen.getByText('gain a bonus feat'))
+    await userEvent.click(await screen.findByLabelText('Alert'))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(lastSaved().data.feats).toHaveLength(2))
+    expect(lastSaved().data.feats).toEqual([
+      { _ref: 'alert', _source: 'xphb' },
+      { _inline: true, name: 'Bonus Feat' },
+    ])
+  })
+
+  it('keeps a grant recorded under the field the same prompt picks', async () => {
+    await renderView()
+    await userEvent.click(screen.getByText('take an origin'))
+    await userEvent.click(await screen.findByLabelText('Alert'))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(lastSaved().data.features).toHaveLength(1))
+    const saved = lastSaved().data
+    expect(saved.origin_feat).toEqual({ _ref: 'alert', _source: 'xphb' })
+    expect(saved.features).toEqual([{ _inline: true, name: 'X' }])
+    expect(saved._granted.origin_feat).toEqual({ skills: ['Perception'], features: ['X'] })
+  })
+
+  it('keeps a change made while a grant waits on the catalog', async () => {
+    let answer: (value: unknown) => void = () => {}
+    mockResolve.mockImplementation(() => new Promise((resolve) => (answer = resolve)))
+    await renderView()
+    await userEvent.click(screen.getByText('gain a level'))
+    await userEvent.click(await screen.findByLabelText('yes'))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(mockResolve).toHaveBeenCalled())
+    await userEvent.click(screen.getByText('add a feature by hand'))
+    answer({ entries: {} })
+    await waitFor(() => expect(lastSaved().data.features).toHaveLength(3))
+    expect(lastSaved().data.features).toEqual([
+      { _inline: true, name: 'Hand' },
+      { _inline: true, name: 'Action Surge' },
+      { _inline: true, name: 'Tactical Mind' },
+    ])
+  })
+
+  describe('unpick', () => {
+    const swapTough = async () => {
+      mockBrowse.mockResolvedValue({
+        entries: [{ entry_id: 'tough', source: 'xphb', name: 'Tough', data: {} }],
+        total: 1,
+      })
+      await renderView()
+      await userEvent.click(screen.getByText('swap a feat'))
+      await userEvent.click(await screen.findByLabelText('Tough'))
+      await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+      await waitFor(() =>
+        expect(lastSaved().data.feats).toEqual([{ _inline: true, name: 'Lucky' }])
+      )
+      return lastSaved().data
+    }
+
+    it('takes the row out and keeps a grant into the same list', async () => {
+      stored = { feats: [{ _ref: 'tough', _source: 'xphb' }] }
+      await swapTough()
+    })
+
+    it('drops the row from the records of an earlier pick', async () => {
+      stored = {
+        feats: [{ _ref: 'tough', _source: 'xphb' }],
+        _granted: { origin_feat: { feats: ['tough'], skills: ['Perception'] } },
+      }
+      const saved = await swapTough()
+      expect(saved._granted).toEqual({ origin_feat: { feats: [], skills: ['Perception'] } })
+    })
+
+    it('finds a freeform row by its name', async () => {
+      stored = { feats: [{ _inline: true, name: 'Tough' }] }
+      await swapTough()
+    })
+
+    it('matches the row and its record in any case', async () => {
+      stored = {
+        feats: [{ _ref: 'Tough' }],
+        _granted: { origin_feat: { feats: ['TOUGH'] } },
+      }
+      const saved = await swapTough()
+      expect(saved._granted).toEqual({ origin_feat: { feats: [] } })
+    })
   })
 
   it("follows a change by hand with the field's on_change: a box ticked opens its prompt", async () => {

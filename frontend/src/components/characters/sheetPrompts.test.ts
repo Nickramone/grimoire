@@ -578,6 +578,27 @@ describe('grant', () => {
     })
   })
 
+  it('reads the sheet once the catalog has answered, when given a way to read it', async () => {
+    let data: Record<string, unknown> = { features: [] }
+    const patch = await planGrants(
+      [{ target: 'features', pairs: [['action-surge', 'Action Surge']], carried: {} }],
+      {
+        document,
+        data: () => data,
+        lookup: async () => {
+          data = { features: [{ _inline: true, name: 'Hand' }] }
+          return {}
+        },
+      }
+    )
+    expect(patch).toEqual({
+      features: [
+        { _inline: true, name: 'Hand' },
+        { _inline: true, name: 'Action Surge' },
+      ],
+    })
+  })
+
   it('falls back to named entries when the catalog cannot be asked', async () => {
     const patch = await planGrants(
       [{ target: 'features', pairs: [['action-surge', 'Action Surge']], carried: {} }],
@@ -609,6 +630,15 @@ describe('stepLabel', () => {
     expect(entryNote({ ...pick, entry_note: 'missing(' }, { _ref: 'bless' }, {})).toBe('')
     expect(entryNote({ key: 'x', type: 'entry' }, { _ref: 'bless' }, {})).toBe('')
   })
+
+  it('falls back to the label for anything but text that is not blank', () => {
+    const step: PromptStep = { key: 'swap', type: 'select', label: 'Replace an option?' }
+    for (const formula of ['false', '0', 'level', "'  '"]) {
+      expect(stepLabel({ ...step, label_formula: formula }, { level: 0 })).toBe(
+        'Replace an option?'
+      )
+    }
+  })
 })
 
 describe('startPrompt', () => {
@@ -618,19 +648,14 @@ describe('startPrompt', () => {
   }
 
   it('names the prompt while its condition holds', () => {
-    expect(startPrompt(document, { level: 0 }, {})).toBe('level_up')
-    expect(startPrompt(document, { level: 1 }, {})).toBeUndefined()
-    expect(startPrompt({ ...document, start_prompt: { prompt: 'level_up' } }, {}, {})).toBe(
-      'level_up'
-    )
+    expect(startPrompt(document, { level: 0 })).toBe('level_up')
+    expect(startPrompt(document, { level: 1 })).toBeUndefined()
+    expect(startPrompt({ ...document, start_prompt: { prompt: 'level_up' } }, {})).toBe('level_up')
   })
 
-  it('names nothing once put off, or for a prompt the sheet lacks', () => {
+  it('names nothing for a prompt the sheet lacks', () => {
     expect(
-      startPrompt(document, { level: 0 }, { _pending_prompts: [{ prompt: 'level_up' }] })
-    ).toBeUndefined()
-    expect(
-      startPrompt({ ...document, start_prompt: { prompt: 'gone' } }, { level: 0 }, {})
+      startPrompt({ ...document, start_prompt: { prompt: 'gone' } }, { level: 0 })
     ).toBeUndefined()
   })
 })

@@ -1,7 +1,7 @@
 import { createContext } from 'react'
 import { buildContext, computeValues, evaluate, toNumber } from './expressions'
 import type { ExprContext, ExpressionDocument } from './expressions'
-import { GRANTED_KEY, asList as listOf, grantInto } from './onPick'
+import { GRANTED_KEY, asList as listOf, grantInto, rowKey, sameKey } from './onPick'
 import type { ResolvedRefs } from './onPick'
 import { planAction } from './sheetActions'
 import type { ActionStep } from './sheetActions'
@@ -526,6 +526,11 @@ export function planPrompt(
   const prompts: string[] = []
   const grants: PromptGrant[] = []
   const granted: Record<string, string[]> = {}
+  // The records under `_granted`, cleaned of the rows an `unpick` takes out.
+  const recorded = {
+    ...((data?.[GRANTED_KEY] || {}) as Record<string, Record<string, string[]>>),
+  }
+  let cleaned = false
   const current = (name: string): unknown => (name in patch ? patch[name] : data?.[name])
 
   for (const step of steps) {
@@ -538,7 +543,7 @@ export function planPrompt(
       // Worked out now, against the sheet as the prompt read it; made by
       // `planGrants`, which asks the catalog first.
       const ids = listOf(evaluate<symbol>(step.from, ctx, FAILED))
-      const names = step.names ? listOf(evaluate<symbol>(step.names, ctx, FAILED)) : []
+      const names = step.names ? listOf(evaluate<symbol>(step.names, ctx, FAILED), 'name') : []
       const carried: Values = {}
       for (const [key, formula] of Object.entries(isObject(step.carry) ? step.carry : {})) {
         const value = evaluate<symbol>(formula, ctx, FAILED)
@@ -581,32 +586,43 @@ export function planPrompt(
       continue
     }
     if (typeof step.unpick === 'string') {
-      // The list less the entry's row, made as a change by hand, so the row's
-      // own grants are taken back; the picks after it see the list without it.
-      // An `entries` step's answer takes out each of its entries in turn.
+      // The list less the entry's row, made as a change by hand; the picks
+      // after it see the list without it. A reference is found by its id, a
+      // freeform row by its name (or the id it fell back from). An `entries`
+      // step's answer takes out each of its entries in turn.
       const field = step.unpick
       if (fields[field]?.type !== 'content_list') continue
       for (const entry of entriesOf(evaluate<symbol>(step.entry, ctx, FAILED))) {
-        const wanted = entry._ref.trim().toLowerCase()
+        const keys = [entry._ref, entry.name].filter(
+          (key): key is string => typeof key === 'string' && !!key.trim()
+        )
         const before = picks.filter((pick) => pick.field === field).pop()
         const rows = before
           ? (before.value as unknown[])
           : Array.isArray(current(field))
             ? (current(field) as unknown[])
             : []
-        const index = rows.findIndex(
-          (item) =>
-            isObject(item) &&
-            String(item._ref ?? '')
-              .trim()
-              .toLowerCase() === wanted
-        )
+        const index = rows.findIndex((item) => {
+          const own = rowKey(item)
+          if (own === null) return false
+          return isObject(item) && item._ref !== undefined && item._ref !== null
+            ? sameKey(own, entry._ref)
+            : keys.some((key) => sameKey(own, key))
+        })
         if (index < 0) continue
+        const removed = rowKey(rows[index])!
         picks.push({ field, value: rows.filter((_, i) => i !== index) })
-        // A row this prompt picked and took out again is not recorded either.
+        // No record keeps it, this prompt's or an earlier pick's: a row added
+        // again by hand is not taken back by a later change of that pick.
         const held = granted[field] || []
-        const at = held.indexOf(entry._ref)
+        const at = held.findIndex((key) => sameKey(key, removed))
         if (at >= 0) granted[field] = held.filter((_, i) => i !== at)
+        for (const [from, targets] of Object.entries(recorded)) {
+          const list = targets?.[field]
+          if (!Array.isArray(list) || !list.some((key) => sameKey(key, removed))) continue
+          recorded[from] = { ...targets, [field]: list.filter((key) => !sameKey(key, removed)) }
+          cleaned = true
+        }
       }
       continue
     }
@@ -648,14 +664,14 @@ export function planPrompt(
   // Recorded under the pick that opened the prompt, so picking something
   // else there takes back what the prompt added along with the pick's own.
   if (source && Object.keys(granted).length) {
-    const all = { ...((data?.[GRANTED_KEY] || {}) as Record<string, Record<string, string[]>>) }
-    const fromSource = { ...(all[source] || {}) }
+    const fromSource = { ...(recorded[source] || {}) }
     for (const [target, values] of Object.entries(granted)) {
       fromSource[target] = [...(fromSource[target] || []), ...values]
     }
-    all[source] = fromSource
-    patch[GRANTED_KEY] = all
+    recorded[source] = fromSource
+    cleaned = true
   }
+  if (cleaned) patch[GRANTED_KEY] = recorded
   return { patch, picks, prompts, grants }
 }
 
@@ -665,17 +681,19 @@ export function planPrompt(
  * freeform entry by its name. What is added is recorded under the grant's
  * source, so picking something else there takes it back.
  *
- * @param data  the character's data with the prompt's own patch laid over it
+ * @param data  the character's data with the prompt's own writes and picks
+ *   made, or a function reading it: read once the catalog has answered, so
+ *   what changed while it was asked is kept
  */
 export async function planGrants(
   grants: PromptGrant[],
   {
     document,
-    data,
+    data: readData,
     lookup,
   }: {
     document: PromptDocument | null | undefined
-    data: Values | null | undefined
+    data: Values | null | undefined | (() => Values | null | undefined)
     lookup?: (ids: string[]) => Promise<ResolvedRefs | null | undefined>
   }
 ): Promise<Values> {
@@ -693,6 +711,7 @@ export async function planGrants(
       resolved = {}
     }
   }
+  const data = typeof readData === 'function' ? readData() : readData
   const patch: Values = {}
   const all = { ...((data?.[GRANTED_KEY] || {}) as Record<string, Record<string, string[]>>) }
   let recordedAny = false
@@ -738,31 +757,32 @@ export function entryNote(step: PromptStep, entry: EntryAnswer, context: ExprCon
   return String(value).trim()
 }
 
-/** A step's heading: its `label_formula` worked out, or else its `label`. */
+/**
+ * A step's heading: its `label_formula` worked out, when that gives text that
+ * is not blank, or else its `label` - so `false` or `0` from a formula such
+ * as `kind != '' && concat(...)` falls back rather than showing.
+ */
 export function stepLabel(step: PromptStep, context: ExprContext): string {
   if (step.label_formula) {
     const value = evaluate<symbol>(step.label_formula, context, FAILED)
-    if (value !== FAILED && value !== null && value !== undefined && String(value).trim()) {
-      return String(value)
-    }
+    if (typeof value === 'string' && value.trim()) return value
   }
   return step.label || ''
 }
 
 /**
  * The prompt a sheet opens by itself when a character is opened: its
- * `start_prompt`, when its `when` holds and the player has not put it off.
+ * `start_prompt`, when its `when` holds. Put off, it is not kept (it has no
+ * pick as its source), so it opens again the next time while `when` holds.
  */
 export function startPrompt(
   document: PromptDocument | null | undefined,
-  context: Values,
-  data: Values | null | undefined
+  context: Values
 ): string | undefined {
   const start = document?.start_prompt
   if (!isObject(start) || typeof start.prompt !== 'string') return undefined
   const prompt = findPrompt(document, start.prompt)
   if (!prompt) return undefined
-  if (pendingPrompts(data).some((item) => item.prompt === start.prompt)) return undefined
   if (typeof start.when === 'string' && start.when.trim()) {
     const value = evaluate<symbol>(start.when, context, FAILED)
     if (value === FAILED || !value) return undefined
