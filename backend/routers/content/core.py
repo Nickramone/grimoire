@@ -22,7 +22,7 @@ from ...services.characters import house_rules
 from ...services.characters import packs as pack_service
 from ...services.characters import rulesets as rs
 from ...services.characters.user_schemas import user_schema_document
-from ..characters._helpers import readable_character_or_404
+from .._character_access import readable_character_or_404
 from . import _helpers as helpers
 
 logger = logging.getLogger("grimoire.content")

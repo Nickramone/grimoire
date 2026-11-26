@@ -127,6 +127,7 @@ TTRPG_GUEST_REACHABLE = {
     "/api/campaigns/{campaign_id}/guests/{member_id}": "DELETE",
     "/api/campaigns/{campaign_id}/guests/{member_id}/regenerate": "POST",
     "/api/campaigns/{campaign_id}/guests/{member_id}/share-template": "GET",
+    "/api/campaigns/{campaign_id}/house-rules": "GET PUT",
     "/api/campaigns/{campaign_id}/images": "POST",
     "/api/campaigns/{campaign_id}/invite": "POST",
     "/api/campaigns/{campaign_id}/members/{member_id}/art": "DELETE GET POST",

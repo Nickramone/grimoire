@@ -329,7 +329,7 @@ def _serialize_character(
         # campaign's switch, whatever the stored value says.
         data = house_rules.with_derived(db, document, row.data, row.campaign_id)
         payload["data"] = data
-        payload["house_rules"] = bool(db) and house_rules.house_rules_on(db, row.campaign_id)
+        payload["house_rules"] = db is not None and house_rules.house_rules_on(db, row.campaign_id)
         # References resolve to their catalog entries so a formula reading an
         # entry's own properties has something to read.
         entries = (
