@@ -65,7 +65,8 @@ export interface PromptStep {
   // Text worked out for each candidate, read as `entry`, shown beside its
   // name - a spell's level.
   entry_note?: string
-  // number
+  // number: the starting value; entry: the id of the entry chosen at the
+  // start, which the player may keep or change
   default?: string
   average?: string
   min?: number
@@ -473,6 +474,14 @@ export function laterPrompts(prompt: SheetPrompt, skipped: readonly string[]): s
     if (name && !later.includes(name)) later.push(name)
   }
   return later
+}
+
+/** An `entry` step's starting choice: the entry id its `default` works out. */
+export function entryDefault(step: PromptStep, context: ExprContext): string | undefined {
+  if (step.type !== 'entry' || !step.default) return undefined
+  const value = evaluate<symbol>(step.default, context, FAILED)
+  if (value === FAILED || value === null || value === undefined || value === '') return undefined
+  return String(value)
 }
 
 /** A `number` step's starting value, from its `default` formula. */

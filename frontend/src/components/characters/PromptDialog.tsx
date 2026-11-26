@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { LuCheck, LuChevronLeft, LuChevronRight } from 'react-icons/lu'
 import { goldBtn, ghostBtn, scrim, card, helpText } from './characterStyles'
 import {
+  entryDefault,
   isAnswered,
   isComplete,
   laterPrompts,
@@ -99,6 +100,30 @@ export default function PromptDialog({
     for (const step of prompt.steps || []) {
       if (step?.type === 'entry' || step?.type === 'entries') loadEntries(step).catch(() => {})
     }
+  }, [prompt, loadEntries])
+
+  // An `entry` step with a `default` starts on that entry, once its catalog is
+  // read, unless it was answered meanwhile; a prompt opened again keeps its
+  // answers.
+  useEffect(() => {
+    if (resume) return
+    let live = true
+    for (const step of prompt.steps || []) {
+      const id = step ? entryDefault(step, promptContext(context, {}, row)) : undefined
+      if (!id) continue
+      loadEntries(step)
+        .then((entries) => {
+          const found = entries.find((entry) => entry._ref === id)
+          if (!live || !found) return
+          setAnswers((prev) => (step.key in prev ? prev : { ...prev, [step.key]: found }))
+        })
+        .catch(() => {})
+    }
+    return () => {
+      live = false
+    }
+    // Worked out once, when the dialog opens, as the numbers' defaults are.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt, loadEntries])
 
   // How many entries each `entries` step found: it asks for no more.

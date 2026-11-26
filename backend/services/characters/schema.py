@@ -1021,6 +1021,8 @@ def _validate_prompts(
                     _validate_formula(
                         step["filter"], f"{where} 'filter'", base | {PROMPT_ENTRY_NAME}, images
                     )
+                if kind == "entry" and "default" in step:
+                    _validate_formula(step["default"], f"{where} 'default'", base, images)
                 if "entry_note" in step:
                     _validate_formula(
                         step["entry_note"],

@@ -179,6 +179,41 @@ describe('PromptDialog', () => {
     })
   })
 
+  it('starts an entry step on the entry its default works out, which can be changed', async () => {
+    const prompt: SheetPrompt = {
+      label: 'Background feat',
+      steps: [
+        { key: 'feat', type: 'entry', label: 'Feat', content_type: 'feat', default: 'row.feat_id' },
+      ],
+      apply: [],
+    }
+    const browse = async () => ({
+      entries: [
+        { entry_id: 'alert', name: 'Alert', source: 'xphb', data: {} },
+        { entry_id: 'lucky', name: 'Lucky', source: 'xphb', data: {} },
+      ],
+      total: 2,
+    })
+    const onConfirm = vi.fn()
+    render(
+      <PromptDialog
+        prompt={prompt}
+        document={DOCUMENT}
+        data={{}}
+        context={SHEET}
+        row={{ feat_id: 'lucky' }}
+        browse={browse}
+        onConfirm={onConfirm}
+      />
+    )
+    expect(await screen.findByLabelText('Lucky')).toBeChecked()
+    await userEvent.click(screen.getByLabelText('Alert'))
+    await userEvent.click(confirm())
+    expect(onConfirm.mock.calls.at(-1)?.[0]).toEqual({
+      feat: { name: 'Alert', _ref: 'alert', _source: 'xphb' },
+    })
+  })
+
   it('chooses several entries, as many as count asks for', async () => {
     const prompt: SheetPrompt = {
       ...LEVEL_UP,
