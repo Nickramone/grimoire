@@ -56,6 +56,12 @@ export const campaigns = {
     }),
   setArchived: (id: Id, archived: boolean) =>
     client.put('/campaigns/{campaign_id}/archive', { path: campaign(id), body: { archived } }),
+  // Whether the table plays its house rules (Nickramone fork): read by anyone
+  // at it, switched by the GM.
+  houseRules: (id: Id) =>
+    client.get('/campaigns/{campaign_id}/house-rules', { path: campaign(id) }),
+  setHouseRules: (id: Id, on: boolean) =>
+    client.put('/campaigns/{campaign_id}/house-rules', { path: campaign(id), body: { on } }),
 
   // Members
   invite: (id: Id, userId: string) =>

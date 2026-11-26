@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LuSearch, LuX, LuCheck, LuPlus } from 'react-icons/lu'
 import { content as contentApi } from '../../api'
+import { useCharacterMedia } from './characterMedia'
 import type { Schema } from '../../api'
 import Spinner from '../Spinner'
 import ContentEntryDetail from './ContentEntryDetail'
@@ -81,12 +82,16 @@ export default function ContentBrowser({
   // Serialised, so a definition rebuilt on every render does not reload.
   const fixedKey = JSON.stringify(fixedFilters || {})
 
+  // Browsing for a character offers what its sheet reads: its campaign's
+  // rulesets, and a house-rule rewrite in place of the original.
+  const characterId = useCharacterMedia()?.character.id
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const result = await contentApi.browse(schemaId, contentType, {
         search,
         page,
+        character_id: characterId || undefined,
         filters: { ...filters, ...(JSON.parse(fixedKey) as Record<string, unknown>) },
       })
       setEntries(result.entries || [])
@@ -108,7 +113,7 @@ export default function ContentBrowser({
     } finally {
       setLoading(false)
     }
-  }, [schemaId, contentType, search, page, filters, fixedKey, t])
+  }, [schemaId, contentType, search, page, filters, fixedKey, characterId, t])
 
   useEffect(() => {
     void load()

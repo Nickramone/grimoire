@@ -338,7 +338,7 @@ describe('CharacterDetailView — prompts', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Lineage' }))
     expect(await screen.findByRole('dialog', { name: 'Lineage' })).toBeInTheDocument()
-    expect(mockResolve).toHaveBeenCalledWith('demo', ['elf'])
+    expect(mockResolve).toHaveBeenCalledWith('demo', ['elf'], 'c1')
     await userEvent.click(screen.getByLabelText('Drow'))
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     await waitFor(() => expect(lastSaved().data._pending_prompts).toEqual([]))
@@ -374,6 +374,7 @@ describe('CharacterDetailView — prompts', () => {
     expect(saved.origin_feat).toEqual({ _ref: 'alert', _source: 'xphb' })
     expect(saved._granted.origin_feat.skills).toEqual(['Perception'])
     expect(mockBrowse).toHaveBeenCalledWith('demo', 'feat', {
+      character_id: 'c1',
       filters: {},
       page: 1,
       page_size: 200,
@@ -467,7 +468,7 @@ describe('CharacterDetailView — prompts', () => {
     expect(saved._granted).toEqual({
       origin_feat: { features: ['action-surge', 'Tactical Mind'] },
     })
-    expect(mockResolve).toHaveBeenCalledWith('demo', ['action-surge', 'tactical-mind'])
+    expect(mockResolve).toHaveBeenCalledWith('demo', ['action-surge', 'tactical-mind'], 'c1')
   })
 
   it('keeps a grant into the list the same prompt picks into', async () => {

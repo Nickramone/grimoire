@@ -178,7 +178,7 @@ describe('CharacterDetailView — picks', () => {
     await renderView()
     await userEvent.click(screen.getByText('pick without entry'))
     await waitFor(() => expect(lastSaved().data.skills).toEqual(['Insight']))
-    expect(mockResolve).toHaveBeenCalledWith('demo', ['acolyte'])
+    expect(mockResolve).toHaveBeenCalledWith('demo', ['acolyte'], 'c1')
   })
 
   it('asks for a choice the pick offers, and records the answer', async () => {
@@ -216,7 +216,7 @@ describe('CharacterDetailView — picks in a list', () => {
     await renderView()
     await userEvent.click(screen.getByText('add row without entry'))
     await waitFor(() => expect(lastSaved().data.skills).toEqual(['Insight']))
-    expect(mockResolve).toHaveBeenCalledWith('demo', ['acolyte'])
+    expect(mockResolve).toHaveBeenCalledWith('demo', ['acolyte'], 'c1')
   })
 
   it('takes the grants back when the row is removed', async () => {

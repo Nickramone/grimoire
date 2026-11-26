@@ -16,6 +16,7 @@ import {
   LuLayoutDashboard,
 } from 'react-icons/lu'
 import api, { campaigns } from '../api'
+import CampaignHouseRules from '../components/campaigns/CampaignHouseRules'
 import type { ResponseOf } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useUISettings } from '../context/UISettingsContext'
@@ -480,6 +481,7 @@ export default function CampaignDetailView() {
                   </span>
                 )
               )}
+              {isGmCampaign && <CampaignHouseRules campaignId={campaign.id} />}
               {isGmCampaign && schedule?.definition && (
                 <span>
                   {t('campaignDetail.tabs.schedule')}:{' '}

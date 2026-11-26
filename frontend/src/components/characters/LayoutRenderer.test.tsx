@@ -1353,3 +1353,49 @@ describe('LayoutRenderer — prompts', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 })
+
+describe('LayoutRenderer — a field the campaign sets', () => {
+  const media = {
+    character: { id: 'c1', name: 'Vex', campaign_name: 'Rime' },
+    readOnly: false,
+    onPortraitChanged: vi.fn(),
+    onImageChanged: vi.fn(),
+    onError: vi.fn(),
+    openPortrait: vi.fn(),
+  }
+  const document = {
+    fields: {
+      house: { type: 'checkbox', label: 'House rules', from_campaign: 'house_rules' },
+    },
+  }
+
+  it('shows the switch read-only, named after the campaign', () => {
+    const onChange = vi.fn()
+    render(
+      <CharacterMediaContext.Provider value={media}>
+        <LayoutRenderer
+          ast={[{ tag: 'g-field', attrs: { name: 'house' }, children: [] }]}
+          document={document}
+          data={{ house: true }}
+          onChange={onChange}
+        />
+      </CharacterMediaContext.Provider>
+    )
+    expect(screen.getByText('House rules (Rime)')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.getByText('✓')).toBeInTheDocument()
+  })
+
+  it('says when the character is in no campaign', () => {
+    render(
+      <LayoutRenderer
+        ast={[{ tag: 'g-field', attrs: { name: 'house' }, children: [] }]}
+        document={document}
+        data={{ house: false }}
+        onChange={vi.fn()}
+      />
+    )
+    expect(screen.getByText('House rules (no campaign)')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+})

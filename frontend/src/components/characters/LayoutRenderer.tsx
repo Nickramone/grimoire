@@ -11,6 +11,7 @@ import TierSelect from './TierSelect'
 import Pips from './Pips'
 import { fieldState } from './onPick'
 import SheetPortrait from './SheetPortrait'
+import { useCharacterMedia } from './characterMedia'
 import { actionPrompts, findAction, planAction } from './sheetActions'
 import { findPrompt, PromptLauncher } from './sheetPrompts'
 import type { PromptRequest } from './sheetPrompts'
@@ -93,6 +94,8 @@ interface RenderContext {
   rowScope?: RowScope
   // Opens one of the sheet's prompts, when the page showing the sheet can.
   openPrompt?: (request: PromptRequest) => void
+  // The character's campaign, named beside a field the campaign sets.
+  campaignName?: string | null
 }
 
 interface Props {
@@ -278,6 +281,7 @@ export default function LayoutRenderer({
     [sheetContext, data, computed]
   )
   const openPrompt = useContext(PromptLauncher) || undefined
+  const campaignName = useCharacterMedia()?.character.campaign_name
 
   if (!Array.isArray(ast)) return null
 
@@ -297,6 +301,7 @@ export default function LayoutRenderer({
           entries,
           schemaId,
           openPrompt,
+          campaignName,
         })
       )}
     </div>
@@ -388,20 +393,32 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
       // a schema does not have to repeat the condition in every layout.
       if (!isVisible(definition.visible_if, context)) return null
       const state = fieldState(name, definition, data, context)
-      const editable = !readOnly && attrs.readonly === undefined
+      // The campaign sets a `from_campaign` field (its house rules): shown,
+      // never edited, with the campaign that decides it.
+      const fromCampaign = Boolean((definition as { from_campaign?: string }).from_campaign)
+      const editable = !readOnly && !fromCampaign && attrs.readonly === undefined
+      const label = attrs.label ?? definition.label
       return (
         <FieldRenderer
           key={key}
           name={name}
-          definition={{ ...definition, ...(attrs.label ? { label: attrs.label } : {}) }}
+          definition={{
+            ...definition,
+            ...(attrs.label ? { label: attrs.label } : {}),
+            ...(fromCampaign && label
+              ? { label: `${label} (${ctx.campaignName || 'no campaign'})` }
+              : {}),
+          }}
           value={state.value}
           derivedValue={context?.[name]}
           derived={editable && state.derived}
           onReset={editable && state.overridden && onReset ? () => onReset(name) : undefined}
           onChange={
-            readOnly ? undefined : (...args: [unknown, unknown?]) => onChange?.(name, ...args)
+            readOnly || fromCampaign
+              ? undefined
+              : (...args: [unknown, unknown?]) => onChange?.(name, ...args)
           }
-          readOnly={readOnly || attrs.readonly !== undefined}
+          readOnly={readOnly || fromCampaign || attrs.readonly !== undefined}
           hideLabel={attrs.label === ''}
           variant={attrs.variant}
           entries={entries}

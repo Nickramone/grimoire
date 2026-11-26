@@ -2591,6 +2591,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/campaigns/{campaign_id}/house-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the campaign plays its house rules */
+        get: operations["get_house_rules_api_campaigns__campaign_id__house_rules_get"];
+        /** GM: switch the campaign's house rules on or off */
+        put: operations["set_house_rules_api_campaigns__campaign_id__house_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/campaigns/{campaign_id}/images": {
         parameters: {
             query?: never;
@@ -4287,6 +4305,9 @@ export interface paths {
         /**
          * Browse a content type
          * @description Browse one content type: search, filter, sort, paginate.
+         *
+         *     ``character_id`` browses as that character picks: its campaign's rulesets
+         *     and house rules (Nickramone fork).
          *
          *     Filters arrive as `filter[field]=value` query parameters, which is why this
          *     handler takes the raw request — FastAPI cannot express that bracketed shape
@@ -10949,6 +10970,11 @@ export interface components {
              * @default false
              */
             gm_can_edit?: boolean;
+            /**
+             * House Rules
+             * @default false
+             */
+            house_rules?: boolean;
             /** Id */
             id: string;
             /** Name */
@@ -13216,6 +13242,18 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** HouseRulesOut */
+        HouseRulesOut: {
+            /** Editable */
+            editable: boolean;
+            /** On */
+            on: boolean;
+        };
+        /** HouseRulesUpdate */
+        HouseRulesUpdate: {
+            /** On */
+            on: boolean;
+        };
         /** ImageFieldResponse */
         ImageFieldResponse: {
             /** Field */
@@ -13313,6 +13351,11 @@ export interface components {
              * @default false
              */
             gm_can_edit?: boolean;
+            /**
+             * House Rules
+             * @default false
+             */
+            house_rules?: boolean;
             /** Id */
             id: string;
             /**
@@ -26013,6 +26056,82 @@ export interface operations {
             };
         };
     };
+    get_house_rules_api_campaigns__campaign_id__house_rules_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseRulesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_house_rules_api_campaigns__campaign_id__house_rules_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseRulesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseRulesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_campaign_image_api_campaigns__campaign_id__images_post: {
         parameters: {
             query?: never;
@@ -30000,6 +30119,8 @@ export interface operations {
             query?: {
                 /** @description Comma-separated entry ids */
                 ids?: string;
+                /** @description Resolve as this character's sheet reads them (its campaign's house rules) */
+                character_id?: string | null;
             };
             header?: {
                 /** @description An API key, for external integrations (instead of a session). */
@@ -30078,6 +30199,7 @@ export interface operations {
                 page?: number;
                 page_size?: number;
                 include_rulesets?: boolean;
+                character_id?: string | null;
             };
             header?: {
                 /** @description An API key, for external integrations (instead of a session). */

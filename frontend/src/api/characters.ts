@@ -157,10 +157,12 @@ export const content = {
     client.get('/content/{schema_id}/{content_type}/{entry_id}', {
       path: { schema_id: schemaId, content_type: contentType, entry_id: entryId },
     }),
-  resolve: (schemaId: string, ids: string[]) =>
+  // With a character, ids resolve as its sheet reads them: its campaign's
+  // rulesets, and a house-rule rewrite in place of the original.
+  resolve: (schemaId: string, ids: string[], characterId?: string | null) =>
     client.get('/content/{schema_id}/resolve', {
       path: { schema_id: schemaId },
-      query: { ids: ids.join(',') },
+      query: { ids: ids.join(','), character_id: characterId || undefined },
     }),
 }
 

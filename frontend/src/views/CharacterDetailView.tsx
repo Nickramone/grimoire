@@ -264,8 +264,8 @@ export default function CharacterDetailView() {
   // reference only when the content is really installed.
   const lookup = useCallback(
     async (ids: string[]) =>
-      (await contentApi.resolve(character?.schema_ref || '', ids))?.entries || {},
-    [character?.schema_ref]
+      (await contentApi.resolve(character?.schema_ref || '', ids, character?.id))?.entries || {},
+    [character?.schema_ref, character?.id]
   )
 
   // The field's `on_change`: writes and prompts that follow a change, read
@@ -543,8 +543,9 @@ export default function CharacterDetailView() {
         filters,
         page,
         page_size: pageSize,
+        character_id: character?.id,
       }),
-    [character?.schema_ref]
+    [character?.schema_ref, character?.id]
   )
 
   // Where what a prompt adds is recorded: under the pick that opened it,

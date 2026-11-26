@@ -22,6 +22,8 @@ vi.mock('../api', () => ({
     setAvailability: vi.fn(),
     cancelDate: vi.fn(),
     setArchived: vi.fn(),
+    houseRules: vi.fn(() => Promise.resolve({ on: false, editable: false })),
+    setHouseRules: vi.fn(),
     convertToGroup: vi.fn(),
   },
 }))
