@@ -748,10 +748,18 @@ export function planPrompt(
       // The list less the entry's row, made as a change by hand; the picks
       // after it see the list without it. A reference is found by its id, a
       // freeform row by its name (or the id it fell back from). An `entries`
-      // step's answer takes out each of its entries in turn.
+      // step's answer takes out each of its entries in turn; a text names the
+      // row by its id or name - a grant the sheet made from an entry's id.
       const field = step.unpick
       if (fields[field]?.type !== 'content_list') continue
-      for (const entry of entriesOf(evaluate<symbol>(step.entry, ctx, FAILED))) {
+      const named = evaluate<symbol>(step.entry, ctx, FAILED)
+      const taken =
+        typeof named === 'string'
+          ? named.trim()
+            ? [{ _ref: named.trim(), name: named.trim() }]
+            : []
+          : entriesOf(named)
+      for (const entry of taken) {
         const keys = [entry._ref, entry.name].filter(
           (key): key is string => typeof key === 'string' && !!key.trim()
         )

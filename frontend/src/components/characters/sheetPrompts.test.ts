@@ -451,6 +451,34 @@ describe('planPrompt', () => {
     ])
   })
 
+  it('takes out the row a text names by its id, and nothing for an empty text', () => {
+    const prompt: SheetPrompt = {
+      label: 'Origin feat',
+      steps: [{ key: 'feat', type: 'entry', content_type: 'feat' }],
+      apply: [
+        { unpick: 'feats', entry: "answer.feat._ref != row.feat_id ? row.feat_id : ''" },
+        { pick: 'feats', entry: "answer.feat._ref != row.feat_id ? answer.feat : ''" },
+      ],
+    }
+    const plan = (feat: string) =>
+      planPrompt(prompt, {
+        document: DOCUMENT,
+        data: { feats: [{ _ref: 'alert' }, { _ref: 'tough' }] },
+        context: {},
+        answers: { feat: { _ref: feat, name: feat } },
+        row: { feat_id: 'alert' },
+      })
+    expect(plan('lucky').picks).toEqual([
+      { field: 'feats', value: [{ _ref: 'tough' }] },
+      {
+        field: 'feats',
+        value: [{ _ref: 'tough' }, { _ref: 'lucky' }],
+        entry: { _ref: 'lucky', name: 'lucky' },
+      },
+    ])
+    expect(plan('alert').picks).toEqual([])
+  })
+
   it('takes out nothing when the entry has no row, or none was answered', () => {
     const prompt: SheetPrompt = {
       label: 'Replace a feat',
