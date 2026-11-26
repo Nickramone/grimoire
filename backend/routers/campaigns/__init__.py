@@ -106,6 +106,7 @@ from .guests import (
 )
 from .wiki_io import export_wiki, import_wiki
 from .wiki_pins import create_pin, delete_pin, update_pin
+from .house_rules import HouseRulesOut, get_house_rules, set_house_rules
 from .wiki_annotations import (
     create_annotation,
     delete_annotation,
@@ -897,6 +898,20 @@ router.add_api_route(
     methods=["DELETE"],
     summary="Delete a wiki page",
     status_code=204,
+)
+router.add_api_route(
+    "/{campaign_id}/house-rules",
+    get_house_rules,
+    methods=["GET"],
+    summary="Whether the campaign plays its house rules",
+    response_model=HouseRulesOut,
+)
+router.add_api_route(
+    "/{campaign_id}/house-rules",
+    set_house_rules,
+    methods=["PUT"],
+    summary="GM: switch the campaign's house rules on or off",
+    response_model=HouseRulesOut,
 )
 router.add_api_route(
     "/{campaign_id}/wiki/{page_id}/annotations",

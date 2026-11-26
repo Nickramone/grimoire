@@ -264,6 +264,18 @@ def _validate_field(name: str, definition: Any) -> None:
             "letters, digits, and underscores"
         )
     _validate_definition(f"Field {name!r}", name, definition, allow_image=True)
+    if "from_campaign" in definition:
+        # Only a character's own switch: the campaign's answer is a yes or no.
+        source = definition["from_campaign"]
+        if source != "house_rules":
+            raise SchemaError(
+                f"Field {name!r} from_campaign must be 'house_rules', not {source!r}"
+            )
+        if definition.get("type", "text") != "checkbox":
+            raise SchemaError(
+                f"Field {name!r} takes its value from the campaign's house rules, "
+                "so it must be a checkbox"
+            )
 
 
 def _validate_definition(

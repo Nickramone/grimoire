@@ -23,6 +23,7 @@ from ...config import CHARACTER_PORTRAIT_DIR, get_db
 from ...models import Character, CharacterSchema
 from ...services import characters as svc
 from ...services.characters import catalogue
+from ...services.characters import house_rules
 from ...services.characters import images as char_images
 from ...services.characters import importing
 from ...services.characters.sheet_values import (
@@ -320,12 +321,15 @@ def _serialize_character(
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
     if detail:
-        data = row.data if isinstance(row.data, dict) else {}
-        payload["data"] = data
         # Computed values are derived on read, never stored: a corrected formula
         # must fix every character built on it rather than leaving stale numbers.
         # The document is validated once and reused — it is the expensive part.
         document = _validated_document(schema) if schema else None
+        # A field taken from the campaign (its house rules) reads the
+        # campaign's switch, whatever the stored value says.
+        data = house_rules.with_derived(db, document, row.data, row.campaign_id)
+        payload["data"] = data
+        payload["house_rules"] = bool(db) and house_rules.house_rules_on(db, row.campaign_id)
         # References resolve to their catalog entries so a formula reading an
         # entry's own properties has something to read.
         entries = (
@@ -516,10 +520,13 @@ def update_character(
         # An image's value goes with its file, through the image routes; a
         # reset here would strand the file.
         pictures = char_images.image_fields(document)
+        # The campaign decides a ``from_campaign`` field: a write to it is
+        # dropped, not stored to be ignored later.
+        derived = house_rules.derived_fields(document)
         for name in data.unset:
-            if name not in pictures:
+            if name not in pictures and name not in derived:
                 merged.pop(name, None)
-        merged.update(_coerce_all(document, data.data or {}))
+        merged.update(_coerce_all(document, house_rules.without_derived(document, data.data or {})))
 
     # The character's name and its sheet's name field are one value: editing
     # either updates the other, so the list and the sheet never disagree.

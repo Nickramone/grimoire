@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from ...config import CHARACTER_PORTRAIT_DIR
 from ...models import Character, CharacterSchema, User
 from ..characters import compute_values
+from ..characters.house_rules import with_derived
 from ..characters.sheet_values import resolved_entries, validated_document
 
 __all__ = ["party_overview"]
@@ -117,7 +118,7 @@ def party_overview(db: Session, campaign_id: str, viewer_id: str) -> dict:
         if schema and key not in documents:
             documents[key] = validated_document(schema)
         document = documents.get(key) or {"fields": {}, "computed": {}}
-        data = row.data if isinstance(row.data, dict) else {}
+        data = with_derived(db, document, row.data, row.campaign_id)
 
         values: dict[str, Any] = {}
         for name, definition in (document.get("fields") or {}).items():
