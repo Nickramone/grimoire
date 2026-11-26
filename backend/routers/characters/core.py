@@ -333,7 +333,9 @@ def _serialize_character(
         # References resolve to their catalog entries so a formula reading an
         # entry's own properties has something to read.
         entries = (
-            _resolved_entries(db, document, data, row.user_id)
+            _resolved_entries(
+                db, document, data, row.user_id, house_rules.scope_for(db, row)
+            )
             if document is not None and db
             else {}
         )

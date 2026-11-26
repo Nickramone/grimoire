@@ -173,3 +173,153 @@ def test_the_schema_checks_from_campaign(client, player_headers, definition, mes
     resp = client.post("/api/characters/schemas", json={"document": document}, headers=player_headers)
     assert resp.status_code == 400
     assert message in resp.text
+
+
+# --- entries as one character sees them ------------------------------------
+
+FEATS = {
+    "id": "house-feats-demo",
+    "name": "House Feats Demo",
+    "fields": {
+        "house": {"type": "checkbox", "from_campaign": "house_rules"},
+        "feat": {"type": "content_ref", "content_type": "feat"},
+    },
+    "computed": {"feat_bonus": {"formula": "ref(feat, 'bonus')"}},
+    "content_types": {
+        "feat": {
+            "identity_field": "name",
+            "fields": {"name": {"type": "text"}, "bonus": {"type": "number"}},
+        }
+    },
+}
+
+
+@pytest.fixture
+def feats(client, admin_headers, gm_headers, player_headers, table, gm_id, player_id):
+    """A pack Charger (+1), the table's rewrite (+5), and another table's Spear."""
+    from backend.models import ContentEntry, ContentPack, Ruleset, RulesetEntry  # noqa: PLC0415
+
+    for headers in (admin_headers, gm_headers, player_headers):
+        resp = client.post("/api/characters/schemas", json={"document": FEATS}, headers=headers)
+        assert resp.status_code == 200, resp.text
+    other = _campaign(gm_id, player_id, name="Other Table")
+    db = SessionLocal()
+    try:
+        pack = ContentPack(pack_id="house-feats-pack", schema_id="house-feats-demo", name="Feats")
+        db.add(pack)
+        db.flush()
+        db.add(ContentEntry(
+            pack_id=pack.id, schema_id="house-feats-demo", content_type="feat",
+            entry_id="charger", source="srd", name="Charger", data={"name": "Charger", "bonus": 1},
+        ))
+        for campaign_id, entry_id, name, bonus in (
+            (table, "charger", "Charger", 5),
+            (other, "spear", "Spear", 2),
+        ):
+            ruleset = Ruleset(campaign_id=campaign_id, schema_id="house-feats-demo", name=f"Rules {name}")
+            db.add(ruleset)
+            db.flush()
+            db.add(RulesetEntry(
+                ruleset_id=ruleset.id, schema_id="house-feats-demo", content_type="feat",
+                entry_id=entry_id, name=name, data={"name": name, "bonus": bonus},
+                forked_from="srd:charger" if entry_id == "charger" else None,
+            ))
+        db.commit()
+    finally:
+        db.close()
+    yield other
+    db = SessionLocal()
+    try:
+        db.query(RulesetEntry).filter_by(schema_id="house-feats-demo").delete()
+        db.query(Ruleset).filter_by(schema_id="house-feats-demo").delete()
+        db.query(ContentEntry).filter_by(schema_id="house-feats-demo").delete()
+        db.query(ContentPack).filter_by(pack_id="house-feats-pack").delete()
+        db.commit()
+    finally:
+        db.close()
+    for headers in (admin_headers, gm_headers, player_headers):
+        client.delete("/api/characters/schemas/house-feats-demo", headers=headers)
+
+
+def _feat_pc(client, player_headers, campaign_id):
+    resp = client.post(
+        "/api/characters",
+        json={
+            "schema_ref": "house-feats-demo",
+            "name": "Charger",
+            "campaign_id": campaign_id,
+            "data": {"feat": {"_ref": "charger"}},
+        },
+        headers=player_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]
+
+
+def _catalog(client, headers, character_id=None):
+    params = {"character_id": character_id} if character_id else {}
+    resp = client.get("/api/content/house-feats-demo/feat", params=params, headers=headers)
+    assert resp.status_code == 200, resp.text
+    return sorted((row["entry_id"], row["data"]["bonus"]) for row in resp.json()["entries"])
+
+
+def _resolve(client, headers, character_id=None):
+    params = {"ids": "charger,spear"}
+    if character_id:
+        params["character_id"] = character_id
+    resp = client.get("/api/content/house-feats-demo/resolve", params=params, headers=headers)
+    assert resp.status_code == 200, resp.text
+    return {key: value["data"].get("bonus") for key, value in resp.json()["entries"].items()}
+
+
+def test_rules_off_the_original_counts_and_is_the_only_one_offered(
+    client, feats, table, player_headers
+):
+    pc_id = _feat_pc(client, player_headers, table)
+    assert _read(client, player_headers, pc_id)["computed"]["feat_bonus"] == 1
+    assert _catalog(client, player_headers, pc_id) == [("charger", 1)]
+    assert _resolve(client, player_headers, pc_id) == {"charger": 1, "spear": None}
+
+
+def test_rules_on_the_rewrite_replaces_the_original(
+    client, feats, table, gm_headers, player_headers
+):
+    pc_id = _feat_pc(client, player_headers, table)
+    _switch(client, gm_headers, table, True)
+    pc = _read(client, player_headers, pc_id)
+    assert pc["computed"]["feat_bonus"] == 5
+    assert pc["entries"]["charger"]["bonus"] == 5
+    assert _catalog(client, player_headers, pc_id) == [("charger", 5)]
+    assert _resolve(client, player_headers, pc_id)["charger"] == 5
+    _switch(client, gm_headers, table, False)
+    assert _read(client, player_headers, pc_id)["computed"]["feat_bonus"] == 1
+
+
+def test_a_sheet_reads_only_its_own_campaigns_rulesets(client, feats, table, player_headers):
+    pc_id = _feat_pc(client, player_headers, table)
+    assert ("spear", 2) not in _catalog(client, player_headers, pc_id)
+    # Another table's sheet sees its own.
+    other_pc = _feat_pc(client, player_headers, feats)
+    assert ("spear", 2) in _catalog(client, player_headers, other_pc)
+
+
+def test_without_a_character_the_compendium_shows_everything(
+    client, feats, table, gm_headers, player_headers
+):
+    _switch(client, gm_headers, table, True)
+    assert _catalog(client, player_headers) == [("charger", 1), ("charger", 5), ("spear", 2)]
+    assert _resolve(client, player_headers) == {"charger": 1, "spear": 2}
+
+
+def test_a_character_you_cannot_read_is_404(client, feats, table, player_headers, admin_headers):
+    from backend.tests.test_wiki_annotations import _user  # noqa: PLC0415
+
+    pc_id = _feat_pc(client, player_headers, table)
+    _, outsider = _user(client, admin_headers)
+    # They have the sheet, so the 404 is the character's, not the schema's.
+    assert client.post("/api/characters/schemas", json={"document": FEATS}, headers=outsider).status_code == 200
+    assert _catalog(client, outsider) == [("charger", 1)]  # no table, no rulesets
+    resp = client.get(
+        "/api/content/house-feats-demo/feat", params={"character_id": pc_id}, headers=outsider
+    )
+    assert resp.status_code == 404

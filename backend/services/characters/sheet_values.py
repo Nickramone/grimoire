@@ -6,11 +6,12 @@ router: re-validating a schema document on the way out, and resolving the
 catalog entries a character's references point at.
 """
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from ...models import CharacterSchema, ContentEntry, Ruleset, RulesetEntry
+from . import house_rules as hr
 from . import rulesets as rs
 from .schema import SchemaError, validate_schema
 
@@ -72,7 +73,13 @@ def _collect_ids(definition: dict, value: Any, wanted: set[str]) -> None:
                 _collect_ids(per_definition, per.get(key), wanted)
 
 
-def resolved_entries(db: Session, document: dict, data: dict, user_id: str) -> dict[str, Any]:
+def resolved_entries(
+    db: Session,
+    document: dict,
+    data: dict,
+    user_id: str,
+    scope: Optional[hr.CharacterScope] = None,
+) -> dict[str, Any]:
     """Catalog entries every reference in a character points at.
 
     Formulas like `sum_refs(spells, 'level')` need the entries themselves, not
@@ -94,14 +101,17 @@ def resolved_entries(db: Session, document: dict, data: dict, user_id: str) -> d
     }
     # Ruleset entries resolve the same way, so a formula reading a spell's
     # level does not care whether the spell came from a pack or a table's own
-    # ruleset.
-    for row in (
-        db.query(RulesetEntry)
+    # ruleset. For a character (``scope``), only its own campaign's rulesets,
+    # and their rewrites win while the house rules are on.
+    rows = (
+        db.query(RulesetEntry, Ruleset)
         .join(Ruleset, Ruleset.id == RulesetEntry.ruleset_id)
         .filter(RulesetEntry.schema_id == schema_id)
         .filter(RulesetEntry.entry_id.in_(wanted))
         .filter(rs.readable_filter(db, user_id))
+        .filter(hr.ruleset_scope(scope))
         .all()
-    ):
-        resolved.setdefault(row.entry_id, row.data if isinstance(row.data, dict) else {})
-    return resolved
+    )
+    return hr.merge_resolved(
+        resolved, rows, lambda row: row.data if isinstance(row.data, dict) else {}, scope
+    )

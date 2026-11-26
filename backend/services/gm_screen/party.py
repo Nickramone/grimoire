@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from ...config import CHARACTER_PORTRAIT_DIR
 from ...models import Character, CharacterSchema, User
 from ..characters import compute_values
-from ..characters.house_rules import with_derived
+from ..characters.house_rules import scope_for, with_derived
 from ..characters.sheet_values import resolved_entries, validated_document
 
 __all__ = ["party_overview"]
@@ -138,7 +138,7 @@ def party_overview(db: Session, campaign_id: str, viewer_id: str) -> dict:
             if value is not None:
                 values[name] = value
         if document.get("computed"):
-            entries = resolved_entries(db, document, data, row.user_id)
+            entries = resolved_entries(db, document, data, row.user_id, scope_for(db, row))
             for name, value in compute_values(document, data, entries).items():
                 fields.setdefault(
                     name,

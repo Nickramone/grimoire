@@ -18,6 +18,7 @@ from ...models import (
 )
 from ...services import characters as svc
 from ...services.characters import images as char_images
+from ...services.characters import house_rules
 from ...services.characters import rulesets as rs
 from ...services.characters.sheet_values import reference_ids
 
@@ -243,24 +244,29 @@ def embedded_entries(db: Session, character: Character, document: dict) -> dict[
             "name": row.name,
             "data": row.data if isinstance(row.data, dict) else {},
         }
-    for entry in (
-        db.query(RulesetEntry)
+    # The rulesets the sheet reads: its own campaign's, and a rewrite in it
+    # stands for the original while the house rules are on.
+    scope = house_rules.scope_for(db, character)
+    rows = (
+        db.query(RulesetEntry, Ruleset)
         .join(Ruleset, Ruleset.id == RulesetEntry.ruleset_id)
         .filter(RulesetEntry.schema_id == character.schema_ref)
         .filter(RulesetEntry.entry_id.in_(entry_ids))
         .filter(rs.readable_filter(db, character.user_id))
+        .filter(house_rules.ruleset_scope(scope))
         .all()
-    ):
-        embedded.setdefault(
-            entry.entry_id,
-            {
-                "content_type": entry.content_type,
-                "source": "ruleset",
-                "name": entry.name,
-                "data": entry.data if isinstance(entry.data, dict) else {},
-            },
-        )
-    return embedded
+    )
+    return house_rules.merge_resolved(
+        embedded,
+        rows,
+        lambda entry: {
+            "content_type": entry.content_type,
+            "source": "ruleset",
+            "name": entry.name,
+            "data": entry.data if isinstance(entry.data, dict) else {},
+        },
+        scope,
+    )
 
 
 def referenced_ids(document: dict, data: dict) -> set:

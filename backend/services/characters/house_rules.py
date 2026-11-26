@@ -19,11 +19,13 @@ in no campaign, plays without house rules.
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any, Iterable, Optional
 
+from sqlalchemy import or_, true
 from sqlalchemy.orm import Session
 
-from ...models import AppSetting
+from ...models import AppSetting, Ruleset
 
 __all__ = [
     "SETTING_KEY",
@@ -34,6 +36,12 @@ __all__ = [
     "derived_fields",
     "with_derived",
     "without_derived",
+    "CharacterScope",
+    "scope_for",
+    "ruleset_scope",
+    "replaces",
+    "merge_resolved",
+    "pick_catalog_rows",
 ]
 
 SETTING_KEY = "house_rules_by_campaign"
@@ -107,3 +115,80 @@ def without_derived(document: Optional[dict], submitted: Any) -> dict:
     for name in derived_fields(document):
         values.pop(name, None)
     return values
+
+
+# --- entries as one character sees them ---------------------------------
+#
+# A campaign ruleset rewrites a feat by keeping its entry id: the variant takes
+# the original's place for the characters at that table while the house rules
+# are on, so a feat picked before the switch reads the table's version at once,
+# and the original again when the rules go off or the character moves. A
+# character at a table only reads that campaign's rulesets, not those of every
+# other table its player sits at.
+
+
+@dataclass(frozen=True)
+class CharacterScope:
+    campaign_id: Optional[str]
+    house_rules: bool
+
+
+def scope_for(db: Session, character: Any) -> CharacterScope:
+    campaign_id = getattr(character, "campaign_id", None) or None
+    return CharacterScope(campaign_id=campaign_id, house_rules=house_rules_on(db, campaign_id))
+
+
+def ruleset_scope(scope: Optional[CharacterScope]) -> Any:
+    """A filter on ``Ruleset`` for one character at a table: server, personal,
+    and that campaign's rulesets. A character in no campaign, and no character
+    at all (the Compendium), keep every readable ruleset, as upstream."""
+    if scope is None or not scope.campaign_id:
+        return true()
+    return or_(Ruleset.campaign_id.is_(None), Ruleset.campaign_id == scope.campaign_id)
+
+
+def replaces(scope: Optional[CharacterScope], ruleset: Any) -> bool:
+    """Whether a ruleset's entries take the place of same-id entries."""
+    return bool(
+        scope is not None
+        and scope.house_rules
+        and scope.campaign_id
+        and getattr(ruleset, "campaign_id", None) == scope.campaign_id
+    )
+
+
+def merge_resolved(
+    resolved: dict, rows: Iterable[tuple[Any, Any]], value: Any, scope: Optional[CharacterScope]
+) -> dict:
+    """Add ruleset entries to pack entries already resolved by id.
+
+    ``rows`` are ``(RulesetEntry, Ruleset)`` pairs and ``value(entry)`` what to
+    store. Pack entries win over ruleset ones, as upstream, except a campaign's
+    rewrite while its house rules are on.
+    """
+    for entry, ruleset in rows:
+        if replaces(scope, ruleset):
+            resolved[entry.entry_id] = value(entry)
+        else:
+            resolved.setdefault(entry.entry_id, value(entry))
+    return resolved
+
+
+def pick_catalog_rows(rows: list, scope: Optional[CharacterScope]) -> list:
+    """One character's catalog: a rewrite replaces its original, and with the
+    house rules off a campaign's rewrites of pack entries are not offered.
+
+    ``rows`` carry ``entry_id``, ``ruleset`` (bool) and ``ruleset_campaign_id``.
+    """
+    if scope is None or not scope.campaign_id:
+        return rows
+    def ours(row: Any) -> bool:
+        return bool(row.ruleset) and getattr(row, "ruleset_campaign_id", None) == scope.campaign_id
+
+    ours_ids = {row.entry_id for row in rows if ours(row)}
+    if not ours_ids:
+        return rows
+    if scope.house_rules:
+        return [row for row in rows if ours(row) or row.entry_id not in ours_ids]
+    pack_ids = {row.entry_id for row in rows if not row.ruleset}
+    return [row for row in rows if not (ours(row) and row.entry_id in pack_ids)]
