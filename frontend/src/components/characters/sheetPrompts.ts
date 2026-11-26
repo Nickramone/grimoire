@@ -153,6 +153,29 @@ export interface PromptDocument extends ExpressionDocument {
 /** Opens one of the sheet's prompts; provided by the character view. */
 export const PromptLauncher = createContext<((request: PromptRequest) => void) | null>(null)
 
+/**
+ * The choices put off, for the field or row whose pick opened each to mark
+ * it there and open it again; provided by the character view when the sheet
+ * can be edited.
+ */
+export interface PendingChoicesValue {
+  pending: PromptRequest[]
+  label: (request: PromptRequest) => string
+  reopen: (request: PromptRequest) => void
+}
+export const PendingChoices = createContext<PendingChoicesValue | null>(null)
+
+/** The choices put off that a field's pick - or one row of it, by `ref` - opened. */
+export function pendingFrom(
+  pending: PromptRequest[],
+  source: string,
+  ref?: string
+): PromptRequest[] {
+  return pending.filter(
+    (item) => item.source === source && (ref === undefined || (item.ref || '') === ref)
+  )
+}
+
 const FAILED = Symbol('failed')
 
 // The longest record key, as the server keeps it.

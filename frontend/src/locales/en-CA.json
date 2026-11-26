@@ -4062,6 +4062,7 @@
     "promptUseAverage": "Use average ({{value}})",
     "promptPending": "Choices to make:",
     "promptDismiss": "Dismiss {{name}}",
+    "promptChooseNow": "Choose {{name}} now",
     "overrideValue": "Set {{label}}",
     "overriddenValue": "{{label}}: {{value}}, set by you",
     "overrideHint": "Calculated. Click to set your own value.",

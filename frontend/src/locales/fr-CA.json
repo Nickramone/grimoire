@@ -4062,6 +4062,7 @@
     "promptUseAverage": "Utiliser la moyenne ({{value}})",
     "promptPending": "Choix à faire :",
     "promptDismiss": "Ignorer {{name}}",
+    "promptChooseNow": "Choisir {{name}} maintenant",
     "overrideValue": "Définir {{label}}",
     "overriddenValue": "{{label}} : {{value}}, défini par vous",
     "overrideHint": "Calculé. Cliquez pour définir votre propre valeur.",

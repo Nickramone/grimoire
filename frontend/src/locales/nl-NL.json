@@ -4062,6 +4062,7 @@
     "promptUseAverage": "Gemiddelde gebruiken ({{value}})",
     "promptPending": "Nog te kiezen:",
     "promptDismiss": "{{name}} negeren",
+    "promptChooseNow": "Kies {{name}} nu",
     "overrideValue": "{{label}} instellen",
     "overriddenValue": "{{label}}: {{value}}, door jou ingesteld",
     "overrideHint": "Berekend. Klik om je eigen waarde in te stellen.",

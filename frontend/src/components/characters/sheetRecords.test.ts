@@ -115,6 +115,22 @@ describe('planRevert', () => {
     expect(planRevert(DOCUMENT, DATA, '')).toEqual({})
   })
 
+  it('drops the choices the level put off, with or without a record', () => {
+    const waiting = [
+      { prompt: 'asi_later', record: 'level:2' },
+      { prompt: 'background_later', record: 'level:1' },
+      { prompt: 'feat_tools', source: 'feats', ref: 'alert' },
+    ]
+    expect(planRevert(DOCUMENT, { ...DATA, _pending_prompts: waiting }, 'level:2')).toMatchObject({
+      // Alert itself is taken back with level 2, and its choice with it.
+      _pending_prompts: [waiting[1]],
+    })
+    expect(planRevert(DOCUMENT, { _pending_prompts: waiting }, 'level:1')).toEqual({
+      _pending_prompts: [waiting[0], waiting[2]],
+    })
+    expect(planRevert(DOCUMENT, { _pending_prompts: waiting }, 'level:5')).toEqual({})
+  })
+
   it('does not put back a row the list holds again', () => {
     const data = { ...DATA, spells: [{ _ref: 'light' }, { _ref: 'fire-bolt' }] }
     expect(planRevert(DOCUMENT, data, 'level:2').spells).toEqual([{ _ref: 'light' }])

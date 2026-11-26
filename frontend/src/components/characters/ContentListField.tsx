@@ -11,6 +11,7 @@ import type { ContentFieldDefinition, ContentTypeDefinition } from './ContentEnt
 import { ghostBtn, iconBtn, fieldLabel } from './characterStyles'
 import { evaluate } from './expressions'
 import { catalogFilters, catalogNote } from './catalogFilters'
+import PendingMarks from './PendingMarks'
 
 type EntryValues = Record<string, unknown>
 
@@ -377,6 +378,8 @@ export default function ContentListField({
                           ) : null}
                         </button>
                       )}
+                      {/* A choice this row's pick put off - a feat's tools - opens from here. */}
+                      {row?._ref ? <PendingMarks source={name} rowRef={row._ref} /> : null}
                     </td>
                     {columns.map((column) => (
                       <td key={column.key} style={{ ...cell, color: 'var(--text-dim)' }}>

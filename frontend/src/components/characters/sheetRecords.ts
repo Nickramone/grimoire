@@ -207,10 +207,19 @@ export function planRevert(
   data: Values | null | undefined,
   key: string
 ): Values {
+  if (!key) return {}
+  // The choices that level put off go with it: there is nothing left to choose.
+  const waiting = data?.[PENDING_PROMPTS_KEY]
+  const pending: Values = {}
+  if (Array.isArray(waiting)) {
+    const kept = waiting.filter((item) => !isObject(item) || item.record !== key)
+    if (kept.length !== waiting.length) pending[PENDING_PROMPTS_KEY] = kept
+  }
   const records = recordsOf(data)
-  if (!key || !Object.prototype.hasOwnProperty.call(records, key)) return {}
+  if (!Object.prototype.hasOwnProperty.call(records, key)) return pending
   const own = records[key]
   const undo = new Undo(document, data)
+  Object.assign(undo.patch, pending)
   const rest = { ...records }
   delete rest[key]
   undo.patch[RECORDS_KEY] = rest

@@ -20,6 +20,7 @@ import PromptDialog from '../components/characters/PromptDialog'
 import type { BrowseEntries } from '../components/characters/PromptDialog'
 import {
   findPrompt,
+  PendingChoices,
   pendingPrompts,
   planPrompt,
   planGrants,
@@ -989,18 +990,32 @@ export default function CharacterDetailView() {
 
         {document ? (
           <PromptLauncher.Provider value={readOnly ? null : openPrompt}>
-            <CharacterSheet
-              document={document}
-              data={data}
-              // A party member may read another player's sheet but not edit it; the
-              // server refuses the write, so the controls should not be offered.
-              readOnly={readOnly}
-              onChange={onChange}
-              onReset={onReset}
-              onOverride={onOverride}
-              entries={{ ...(character.entries || {}), ...pickedEntries }}
-              schemaId={character.schema_ref}
-            />
+            {/* The choices put off, marked again beside the pick that opened each. */}
+            <PendingChoices.Provider
+              value={
+                readOnly
+                  ? null
+                  : {
+                      pending: pendingPrompts(data),
+                      label: (request) =>
+                        findPrompt(document, request.prompt)?.label || request.prompt,
+                      reopen: (request) => void reopenPrompt(request),
+                    }
+              }
+            >
+              <CharacterSheet
+                document={document}
+                data={data}
+                // A party member may read another player's sheet but not edit it; the
+                // server refuses the write, so the controls should not be offered.
+                readOnly={readOnly}
+                onChange={onChange}
+                onReset={onReset}
+                onOverride={onOverride}
+                entries={{ ...(character.entries || {}), ...pickedEntries }}
+                schemaId={character.schema_ref}
+              />
+            </PendingChoices.Provider>
           </PromptLauncher.Provider>
         ) : (
           <RawCharacterData data={data} />

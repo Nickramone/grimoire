@@ -4062,6 +4062,7 @@
     "promptUseAverage": "Usa la media ({{value}})",
     "promptPending": "Scelte in sospeso:",
     "promptDismiss": "Scarta {{name}}",
+    "promptChooseNow": "Scegli {{name}} ora",
     "overrideValue": "Imposta {{label}}",
     "overriddenValue": "{{label}}: {{value}}, impostato da te",
     "overrideHint": "Calcolato. Fai clic per impostare un valore tuo.",

@@ -5,6 +5,7 @@ import { LuSearch, LuX, LuPencil, LuInfo } from 'react-icons/lu'
 import ContentBrowser from './ContentBrowser'
 import ContentEntryDetail from './ContentEntryDetail'
 import { catalogFilters, catalogNote } from './catalogFilters'
+import PendingMarks from './PendingMarks'
 import ContentEntryDialog from './ContentEntryDialog'
 import type { ContentRefValue } from './ContentBrowser'
 import FieldRenderer from './FieldRenderer'
@@ -274,6 +275,10 @@ export default function ContentRefField({
               </button>
             )}
           </div>
+
+          {/* A choice the pick put off - a background's ability increases -
+              opens from beside it, even where the pick itself is read-only. */}
+          <PendingMarks source={name} />
 
           {/* When freeform is on and nothing is chosen yet, also offer an explicit
               "Add custom" control — the pencil icon alone is easy to miss in a
