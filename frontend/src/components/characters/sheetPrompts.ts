@@ -1,7 +1,15 @@
 import { createContext } from 'react'
 import { buildContext, computeValues, evaluate, parse, toNumber } from './expressions'
 import type { ExprContext, ExprNode, ExpressionDocument } from './expressions'
-import { GRANTED_KEY, asList as listOf, grantInto, parallelList, perEntryAt } from './onPick'
+import {
+  GRANTED_KEY,
+  asList as listOf,
+  grantInto,
+  parallelList,
+  perEntryAt,
+  rowKey,
+  sameKey,
+} from './onPick'
 import type { ResolvedRefs } from './onPick'
 import { planAction } from './sheetActions'
 import type { ActionStep } from './sheetActions'
@@ -637,6 +645,11 @@ export function planPrompt(
   // Rows `unpick` took out that were there before the prompt: kept in the
   // record, to be put back.
   const dropped: Record<string, Values[]> = {}
+  // The records under `_granted`, cleaned of the rows an `unpick` takes out.
+  const recorded = {
+    ...((data?.[GRANTED_KEY] || {}) as Record<string, Record<string, string[]>>),
+  }
+  let cleaned = false
   const current = (name: string): unknown => (name in patch ? patch[name] : data?.[name])
 
   for (const step of steps) {
@@ -700,34 +713,46 @@ export function planPrompt(
       continue
     }
     if (typeof step.unpick === 'string') {
-      // The list less the entry's row, made as a change by hand, so the row's
-      // own grants are taken back; the picks after it see the list without it.
-      // An `entries` step's answer takes out each of its entries in turn.
+      // The list less the entry's row, made as a change by hand; the picks
+      // after it see the list without it. A reference is found by its id, a
+      // freeform row by its name (or the id it fell back from). An `entries`
+      // step's answer takes out each of its entries in turn.
       const field = step.unpick
       if (fields[field]?.type !== 'content_list') continue
       for (const entry of entriesOf(evaluate<symbol>(step.entry, ctx, FAILED))) {
-        const wanted = entry._ref.trim().toLowerCase()
+        const keys = [entry._ref, entry.name].filter(
+          (key): key is string => typeof key === 'string' && !!key.trim()
+        )
         const before = picks.filter((pick) => pick.field === field).pop()
         const rows = before
           ? (before.value as unknown[])
           : Array.isArray(current(field))
             ? (current(field) as unknown[])
             : []
-        const index = rows.findIndex(
-          (item) =>
-            isObject(item) &&
-            String(item._ref ?? '')
-              .trim()
-              .toLowerCase() === wanted
-        )
+        const index = rows.findIndex((item) => {
+          const own = rowKey(item)
+          if (own === null) return false
+          return isObject(item) && item._ref !== undefined && item._ref !== null
+            ? sameKey(own, entry._ref)
+            : keys.some((key) => sameKey(own, key))
+        })
         if (index < 0) continue
+        const removed = rowKey(rows[index])!
         picks.push({ field, value: rows.filter((_, i) => i !== index) })
         // A row this prompt picked and took out again is not recorded either.
         const held = granted[field] || []
-        const at = held.indexOf(entry._ref)
+        const at = held.findIndex((key) => sameKey(key, removed))
         if (at >= 0) granted[field] = held.filter((_, i) => i !== at)
         else if (record && isObject(rows[index])) {
           dropped[field] = [...(dropped[field] || []), rows[index] as Values]
+        }
+        // No record keeps it, an earlier pick's either: a row added again by
+        // hand is not taken back by a later change of that pick.
+        for (const [from, targets] of Object.entries(recorded)) {
+          const list = targets?.[field]
+          if (!Array.isArray(list) || !list.some((key) => sameKey(key, removed))) continue
+          recorded[from] = { ...targets, [field]: list.filter((key) => !sameKey(key, removed)) }
+          cleaned = true
         }
       }
       continue
@@ -771,6 +796,7 @@ export function planPrompt(
     }
   }
 
+  if (cleaned) patch[GRANTED_KEY] = recorded
   // Kept in the record, when the prompt keeps one.
   if (record) {
     Object.assign(patch, withRecord(data, record, { granted, dropped }))
@@ -779,13 +805,12 @@ export function planPrompt(
   // Recorded under the pick that opened the prompt, so picking something
   // else there takes back what the prompt added along with the pick's own.
   if (source && Object.keys(granted).length) {
-    const all = { ...((data?.[GRANTED_KEY] || {}) as Record<string, Record<string, string[]>>) }
-    const fromSource = { ...(all[source] || {}) }
+    const fromSource = { ...(recorded[source] || {}) }
     for (const [target, values] of Object.entries(granted)) {
       fromSource[target] = [...(fromSource[target] || []), ...values]
     }
-    all[source] = fromSource
-    patch[GRANTED_KEY] = all
+    recorded[source] = fromSource
+    patch[GRANTED_KEY] = recorded
   }
   return { patch, picks, prompts, grants }
 }
