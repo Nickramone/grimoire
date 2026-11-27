@@ -575,7 +575,7 @@ PROMPT_ANSWER_NAME = "answer"
 PROMPT_ROW_NAME = "row"
 PROMPT_ENTRY_NAME = "entry"
 _PROMPT_STEP_TYPES: frozenset = frozenset(
-    {"campaign", "choose", "distribute", "entry", "entries", "number", "select"}
+    {"campaign", "choose", "distribute", "entry", "entries", "number", "scores", "select"}
 )
 _PATTERN_RE = re.compile(r"^\d{1,2}(,\d{1,2}){0,9}$")
 
@@ -900,6 +900,39 @@ def _validate_prompt_count(count: Any, where: str, known: set[str], images: froz
         raise SchemaError(f"{where} 'count' must be 1-{MAX_CHOOSE_COUNT} or a formula")
 
 
+def _validate_scores_step(step: dict, where: str, base: set[str], images: frozenset) -> None:
+    """A ``scores`` step: scores set side by side, each moved within min-max;
+    with ``costs`` and a ``budget``, the points they cost stay within it."""
+    abilities = step.get("abilities")
+    if not isinstance(abilities, list) or not 1 <= len(abilities) <= 12:
+        raise SchemaError(f"{where} needs 'abilities': one to twelve scores")
+    names: set[str] = set()
+    for ability in abilities:
+        ability = _require_dict(ability, f"{where} ability")
+        name = ability.get("key")
+        if not isinstance(name, str) or not _NAME_RE.match(name) or name in names:
+            raise SchemaError(f"{where} needs a distinct identifier 'key' for each ability")
+        names.add(name)
+        what = f"{where} ability {name!r}"
+        _validate_label(ability.get("label"), what, MAX_PROMPT_LABEL, required=False)
+        for formula in ("start", "bonus"):
+            if formula in ability:
+                _validate_formula(ability[formula], f"{what} {formula!r}", base, images)
+    for bound in ("min", "max", "budget"):
+        value = step.get(bound)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise SchemaError(f"{where} {bound!r} must be a number")
+    costs = step.get("costs")
+    if costs is not None and (
+        not isinstance(costs, dict)
+        or len(costs) > 100
+        or not all(
+            isinstance(cost, (int, float)) and not isinstance(cost, bool) for cost in costs.values()
+        )
+    ):
+        raise SchemaError(f"{where} 'costs' must map each score to the points it costs")
+
+
 def _validate_prompts(
     prompts: Any, fields: dict, known: set[str], images: frozenset, content_types: dict
 ) -> None:
@@ -1041,6 +1074,8 @@ def _validate_prompts(
                         isinstance(value, bool) or not isinstance(value, (int, float))
                     ):
                         raise SchemaError(f"{where} {bound!r} must be a number")
+            elif kind == "scores":
+                _validate_scores_step(step, where, base, images)
             elif kind == "campaign":
                 # The character's campaign, chosen from the player's own: no
                 # options of the sheet's.

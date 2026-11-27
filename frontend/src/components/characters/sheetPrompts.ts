@@ -39,7 +39,7 @@ const ENTRY_PAGE_SIZE = 200
 const ENTRY_MAX_PAGES = 10
 
 export type PromptStepType =
-  'campaign' | 'choose' | 'distribute' | 'entry' | 'entries' | 'number' | 'select'
+  'campaign' | 'choose' | 'distribute' | 'entry' | 'entries' | 'number' | 'scores' | 'select'
 
 export interface PromptStep {
   // The page of a paged prompt it is shown on; alone on its own without one.
@@ -69,12 +69,26 @@ export interface PromptStep {
   // Text worked out for each candidate, read as `entry`, shown beside its
   // name - a spell's level.
   entry_note?: string
+  // scores: the scores set, each from its `start` up or down within
+  // `min`-`max`; with `costs` (score -> points) and `budget`, the points they
+  // cost may not go past the budget. Each shows its `bonus` and the total.
+  abilities?: ScoreAbility[]
+  costs?: Record<string, number>
+  budget?: number
   // number: the starting value; entry: the id of the entry chosen at the
   // start, which the player may keep or change
   default?: string
   average?: string
   min?: number
   max?: number
+}
+
+/** One score of a `scores` step: its formulas read the sheet and the answers. */
+export interface ScoreAbility {
+  key: string
+  label?: string
+  start?: string
+  bonus?: string
 }
 
 export interface PromptApplyStep extends Omit<ActionStep, 'values'> {
@@ -428,6 +442,8 @@ function answeredByType(
     }
     case 'number':
       return typeof answer === 'number' && Number.isFinite(answer)
+    case 'scores':
+      return scoresValid(step, answer)
     // The campaign the character is played in, or none: '' is an answer.
     case 'campaign':
       return typeof answer === 'string'
@@ -500,6 +516,43 @@ export function laterPrompts(prompt: SheetPrompt, skipped: readonly string[]): s
     if (name && !later.includes(name)) later.push(name)
   }
   return later
+}
+
+/** What a `scores` step's score costs: by its `costs`, 0 without them. */
+export function scoreCost(step: PromptStep, score: number): number {
+  if (!step.costs) return 0
+  const cost = step.costs[String(score)]
+  return typeof cost === 'number' ? cost : Number.POSITIVE_INFINITY
+}
+
+/** The points a `scores` step has left: its budget less what the scores cost. */
+export function scoresLeft(step: PromptStep, answer: unknown): number | undefined {
+  if (!step.costs || typeof step.budget !== 'number') return undefined
+  const values = isObject(answer) ? answer : {}
+  let spent = 0
+  for (const ability of step.abilities || []) spent += scoreCost(step, Number(values[ability.key]))
+  return step.budget - spent
+}
+
+/** Each score of a `scores` step at its start, within its bounds. */
+export function scoresStart(step: PromptStep, context: ExprContext): Values {
+  const start: Values = {}
+  for (const ability of step.abilities || []) {
+    const value = ability.start ? toNumber(evaluate(ability.start, context)) : (step.min ?? 0)
+    start[ability.key] = clampNumber(step, Math.round(Number(value) || 0))
+  }
+  return start
+}
+
+function scoresValid(step: PromptStep, answer: unknown): boolean {
+  if (!isObject(answer)) return false
+  for (const ability of step.abilities || []) {
+    const value = answer[ability.key]
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false
+    if (clampNumber(step, value) !== value) return false
+  }
+  const left = scoresLeft(step, answer)
+  return left === undefined || left >= 0
 }
 
 /** An `entry` step's starting choice: the entry id its `default` works out. */

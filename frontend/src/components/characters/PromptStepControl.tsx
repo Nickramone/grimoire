@@ -3,6 +3,7 @@ import PromptStepChoose from './PromptStepChoose'
 import PromptStepDistribute from './PromptStepDistribute'
 import PromptStepEntry from './PromptStepEntry'
 import PromptStepNumber from './PromptStepNumber'
+import PromptStepScores from './PromptStepScores'
 import PromptStepSelect from './PromptStepSelect'
 import type { StepControlProps } from './promptStepShared'
 
@@ -20,6 +21,8 @@ export default function PromptStepControl(props: StepControlProps) {
       return <PromptStepEntry {...props} />
     case 'number':
       return <PromptStepNumber {...props} />
+    case 'scores':
+      return <PromptStepScores {...props} />
     case 'select':
       return <PromptStepSelect {...props} />
     default:

@@ -9,6 +9,7 @@ import {
   laterPrompts,
   loadCatalog,
   numberDefault,
+  scoresStart,
   promptContext,
   shownPages,
   stepLabel,
@@ -73,6 +74,8 @@ export default function PromptDialog({
     const start: Answers = {}
     for (const step of prompt.steps || []) {
       if (step?.type === 'campaign') start[step.key] = campaignId || ''
+      if (step?.type === 'scores')
+        start[step.key] = scoresStart(step, promptContext(context, start, row))
       if (step?.type !== 'number') continue
       const value = numberDefault(step, promptContext(context, start, row))
       if (value !== undefined) start[step.key] = value
