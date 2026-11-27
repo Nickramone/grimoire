@@ -51,6 +51,9 @@ export interface PromptStep {
   // of `label` when it is not empty.
   label_formula?: string
   visible_if?: string
+  // A formula reading the answers, this step's own included: the step counts
+  // as answered only while it holds - points spent within a budget.
+  valid_if?: string
   // choose
   target?: string
   // choose, entries
@@ -384,6 +387,25 @@ export function isAnswered(
   document: PromptDocument | null | undefined,
   data: Values | null | undefined,
   // How many entries an `entries` step has to choose from, once it has read them.
+  available?: number
+): boolean {
+  if (!answeredByType(step, answer, context, document, data, available)) return false
+  if (!step.valid_if) return true
+  const answers = isObject(context.answer) ? context.answer : {}
+  const value = evaluate<symbol>(
+    step.valid_if,
+    { ...context, answer: { ...answers, [step.key]: answer } },
+    FAILED
+  )
+  return value !== FAILED && Boolean(value)
+}
+
+function answeredByType(
+  step: PromptStep,
+  answer: unknown,
+  context: ExprContext,
+  document: PromptDocument | null | undefined,
+  data: Values | null | undefined,
   available?: number
 ): boolean {
   switch (step.type) {

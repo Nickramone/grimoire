@@ -975,6 +975,7 @@ def _validate_prompts(
             if "label_formula" in step:
                 _validate_formula(step["label_formula"], f"{where} 'label_formula'", base, images)
             _validate_condition(step.get("visible_if"), f"{where} visible_if", base, images)
+            _validate_condition(step.get("valid_if"), f"{where} valid_if", base, images)
 
             if kind == "choose":
                 target = step.get("target")

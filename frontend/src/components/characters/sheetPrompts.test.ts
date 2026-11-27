@@ -451,6 +451,25 @@ describe('planPrompt', () => {
     ])
   })
 
+  it('counts a step answered only while its valid_if holds, reading its own answer', () => {
+    const prompt: SheetPrompt = {
+      label: 'Point buy',
+      steps: [
+        { key: 'a', type: 'number', min: 8, max: 15 },
+        {
+          key: 'b',
+          type: 'number',
+          min: 8,
+          max: 15,
+          valid_if: '(answer.a - 8) + (answer.b - 8) <= 9',
+        },
+      ],
+      apply: [],
+    }
+    expect(isComplete(prompt, {}, { a: 12, b: 13 }, DOCUMENT, {})).toBe(true)
+    expect(isComplete(prompt, {}, { a: 15, b: 13 }, DOCUMENT, {})).toBe(false)
+  })
+
   it('takes out the row a text names by its id, and nothing for an empty text', () => {
     const prompt: SheetPrompt = {
       label: 'Origin feat',
