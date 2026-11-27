@@ -4,7 +4,7 @@ import FieldRenderer from './FieldRenderer'
 import DerivedCell from './DerivedCell'
 import EntryMarkdown from './EntryMarkdown'
 import type { FieldDefinition } from './FieldRenderer'
-import { evaluate, isVisible, computedOverrides } from './expressions'
+import { evaluate, isVisible, computedOverrides, withRowComputed } from './expressions'
 import OverridableValue from './OverridableValue'
 import LayoutTabs from './LayoutTabs'
 import TierSelect from './TierSelect'
@@ -850,7 +850,7 @@ function entryRepeatItems(
     const entry = item._inline ? item : table[String(item._ref)]
     // A reference whose entry is gone has nothing to draw.
     if (!entry || typeof entry !== 'object') return
-    const row: Values = { ...(entry as Values), ...per }
+    const row: Values = withRowComputed(definition, { ...(entry as Values), ...per }, context)
     if (attrs.where && !evaluate(attrs.where, { ...context, row }, false)) return
     const edit = (name: string, value: unknown) => {
       const next = rows.map((existing, i) =>

@@ -840,6 +840,30 @@ export function buildContext(
   return context
 }
 
+// A content_list's `row_computed`: name -> formula, worked out for each row
+// from the row (as `row`: the entry with the character's per-entry values on
+// top) beside the character's names, computed values included, in the order
+// declared, so a later one reads an earlier one. The layout and the per-entry
+// fields' conditions then read them as `row.<name>`: a condition a list's rows
+// share is written once instead of in every place that draws the row. A
+// formula that does not parse gives null.
+export function withRowComputed(
+  definition: object | null | undefined,
+  row: ExprContext,
+  context: ExprContext | null | undefined
+): ExprContext {
+  const formulas = (definition as { row_computed?: unknown } | null | undefined)?.row_computed
+  if (!formulas || typeof formulas !== 'object' || Array.isArray(formulas)) return row
+  const result: ExprContext = { ...row }
+  const scope: ExprContext = { ...(context || {}), row: result }
+  for (const [name, formula] of Object.entries(formulas as Record<string, unknown>)) {
+    const source =
+      formula && typeof formula === 'object' ? (formula as { formula?: unknown }).formula : formula
+    result[name] = typeof source === 'string' ? evaluate<null>(source, scope, null) : null
+  }
+  return result
+}
+
 // A list field's columns that work out their value with `default_from`.
 export function derivedColumns(definition: ExpressionField | null | undefined): DerivableColumn[] {
   if (definition?.type !== 'list' || !Array.isArray(definition.columns)) return []

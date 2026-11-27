@@ -422,6 +422,40 @@ class TestPicksInsideARow:
         with pytest.raises(SchemaError, match="entry_note"):
             validate_schema(self._schema(entry_note=bad))
 
+    def test_row_computed_values_validate(self):
+        from backend.services.characters.schema import validate_schema
+
+        document = self._schema(
+            row_computed={"ready": "row.level > 0", "shown": {"formula": "row.ready and true"}}
+        )
+        assert validate_schema(document)["fields"]["spells"]["row_computed"]["ready"]
+
+    @pytest.mark.parametrize(
+        "bad, message",
+        [
+            ({}, "non-empty object"),
+            (["row.level"], "non-empty object"),
+            ({"bad name": "1"}, "not a valid identifier"),
+            ({"focus": "1"}, "name of a per-entry field"),
+            ({"ready": ""}, "non-empty expression"),
+            ({"ready": {"formula": 3}}, "non-empty expression"),
+            ({"ready": "row.("}, "not a valid expression"),
+        ],
+    )
+    def test_a_malformed_row_computed_is_rejected(self, bad, message):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match=message):
+            validate_schema(self._schema(focus={"type": "text"}, row_computed=bad))
+
+    def test_row_computed_is_only_for_a_content_list(self):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        document = self._schema()
+        document["fields"]["notes"] = {"type": "text", "row_computed": {"x": "1"}}
+        with pytest.raises(SchemaError, match="only a content_list"):
+            validate_schema(document)
+
     def test_a_per_entry_pick_must_name_a_declared_content_type(self):
         from backend.services.characters.schema import SchemaError, validate_schema
 

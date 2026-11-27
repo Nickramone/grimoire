@@ -359,6 +359,9 @@ def _validate_definition(
                         f"{what} per-entry field {per_name!r} {key} is not a valid expression: {exc}"
                     ) from exc
 
+    if "row_computed" in definition:
+        _validate_row_computed(what, field_type, definition)
+
     if field_type == "list":
         columns = definition.get("columns")
         if not isinstance(columns, list) or not columns:
@@ -372,6 +375,42 @@ def _validate_definition(
             if key in seen:
                 raise SchemaError(f"{what} has two columns keyed {key!r}")
             seen.add(key)
+
+
+#: The most values a content_list may work out for each of its rows.
+MAX_ROW_COMPUTED = 40
+
+
+def _validate_row_computed(what: str, field_type: str, definition: dict) -> None:
+    """A content_list's `row_computed`: name -> formula, worked out on screen for
+    each row (read as `row`, beside the character's names and computed values)
+    and read by the layout and the per-entry fields as `row.<name>`. Only the
+    shape and syntax are checked; the server never works them out.
+    """
+    if field_type != "content_list":
+        raise SchemaError(f"{what} has 'row_computed', which only a content_list can have")
+    formulas = definition["row_computed"]
+    if not isinstance(formulas, dict) or not formulas:
+        raise SchemaError(f"{what} 'row_computed' must be a non-empty object")
+    if len(formulas) > MAX_ROW_COMPUTED:
+        raise SchemaError(f"{what} has more than {MAX_ROW_COMPUTED} 'row_computed' values")
+    per_entry = definition.get("per_entry_fields") or {}
+    for row_name, formula in formulas.items():
+        if not _NAME_RE.match(str(row_name)):
+            raise SchemaError(f"{what} row_computed {row_name!r} is not a valid identifier")
+        if row_name in per_entry:
+            raise SchemaError(
+                f"{what} row_computed {row_name!r} has the name of a per-entry field"
+            )
+        source = formula.get("formula") if isinstance(formula, dict) else formula
+        if not isinstance(source, str) or not source.strip():
+            raise SchemaError(f"{what} row_computed {row_name!r} must be a non-empty expression")
+        try:
+            parse(source)
+        except EVALUATION_ERRORS as exc:
+            raise SchemaError(
+                f"{what} row_computed {row_name!r} is not a valid expression: {exc}"
+            ) from exc
 
 
 #: Rules one pick may carry. A pick is one player action, so this is generous.

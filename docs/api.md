@@ -2939,6 +2939,15 @@ ones, and a formula reads it through the row:
 - `default_from` on a per-entry field is worked out once, when the entry is
   added, with the added entry as `row`. For a per-entry `content_ref` a text
   result is the id of the entry to pick; an empty result leaves it unset.
+- `row_computed` (on a `content_list`) works values out for each row: each key
+  a name, each value a formula (or `{"formula": ...}`) reading the row as `row`
+  - the entry with its per-entry values on top - beside the sheet's names,
+  computed values included. They are worked out in order, so a later one reads
+  an earlier one, and the layout's `<g-repeat>` over the list and the per-entry
+  fields' `visible_if` and `disabled_if` read them as `row.<name>`: a condition
+  every row shares is written once. A name may not be a per-entry field's. Only
+  the screen works them out; formulas on the server (`computed`, `count_each`)
+  do not see them.
 
 **Stored shape.** A reference, never a copy:
 

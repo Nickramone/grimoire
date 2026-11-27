@@ -422,6 +422,30 @@ describe('LayoutRenderer — a repeat over picked entries', () => {
     expect(screen.queryByText('Homebrew Blade')).not.toBeInTheDocument()
   })
 
+  it('reads row_computed values as row.<name>, an earlier one in a later one', () => {
+    const doc = {
+      ...DOC,
+      fields: {
+        ...DOC.fields,
+        magic_items: {
+          ...DOC.fields.magic_items,
+          row_computed: {
+            hit: 'strength + row.attack_bonus',
+            label: { formula: "concat(row.name, ' ', signed(row.hit))" },
+          },
+        },
+      },
+    }
+    renderEntries(
+      repeat('row.hit > 3 && not row._inline', [
+        { tag: 'g-value', attrs: { formula: 'row.label' }, children: [] },
+      ]),
+      { document: doc }
+    )
+    expect(screen.getByText('+1 Sword +4')).toBeInTheDocument()
+    expect(screen.queryByText(/Cloak/)).not.toBeInTheDocument()
+  })
+
   it("draws an entry's text as Markdown, inside a row that opens", () => {
     renderEntries(
       repeat('row.attack_bonus == 1', [

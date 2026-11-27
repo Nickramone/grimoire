@@ -16,6 +16,8 @@ export interface ContentTypeDefinition {
 export interface ContentFieldDefinition extends FieldDefinition {
   allow_freeform?: boolean
   per_entry_fields?: Record<string, FieldDefinition>
+  // Values worked out for each row, read as `row.<name>`: name -> formula.
+  row_computed?: Record<string, string | { formula: string }>
   display_columns?: (string | { key: string; label?: string })[]
   // Fixed browser filters: a value, or a list of values any of which matches.
   filter?: Record<string, unknown>

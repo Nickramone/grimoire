@@ -9,7 +9,7 @@ import type { FieldDefinition } from './FieldRenderer'
 import ContentEntryDetail from './ContentEntryDetail'
 import type { ContentFieldDefinition, ContentTypeDefinition } from './ContentEntryDetail'
 import { ghostBtn, iconBtn, fieldLabel } from './characterStyles'
-import { evaluate } from './expressions'
+import { evaluate, withRowComputed } from './expressions'
 import { catalogFilters, catalogNote } from './catalogFilters'
 import PendingMarks from './PendingMarks'
 
@@ -161,7 +161,8 @@ export default function ContentListField({
       ...(entry && typeof entry === 'object' ? (entry as EntryValues) : {}),
       ...per,
     }
-    return { [name]: rows, _entries: entries, ...(context || {}), row: resolved }
+    const scope = { [name]: rows, _entries: entries, ...(context || {}) }
+    return { ...scope, row: withRowComputed(definition, resolved, scope) }
   }
 
   const isShown = (row: ContentRefValue, perDefinition: FieldDefinition) => {
