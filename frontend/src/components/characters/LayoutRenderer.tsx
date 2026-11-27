@@ -850,7 +850,9 @@ function entryRepeatItems(
     const entry = item._inline ? item : table[String(item._ref)]
     // A reference whose entry is gone has nothing to draw.
     if (!entry || typeof entry !== 'object') return
-    const row: Values = withRowComputed(definition, { ...(entry as Values), ...per }, context)
+    // A picked entry keeps its id as `_ref`: `has_ref(masteries, row._ref)`.
+    const own: Values = item._inline ? { ...per } : { ...per, _ref: String(item._ref) }
+    const row: Values = withRowComputed(definition, { ...(entry as Values), ...own }, context)
     if (attrs.where && !evaluate(attrs.where, { ...context, row }, false)) return
     const edit = (name: string, value: unknown) => {
       const next = rows.map((existing, i) =>

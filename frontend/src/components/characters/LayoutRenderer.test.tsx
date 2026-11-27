@@ -656,6 +656,19 @@ describe('LayoutRenderer — pips per picked entry', () => {
       { _ref: 'wind', _per: { used: 2 } },
     ])
   })
+
+  it("reads a picked entry's id as row._ref", () => {
+    render(
+      <LayoutRenderer
+        ast={[{ ...ast[0], attrs: { over: 'features', where: "row._ref == 'wind'" } }]}
+        document={DOC}
+        data={{ level: 1, features: items }}
+        computed={{}}
+        entries={entries}
+      />
+    )
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+  })
 })
 
 describe('LayoutRenderer — any value can be set', () => {

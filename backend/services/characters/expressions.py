@@ -308,8 +308,12 @@ def _fn_contains(haystack: Any, needle: Any) -> bool:
 # a formula still evaluates (to 0/empty) rather than failing.
 
 
-def _resolved(value: Any, entries: Any) -> list[dict]:
-    """Every entry a reference or list of references points at."""
+def _resolved(value: Any, entries: Any, with_ref: bool = False) -> list[dict]:
+    """Every entry a reference or list of references points at.
+
+    `with_ref` keeps a picked entry's id on its row as `_ref`, for the forms
+    that read one row at a time: `count_each(spells, row._ref == 'shield')`.
+    """
     items = value if isinstance(value, list) else [value]
     table = entries if isinstance(entries, dict) else {}
     out = []
@@ -325,7 +329,10 @@ def _resolved(value: Any, entries: Any) -> list[dict]:
         if isinstance(entry, dict):
             # The character's own per-entry notes win over the catalog's, so
             # `ref(spells, 'prepared')` reads what the player set.
-            out.append({**entry, **(item.get("_per") or {})})
+            row = {**entry, **(item.get("_per") or {})}
+            if with_ref:
+                row["_ref"] = str(item.get("_ref"))
+            out.append(row)
     return out
 
 
@@ -517,7 +524,7 @@ def _each_rows(value: Any, entries: Any) -> list[dict]:
     if not isinstance(value, list):
         return []
     if any(isinstance(item, dict) and ("_ref" in item or item.get("_inline")) for item in value):
-        return _resolved(value, entries)[:MAX_EACH_ROWS]
+        return _resolved(value, entries, with_ref=True)[:MAX_EACH_ROWS]
     return _rows(value)[:MAX_EACH_ROWS]
 
 

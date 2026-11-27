@@ -361,7 +361,9 @@ const ENTRY_AWARE: Partial<Record<FunctionName, number>> = {
   at: 4,
 }
 
-function resolveRefs(value: ExprValue, entries: ExprValue): Row[] {
+// `withRef` keeps a picked entry's id on its row as `_ref`, for the forms that
+// read one row at a time: `count_each(spells, row._ref == 'shield')`.
+function resolveRefs(value: ExprValue, entries: ExprValue, withRef = false): Row[] {
   const items = Array.isArray(value) ? value : [value]
   const table = (entries && typeof entries === 'object' ? entries : {}) as Row
   const out: Row[] = []
@@ -376,7 +378,9 @@ function resolveRefs(value: ExprValue, entries: ExprValue): Row[] {
     }
     const entry = table[String(item._ref)]
     if (entry && typeof entry === 'object') {
-      out.push({ ...(entry as Row), ...((item._per || {}) as Row) })
+      const row: Row = { ...(entry as Row), ...((item._per || {}) as Row) }
+      if (withRef) row._ref = String(item._ref)
+      out.push(row)
     }
   }
   return out
@@ -428,7 +432,7 @@ function eachRows(value: ExprValue, entries: ExprValue): Row[] {
       !Array.isArray(item) &&
       ('_ref' in item || !!(item as Row)._inline)
   )
-  return (isRef ? resolveRefs(items, entries) : listRows(items)).slice(0, MAX_EACH_ROWS)
+  return (isRef ? resolveRefs(items, entries, true) : listRows(items)).slice(0, MAX_EACH_ROWS)
 }
 
 function evalEach(name: EachForm, args: ExprNode[], context: ExprContext | undefined): ExprValue {

@@ -157,10 +157,11 @@ export default function ContentListField({
   const conditionContext = (row: ContentRefValue) => {
     const per = (row?._per || {}) as EntryValues
     const entry = (row as EntryValues)?._inline ? row : entries[String(row?._ref)]
-    const resolved = {
+    const resolved: EntryValues = {
       ...(entry && typeof entry === 'object' ? (entry as EntryValues) : {}),
       ...per,
     }
+    if (!(row as EntryValues)?._inline && row?._ref) resolved._ref = String(row._ref)
     const scope = { [name]: rows, _entries: entries, ...(context || {}) }
     return { ...scope, row: withRowComputed(definition, resolved, scope) }
   }

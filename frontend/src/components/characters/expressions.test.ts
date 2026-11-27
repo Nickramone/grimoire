@@ -524,6 +524,12 @@ describe('per-row forms', () => {
     expect(evaluate('count_each(gear)', context)).toBe(2)
   })
 
+  it("reads a picked entry's id as row._ref", () => {
+    const context = ctx({ gear: gear(['chain-mail', true], ['shield', true]) })
+    expect(evaluate("count_each(gear, row._ref == 'shield')", context)).toBe(1)
+    expect(evaluate("count_each(gear, contains('shield,rope', row._ref))", context)).toBe(1)
+  })
+
   it('reads plain list rows and a single reference', () => {
     const attacks = [{ bonus: 5, magic: true }, { bonus: 3 }, 'junk']
     expect(evaluate('sum_each(attacks, row.bonus * 2, row.magic)', { attacks })).toBe(10)

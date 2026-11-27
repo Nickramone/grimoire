@@ -1598,6 +1598,13 @@ class TestEachForms:
         assert svc.evaluate("count_each(gear, row.ac_base > 0)", context) == 1
         assert svc.evaluate("count_each(gear)", context) == 2
 
+    def test_a_picked_entry_reads_its_id_as_row_ref(self):
+        context = self._context(gear=_gear(("chain-mail", True), ("shield", True)))
+        assert svc.evaluate("count_each(gear, row._ref == 'shield')", context) == 1
+        assert svc.evaluate("count_each(gear, contains('shield,rope', row._ref))", context) == 1
+        # ref() still reads the entry as it is: no id added to it.
+        assert svc.evaluate("ref(gear, '_ref')", context) in ("", None, [])
+
     def test_plain_list_rows_are_read_as_they_are(self):
         context = {"attacks": [{"bonus": 5, "magic": True}, {"bonus": 3}, "junk"]}
         assert svc.evaluate("sum_each(attacks, row.bonus * 2, row.magic)", context) == 10
