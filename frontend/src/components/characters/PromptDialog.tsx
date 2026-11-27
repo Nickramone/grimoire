@@ -29,6 +29,8 @@ export interface PromptDialogProps {
   // The sheet as its formulas read it.
   context: Values
   row?: Values | null
+  // The campaign the character is in now: a `campaign` step starts on it.
+  campaignId?: string
   sourceLabel?: string
   browse?: BrowseEntries
   // Confirmed: the answers, the pages skipped and the prompts they keep for later.
@@ -56,6 +58,7 @@ export default function PromptDialog({
   data,
   context,
   row,
+  campaignId,
   sourceLabel,
   browse,
   onConfirm,
@@ -69,6 +72,7 @@ export default function PromptDialog({
     if (resume) return { ...resume.answers }
     const start: Answers = {}
     for (const step of prompt.steps || []) {
+      if (step?.type === 'campaign') start[step.key] = campaignId || ''
       if (step?.type !== 'number') continue
       const value = numberDefault(step, promptContext(context, start, row))
       if (value !== undefined) start[step.key] = value

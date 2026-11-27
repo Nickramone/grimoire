@@ -575,7 +575,7 @@ PROMPT_ANSWER_NAME = "answer"
 PROMPT_ROW_NAME = "row"
 PROMPT_ENTRY_NAME = "entry"
 _PROMPT_STEP_TYPES: frozenset = frozenset(
-    {"choose", "distribute", "entry", "entries", "number", "select"}
+    {"campaign", "choose", "distribute", "entry", "entries", "number", "select"}
 )
 _PATTERN_RE = re.compile(r"^\d{1,2}(,\d{1,2}){0,9}$")
 
@@ -1040,6 +1040,10 @@ def _validate_prompts(
                         isinstance(value, bool) or not isinstance(value, (int, float))
                     ):
                         raise SchemaError(f"{where} {bound!r} must be a number")
+            elif kind == "campaign":
+                # The character's campaign, chosen from the player's own: no
+                # options of the sheet's.
+                pass
             else:
                 _validate_prompt_options(step.get("options"), where, base, images)
 

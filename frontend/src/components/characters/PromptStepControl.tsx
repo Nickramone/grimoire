@@ -1,3 +1,4 @@
+import PromptStepCampaign from './PromptStepCampaign'
 import PromptStepChoose from './PromptStepChoose'
 import PromptStepDistribute from './PromptStepDistribute'
 import PromptStepEntry from './PromptStepEntry'
@@ -8,6 +9,8 @@ import type { StepControlProps } from './promptStepShared'
 /** The control for one step of a prompt, by its type. */
 export default function PromptStepControl(props: StepControlProps) {
   switch (props.step.type) {
+    case 'campaign':
+      return <PromptStepCampaign {...props} />
     case 'choose':
       return <PromptStepChoose {...props} />
     case 'distribute':

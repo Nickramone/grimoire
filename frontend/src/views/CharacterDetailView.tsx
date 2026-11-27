@@ -28,6 +28,7 @@ import {
   PromptLauncher,
   sheetContext,
   startPrompt,
+  visibleAnswers,
   visibleSteps,
   withPending,
   withoutPending,
@@ -581,6 +582,23 @@ export default function CharacterDetailView() {
     // A prompt keeping a record - a level gained - keeps what it adds there,
     // and so do the prompts it opens next.
     const record = promptRecord(definition, request, promptSheet)
+    // A `campaign` step moves the character first, so the prompts this one
+    // opens read the new campaign's house rules and rulesets.
+    if (owned) {
+      const shown = visibleAnswers(definition, promptSheet, answers, request.row)
+      const step = (definition.steps || []).find(
+        (item) => item?.type === 'campaign' && typeof shown[item.key] === 'string'
+      )
+      const wanted = step ? String(shown[step.key]) : undefined
+      if (wanted !== undefined && wanted !== (character?.campaign_id || '')) {
+        try {
+          const id = character?.id || characterId
+          onCampaignChanged(await enqueue(() => charactersApi.update(id, { campaign_id: wanted })))
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      }
+    }
     const plan = planPrompt(definition, {
       document,
       data: dataRef.current,
@@ -710,6 +728,25 @@ export default function CharacterDetailView() {
         : null,
     [character, readOnly, onPortraitChanged, onImageChanged]
   )
+
+  // A new campaign changes what the campaign decides - the house rules
+  // switch and the rulesets the sheet's entries come from - and nothing else:
+  // the values the player has on screen stay, an edit may still be saving.
+  const onCampaignChanged = (updated: Character) => {
+    const fields = (document?.fields || {}) as Record<string, { from_campaign?: unknown }>
+    const derived: Values = {}
+    for (const [name, definition] of Object.entries(fields)) {
+      if (definition?.from_campaign && updated.data && name in updated.data) {
+        derived[name] = (updated.data as Values)[name]
+      }
+    }
+    if (Object.keys(derived).length) {
+      dataRef.current = { ...dataRef.current, ...derived }
+      setData((prev) => ({ ...prev, ...derived }))
+    }
+    setCharacter((prev) => (prev ? { ...prev, entries: updated.entries ?? prev.entries } : prev))
+    onPlacementChanged(updated)
+  }
 
   // Placement and edit access change only these; the sheet's values stay as
   // they are on screen, where an edit may still be waiting to save.
@@ -860,7 +897,7 @@ export default function CharacterDetailView() {
                 // Where the character is played stays the player's, even when
                 // they have let the GM edit the sheet itself.
                 readOnly={!owned}
-                onChanged={onPlacementChanged}
+                onChanged={onCampaignChanged}
                 onError={setError}
               />
               <GmEditAccess
@@ -1058,6 +1095,7 @@ export default function CharacterDetailView() {
             data={dataRef.current}
             context={promptSheet}
             row={currentPrompt.row}
+            campaignId={character?.campaign_id || ''}
             sourceLabel={
               currentPrompt.source
                 ? document?.fields?.[currentPrompt.source]?.label || currentPrompt.source

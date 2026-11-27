@@ -38,7 +38,8 @@ export { PENDING_PROMPTS_KEY }
 const ENTRY_PAGE_SIZE = 200
 const ENTRY_MAX_PAGES = 10
 
-export type PromptStepType = 'choose' | 'distribute' | 'entry' | 'entries' | 'number' | 'select'
+export type PromptStepType =
+  'campaign' | 'choose' | 'distribute' | 'entry' | 'entries' | 'number' | 'select'
 
 export interface PromptStep {
   // The page of a paged prompt it is shown on; alone on its own without one.
@@ -405,6 +406,9 @@ export function isAnswered(
     }
     case 'number':
       return typeof answer === 'number' && Number.isFinite(answer)
+    // The campaign the character is played in, or none: '' is an answer.
+    case 'campaign':
+      return typeof answer === 'string'
     case 'select':
       return (
         typeof answer === 'string' &&
