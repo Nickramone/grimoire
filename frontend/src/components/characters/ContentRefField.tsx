@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LuSearch, LuX, LuPencil, LuInfo } from 'react-icons/lu'
 import ContentBrowser from './ContentBrowser'
 import ContentEntryDetail from './ContentEntryDetail'
-import { catalogFilters, catalogNote } from './catalogFilters'
+import { catalogDefaults, catalogFilters, catalogNote } from './catalogFilters'
 import PendingMarks from './PendingMarks'
 import ContentEntryDialog from './ContentEntryDialog'
 import type { ContentRefValue } from './ContentBrowser'
@@ -312,6 +312,7 @@ export default function ContentRefField({
           typeDefinition={typeDefinition}
           chosen={ref && !inline ? [ref] : []}
           fixedFilters={catalogFilters(definition, context)}
+          defaultFilters={catalogDefaults(definition, context)}
           entryNote={catalogNote(definition, context)}
           onChoose={(picked, chosenEntry) => {
             setEditingInline(false)

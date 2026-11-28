@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catalogFilters, catalogNote } from './catalogFilters'
+import { catalogDefaults, catalogFilters, catalogNote } from './catalogFilters'
 
 describe('catalogFilters', () => {
   it('keeps the fixed filter when there is no filter_from', () => {
@@ -24,6 +24,23 @@ describe('catalogFilters', () => {
   it('leaves a key unfiltered when its formula works out to nothing or fails', () => {
     expect(catalogFilters({ filter_from: { option_type: 'a' } }, { a: '' })).toBeUndefined()
     expect(catalogFilters({ filter_from: { option_type: 'a.(' } }, {})).toBeUndefined()
+  })
+})
+
+describe('catalogDefaults', () => {
+  it('works the preset filters out from the character', () => {
+    const definition = { filter_default_from: { spell_lists: "concat(a, ',', b)" } }
+    expect(catalogDefaults(definition, { a: 'Wizard', b: '' })).toEqual({ spell_lists: ['Wizard'] })
+    expect(catalogDefaults(definition, { a: '', b: '' })).toBeUndefined()
+  })
+
+  it('leaves out a key the field already fixes', () => {
+    expect(
+      catalogDefaults(
+        { filter: { level: 1 }, filter_default_from: { level: 'a', school: 'b' } },
+        { a: 2, b: 'Evocation' }
+      )
+    ).toEqual({ school: ['Evocation'] })
   })
 })
 

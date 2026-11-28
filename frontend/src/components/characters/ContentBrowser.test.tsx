@@ -182,4 +182,33 @@ describe('ContentBrowser', () => {
     renderBrowser()
     expect(await screen.findByRole('alert')).toHaveTextContent('catalog down')
   })
+  it('opens on the preset filters, offers the whole facet, and lets them be cleared', async () => {
+    const user = userEvent.setup()
+    renderBrowser({ defaultFilters: { level: ['1', '3'] } })
+    await waitFor(() =>
+      expect(mockBrowse).toHaveBeenCalledWith(
+        'demo',
+        'spell',
+        expect.objectContaining({ filters: { level: ['1', '3'] } })
+      )
+    )
+    const facet = (await screen.findByLabelText('Level')) as HTMLSelectElement
+    expect(facet.value).toBe('1, 3')
+    await user.selectOptions(facet, '')
+    await waitFor(() =>
+      expect(mockBrowse).toHaveBeenLastCalledWith(
+        'demo',
+        'spell',
+        expect.objectContaining({ filters: {} })
+      )
+    )
+    await user.selectOptions(facet, '1, 3')
+    await waitFor(() =>
+      expect(mockBrowse).toHaveBeenLastCalledWith(
+        'demo',
+        'spell',
+        expect.objectContaining({ filters: { level: ['1', '3'] } })
+      )
+    )
+  })
 })

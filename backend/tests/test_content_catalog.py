@@ -409,6 +409,19 @@ class TestPicksInsideARow:
         with pytest.raises(SchemaError, match="filter_from"):
             validate_schema(self._schema(filter_from=bad))
 
+    def test_a_filter_default_from_presets_the_browser(self):
+        from backend.services.characters.schema import validate_schema
+
+        document = self._schema(filter_default_from={"school": "signature"})
+        assert validate_schema(document)["fields"]["spells"]["filter_default_from"]
+
+    @pytest.mark.parametrize("bad", [{}, {"school": ""}, {"school": "ghost_field"}])
+    def test_a_malformed_filter_default_from_is_rejected(self, bad):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match="filter_default_from"):
+            validate_schema(self._schema(filter_default_from=bad))
+
     def test_an_entry_note_reads_the_candidate(self):
         from backend.services.characters.schema import validate_schema
 

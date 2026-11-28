@@ -2936,6 +2936,10 @@ ones, and a formula reads it through the row:
   several values separated by commas; one that works out to nothing leaves that
   key unfiltered. It adds to `filter`, so a list of class options can offer only
   the kinds the character's classes name.
+- `filter_default_from` (on the same fields, same shape) only presets the
+  browser's filters: it opens on them, and the player may set the facet back to
+  any. A spell list can open on the character's classes and still offer every
+  spell. A key the field already fixes is left out.
 - `default_from` on a per-entry field is worked out once, when the entry is
   added, with the added entry as `row`. For a per-entry `content_ref` a text
   result is the id of the entry to pick; an empty result leaves it unset.

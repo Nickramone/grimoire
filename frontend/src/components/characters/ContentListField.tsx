@@ -10,7 +10,7 @@ import ContentEntryDetail from './ContentEntryDetail'
 import type { ContentFieldDefinition, ContentTypeDefinition } from './ContentEntryDetail'
 import { ghostBtn, iconBtn, fieldLabel } from './characterStyles'
 import { evaluate, withRowComputed } from './expressions'
-import { catalogFilters, catalogNote } from './catalogFilters'
+import { catalogDefaults, catalogFilters, catalogNote } from './catalogFilters'
 import PendingMarks from './PendingMarks'
 
 type EntryValues = Record<string, unknown>
@@ -490,6 +490,7 @@ export default function ContentListField({
           multiple
           chosen={rows}
           fixedFilters={catalogFilters(definition, context)}
+          defaultFilters={catalogDefaults(definition, context)}
           entryNote={catalogNote(definition, context)}
           onChoose={add}
           onClose={() => setBrowsing(false)}
