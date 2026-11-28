@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LuSearch, LuX, LuCheck, LuPlus } from 'react-icons/lu'
 import { content as contentApi } from '../../api'
+import { useCharacterMedia } from './characterMedia'
 import type { Schema } from '../../api'
 import Spinner from '../Spinner'
 import ContentEntryDetail from './ContentEntryDetail'
@@ -31,6 +32,15 @@ export interface ContentBrowserProps {
   typeDefinition?: ContentTypeDefinition
   multiple?: boolean
   chosen?: (ContentRefValue | null | undefined)[]
+  // The field's own `filter`: always applied, and its fields offer no facet,
+  // so a base weapon is picked from the weapons and nothing else.
+  fixedFilters?: Record<string, unknown>
+  // The field's `filter_default_from`: the facets the browser opens on, which
+  // the player may set back to any (a spell list opening on the character's
+  // classes). A key with several values matches any of them.
+  defaultFilters?: Record<string, string[]>
+  // The field's `entry_note`: a note beside each entry's name (a weapon's mastery).
+  entryNote?: (entry: Record<string, unknown>) => string
   // The reference to store, and the picked entry's own properties.
   onChoose?: (ref: { _ref: string; _source: string }, entry: Record<string, unknown>) => void
   onClose?: () => void
@@ -53,6 +63,9 @@ export default function ContentBrowser({
   typeDefinition = {},
   multiple = false,
   chosen = [],
+  fixedFilters,
+  defaultFilters,
+  entryNote,
   onChoose,
   onClose,
 }: ContentBrowserProps) {
@@ -61,35 +74,74 @@ export default function ContentBrowser({
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [facets, setFacets] = useState<Facets>({})
-  const [filters, setFilters] = useState<Record<string, string>>({})
+  const [filters, setFilters] = useState<Record<string, string | string[]>>(() =>
+    Object.fromEntries(
+      Object.entries(defaultFilters || {}).map(([field, values]) => [
+        field,
+        values.length === 1 ? values[0] : values,
+      ])
+    )
+  )
+  // The presets as first worked out, so the facet can offer them back once cleared.
+  const [presets] = useState<Record<string, string[]>>(() => ({ ...(defaultFilters || {}) }))
+  const facetsLoaded = useRef(false)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [detail, setDetail] = useState<CatalogEntry | null>(null)
 
-  const searchRef = useRef<HTMLInputElement>(null)
+  const noteOf = (entry: CatalogEntry) =>
+    entryNote ? entryNote({ ...(entry.data || {}), name: entry.name }) : ''
 
+  const searchRef = useRef<HTMLInputElement>(null)
+  // Serialised, so a definition rebuilt on every render does not reload.
+  const fixedKey = JSON.stringify(fixedFilters || {})
+
+  // Browsing for a character offers what its sheet reads: its campaign's
+  // rulesets, and a house-rule rewrite in place of the original.
+  const characterId = useCharacterMedia()?.character.id
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const result = await contentApi.browse(schemaId, contentType, {
         search,
         page,
-        filters,
+        character_id: characterId || undefined,
+        filters: { ...filters, ...(JSON.parse(fixedKey) as Record<string, unknown>) },
       })
       setEntries(result.entries || [])
       setTotal(result.total || 0)
       // Facets describe the whole catalog, so they are only refreshed when the
       // filters are not narrowing it — otherwise picking one value would empty
       // every other facet and leave no way back.
-      if (!Object.keys(filters).length) setFacets(result.filters_available || {})
+      // Opened on preset filters, the whole catalog's facets are asked for once.
+      const fixed = JSON.parse(fixedKey) as Record<string, unknown>
+      let available = Object.keys(filters).length ? undefined : result.filters_available
+      if (!available && !facetsLoaded.current) {
+        available = (
+          await contentApi.browse(schemaId, contentType, {
+            search: '',
+            page: 1,
+            character_id: characterId || undefined,
+            filters: fixed,
+          })
+        ).filters_available
+      }
+      if (available) {
+        facetsLoaded.current = true
+        setFacets(
+          Object.fromEntries(
+            Object.entries(available || {}).filter(([field]) => !(field in fixed))
+          ) as Facets
+        )
+      }
       setError('')
     } catch (e) {
       setError((e as Error).message || t('characters.catalogFailed'))
     } finally {
       setLoading(false)
     }
-  }, [schemaId, contentType, search, page, filters, t])
+  }, [schemaId, contentType, search, page, filters, fixedKey, characterId, t])
 
   useEffect(() => {
     void load()
@@ -120,11 +172,16 @@ export default function ContentBrowser({
     if (!multiple) onClose?.()
   }
 
+  // A preset of several values shows in its facet as one choice, named by all of them.
+  const presetLabel = (field: string) =>
+    (presets[field] || []).length > 1 ? presets[field].join(', ') : ''
+
   const setFilter = (field: string, value: string) => {
     setPage(1)
     setFilters((prev) => {
       const next = { ...prev }
       if (!value) delete next[field]
+      else if (value === presetLabel(field)) next[field] = presets[field]
       else next[field] = value
       return next
     })
@@ -215,11 +272,18 @@ export default function ContentBrowser({
                   </label>
                   <select
                     id={`facet-${field}`}
-                    value={filters[field] || ''}
+                    value={
+                      Array.isArray(filters[field])
+                        ? (filters[field] as string[]).join(', ')
+                        : (filters[field] as string) || ''
+                    }
                     onChange={(event) => setFilter(field, event.target.value)}
                     style={fieldInput}
                   >
                     <option value="">{t('characters.filterAny')}</option>
+                    {presetLabel(field) ? (
+                      <option value={presetLabel(field)}>{presetLabel(field)}</option>
+                    ) : null}
                     {options.map((option) => {
                       // A facet is a column of scalar values.
                       const value = option.value as string | number
@@ -266,7 +330,21 @@ export default function ContentBrowser({
                             minWidth: 0,
                           }}
                         >
-                          <div style={{ fontWeight: 600 }}>{entry.name}</div>
+                          <div style={{ fontWeight: 600 }}>
+                            {entry.name}
+                            {noteOf(entry) ? (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  fontSize: 12,
+                                  fontWeight: 400,
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                {noteOf(entry)}
+                              </span>
+                            ) : null}
+                          </div>
                           {entry.display ? (
                             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                               {entry.display}

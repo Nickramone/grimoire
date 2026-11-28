@@ -7,7 +7,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   LuSearch,
@@ -16,6 +16,7 @@ import {
   LuBox,
   LuUser,
   LuBookOpen,
+  LuBookOpenText,
   LuChevronDown,
   LuChevronRight,
   LuInfo,
@@ -25,6 +26,7 @@ import Spinner from '../components/Spinner'
 import BulkActionBar from '../components/BulkActionBar'
 import BulkToggleButton from '../components/BulkToggleButton'
 import SelectableCard from '../components/SelectableCard'
+import { readEdition, saveEdition } from '../components/compendium/editionChoice'
 import { useAuth } from '../context/AuthContext'
 import useBulkMerge from '../hooks/useBulkMerge'
 import useMixedSelection from '../hooks/useMixedSelection'
@@ -49,7 +51,8 @@ export default function SearchView() {
   const [results, setResults] = useState<SearchResults | null>(null)
   const [searching, setSearching] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const [systemFilter, setSystemFilter] = useState('')
+  // The system last chosen here or in the compendium, kept across searches.
+  const [systemFilter, setSystemFilter] = useState(() => readEdition().systemId ?? '')
   const [sortBy, setSortBy] = useState('relevance')
   const [helpOpen, setHelpOpen] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -90,7 +93,6 @@ export default function SearchView() {
       .get(`/search?q=${encodeURIComponent(q)}`)
       .then((r) => {
         setResults(r)
-        setSystemFilter('')
         setSearching(false)
       })
       .catch(() => setSearching(false))
@@ -119,13 +121,18 @@ export default function SearchView() {
     inputRef.current?.focus()
   }
 
-  // Collect distinct game systems from book results for the filter dropdown
+  // Collect distinct game systems from book results, and the systems linked to
+  // the compendium hits' schemas, for the filter dropdown
   const availableSystems = useMemo(() => {
-    if (!results?.results?.length) return []
     const seen = new Map<string, string>()
-    for (const r of results.results) {
+    for (const r of results?.results ?? []) {
       if (r.game_system_id && !seen.has(r.game_system_id)) {
         seen.set(r.game_system_id, r.game_system)
+      }
+    }
+    for (const hit of results?.compendium ?? []) {
+      for (const system of hit.game_systems ?? []) {
+        if (!seen.has(system.id)) seen.set(system.id, system.name ?? '')
       }
     }
     return [...seen.entries()]
@@ -133,12 +140,33 @@ export default function SearchView() {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [results])
 
+  // The remembered system narrows only results that include it; otherwise the
+  // page shows everything, as if no system were chosen.
+  const activeSystem = availableSystems.some((s) => s.id === systemFilter) ? systemFilter : ''
+
+  const compendiumHits = useMemo(
+    () =>
+      (results?.compendium ?? []).filter(
+        (hit) => !activeSystem || (hit.game_systems ?? []).some((s) => s.id === activeSystem)
+      ),
+    [results, activeSystem]
+  )
+
+  const chooseSystem = (systemId: string) => {
+    setSystemFilter(systemId)
+    // The compendium follows: the schema linked to the chosen system, if any.
+    const linked = (results?.compendium ?? []).find((hit) =>
+      (hit.game_systems ?? []).some((s) => s.id === systemId)
+    )
+    saveEdition({ systemId, ...(linked ? { schemaId: linked.schema_id } : {}) })
+  }
+
   // Filter + sort + group book results client-side
   const groupedBooks = useMemo((): SearchBookGroup[] => {
     if (!results?.results) return []
 
-    const books = systemFilter
-      ? results.results.filter((r) => r.game_system_id === systemFilter)
+    const books = activeSystem
+      ? results.results.filter((r) => r.game_system_id === activeSystem)
       : results.results
 
     // Group pages by book. The group keeps what a hit's page prefetch needs
@@ -169,12 +197,12 @@ export default function SearchView() {
     // sortBy === 'relevance' keeps insertion order, which reflects FTS rank from backend
 
     return groups
-  }, [results, systemFilter, sortBy])
+  }, [results, activeSystem, sortBy])
 
   // Title matches respect the system dropdown too (see the render below), so
   // the count is computed from the same filtered list rather than the raw one.
-  const matchedBookCount = systemFilter
-    ? (results?.book_matches ?? []).filter((b) => b.game_system_id === systemFilter).length
+  const matchedBookCount = activeSystem
+    ? (results?.book_matches ?? []).filter((b) => b.game_system_id === activeSystem).length
     : (results?.book_matches?.length ?? 0)
 
   const totalFiltered =
@@ -182,7 +210,8 @@ export default function SearchView() {
     groupedBooks.reduce((s, g) => s + g.pages.length, 0) +
     (results?.maps?.length ?? 0) +
     (results?.tokens?.length ?? 0) +
-    (results?.audio?.length ?? 0)
+    (results?.audio?.length ?? 0) +
+    compendiumHits.length
 
   // A long result list starts with its sections and book groups collapsed, so
   // the headers (with their counts) are the overview; anything the user has
@@ -194,12 +223,14 @@ export default function SearchView() {
     results?.tokens?.length ?? 0,
     results?.audio?.length ?? 0,
     results?.models?.length ?? 0,
+    compendiumHits.length,
   ].filter((n) => n > 0)
   const resultCount =
     matchedBookCount + pageHitCount + sectionCounts.slice(1).reduce((n, c) => n + c, 0)
   const autoCollapsed: Record<string, boolean> = {}
   if (shouldAutoCollapse(resultCount, sectionCounts.length)) {
-    for (const key of ['books', 'maps', 'tokens', 'audio', 'models']) autoCollapsed[key] = true
+    for (const key of ['books', 'compendium', 'maps', 'tokens', 'audio', 'models'])
+      autoCollapsed[key] = true
   }
   if (shouldAutoCollapse(pageHitCount, groupedBooks.length)) {
     for (const g of groupedBooks) autoCollapsed[`book-${g.id}`] = true
@@ -303,10 +334,11 @@ export default function SearchView() {
           const tokens = results.tokens ?? []
           const audio = results.audio ?? []
           const models = results.models ?? []
+          const compendium = compendiumHits
           // Title matches respect the system dropdown like the page hits do,
           // so filtering to one system doesn't leave foreign books pinned on top.
-          const bookMatches = systemFilter
-            ? (results.book_matches ?? []).filter((b) => b.game_system_id === systemFilter)
+          const bookMatches = activeSystem
+            ? (results.book_matches ?? []).filter((b) => b.game_system_id === activeSystem)
             : (results.book_matches ?? [])
 
           return (
@@ -335,8 +367,8 @@ export default function SearchView() {
                 {availableSystems.length > 1 && (
                   <select
                     id="search-system-filter"
-                    value={systemFilter}
-                    onChange={(e) => setSystemFilter(e.target.value)}
+                    value={activeSystem}
+                    onChange={(e) => chooseSystem(e.target.value)}
                     aria-label={t('search.filterSystem')}
                     style={controlStyle}
                   >
@@ -406,6 +438,57 @@ export default function SearchView() {
                         )
                       )}
                     </ul>
+                  )}
+                </section>
+              )}
+
+              {compendium.length > 0 && (
+                <section style={{ marginBottom: 24 }}>
+                  <h2 style={plainHeading}>
+                    <button
+                      onClick={() => toggleSection('compendium')}
+                      aria-expanded={!shownCollapsed.compendium}
+                      style={sectionHeadStyle}
+                    >
+                      {shownCollapsed.compendium ? (
+                        <LuChevronRight size={14} />
+                      ) : (
+                        <LuChevronDown size={14} />
+                      )}
+                      <LuBookOpenText size={14} /> {t('search.compendium')}
+                      <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 400 }}>
+                        {compendium.length}
+                      </span>
+                    </button>
+                  </h2>
+                  {!shownCollapsed.compendium && (
+                    <>
+                      <ul role="list" className="card-list">
+                        {compendium.map((hit) => {
+                          const search = new URLSearchParams({
+                            schema: hit.schema_id,
+                            q: results.query,
+                          })
+                          return (
+                            <li key={`${hit.schema_id}:${hit.content_type}:${hit.entry_id}`}>
+                              <ResultCard
+                                to={`/${hit.bestiary ? 'bestiary' : 'compendium'}/${encodeURIComponent(hit.content_type)}/${encodeURIComponent(hit.entry_id)}?${search}`}
+                                title={hit.name}
+                                subtitle={[hit.type_label, hit.display, hit.schema_name]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              />
+                            </li>
+                          )
+                        })}
+                      </ul>
+                      <Link
+                        to={`/compendium?${new URLSearchParams({ q: results.query })}`}
+                        style={{ display: 'inline-block', marginTop: 8, fontSize: 14 }}
+                      >
+                        {t('search.compendiumAll')}
+                      </Link>
+                    </>
                   )}
                 </section>
               )}

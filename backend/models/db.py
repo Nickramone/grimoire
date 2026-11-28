@@ -656,6 +656,23 @@ def _post_migration_setup(engine: Engine) -> None:
             conn.rollback()
             logger.warning("Resource visibility backfill skipped: %s", e)
 
+    _ensure_fork_tables(engine)
+
+
+def _ensure_fork_tables(engine: Engine) -> None:
+    """Create the tables this fork adds, when missing.
+
+    Fork-only tables are created here rather than by an Alembic revision, so the
+    migration history stays exactly upstream's: the database can go back to the
+    official image (which ignores a table it does not know) and the fork can be
+    rebased onto new upstream revisions with no merge revision. A table proposed
+    upstream gets a proper revision there. ``checkfirst`` makes it a no-op once
+    the table exists; its indexes are created with it.
+    """
+    from .wiki_annotations import WikiAnnotation
+
+    Base.metadata.tables[WikiAnnotation.__tablename__].create(engine, checkfirst=True)
+
 
 @contextlib.contextmanager
 def _migration_lock(db_path: str) -> Iterator[None]:

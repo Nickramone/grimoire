@@ -40,6 +40,8 @@ _USER_SCOPED_TABLES = (
     "campaign_resource_shares",
     # Wiki pages a member hid from their own sidebar.
     "wiki_page_hidden",
+    # Notes a member left on wiki pages (WikiAnnotation).
+    "wiki_annotations",
     # The character builder: a user's characters and the sheets they installed.
     "characters",
     "character_schemas",

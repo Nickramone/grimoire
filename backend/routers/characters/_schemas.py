@@ -232,6 +232,9 @@ class CharacterDetail(CharacterSummary):
     # The players at the character's table its owner may hand it to. Empty
     # unless the viewer owns the character *and* runs its campaign.
     transfer_candidates: list[TransferCandidate] = Field(default_factory=list)
+    # Whether the character's campaign plays its house rules: what a sheet
+    # field with `from_campaign: house_rules` reads (Nickramone fork).
+    house_rules: bool = False
     data: dict[str, Any] = Field(default_factory=dict)
     computed: dict[str, Any] = Field(default_factory=dict)
     validators: list[ValidatorResult] = Field(default_factory=list)

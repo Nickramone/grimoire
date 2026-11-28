@@ -1,10 +1,13 @@
 // What picking an entry does to the rest of a character.
 //
 // A content_ref field may carry `on_pick` rules: picking a background grants
-// its skills and origin feat, picking a class asks for its skill choices. The
-// rules are data in the sheet, so this engine knows nothing about any game.
+// its skills and origin feat, picking a class asks for its skill choices. A
+// content_list may carry them too, and then each row is a pick of its own - a
+// list of classes, each granting its features. The rules are data in the
+// sheet, so this engine knows nothing about any game.
 //
-// Everything a pick adds is recorded under `_granted[field]`, which is what
+// Everything a pick adds is recorded under `_granted[field]` (or, for a list
+// row, `_granted["field:ref"]`), which is what
 // lets re-picking take it back off: switch Acolyte for Sage and the Acolyte's
 // skills go, rather than the sheet accumulating every background ever tried.
 // Only what a pick actually *added* is recorded, so a skill the player already
@@ -27,11 +30,13 @@ type Grants = Record<string, string[]>
 interface PickRule {
   grant?: string
   choose?: string
+  prompt?: string
   ref?: string
   name?: string
   from?: string
   names?: string
   carry?: Record<string, string>
+  values?: Record<string, string>
   count?: number | string
   label?: string
 }
@@ -41,6 +46,7 @@ interface PickField {
   options?: unknown[]
   on_pick?: unknown
   content_type?: string
+  per_entry_fields?: Record<string, { type?: string } | undefined> | null
   default?: unknown
   default_from?: unknown
 }
@@ -61,7 +67,7 @@ export type PickChoice = {
 }
 
 /** How the catalog resolves entry ids, keyed by id. */
-type ResolvedRefs = Record<
+export type ResolvedRefs = Record<
   string,
   Pick<Schema<'ResolvedEntry'>, 'content_type' | 'source' | 'missing'>
 >
@@ -70,14 +76,40 @@ interface PlanPickArgs {
   document?: PickDocument | null
   data?: Values | null
   field: string
+  // Where the grants are recorded: the field itself for a content_ref, one
+  // key per row for a content_list (see `rowSource`).
+  source?: string
   entry?: Values | null
   lookup?: (ids: string[]) => Promise<ResolvedRefs | null | undefined>
 }
 
-// A property read off an entry as a list: a real list, or comma-separated text
-// for content written before lists were declared.
-function asList(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((item) => String(item))
+/**
+ * The key one content-list row's grants are recorded under: `classes:wizard`.
+ *
+ * A row is known by its reference - a list never holds the same entry twice -
+ * and a field name never contains a colon, so the key splits back unambiguously.
+ */
+/** A prompt one row of a content_list opened: which, and the row's entry. */
+export type ListPrompt = { prompt: string; ref: string; entry: Values }
+
+export function rowSource(field: string, ref: string): string {
+  return `${field}:${ref}`
+}
+
+// A property read off an entry as a list: a real list, kept item for item, or
+// comma-separated text for content written before lists were declared - so a
+// value holding a comma needs a list. An object in a list (a content_list's
+// row) is read by `key`: its `_ref` for an id, its `name` for a name.
+export function asList(value: unknown, key: '_ref' | 'name' = '_ref'): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (item && typeof item === 'object') {
+        const read = (item as Values)[key]
+        return read === undefined || read === null ? '' : String(read)
+      }
+      return item === undefined || item === null ? '' : String(item)
+    })
+  }
   if (typeof value === 'string') {
     return value
       .split(',')
@@ -85,6 +117,46 @@ function asList(value: unknown): string[] {
       .filter(Boolean)
   }
   return []
+}
+
+/**
+ * A list read position by position, for values that run parallel to another
+ * list - a pack's quantities beside its item ids. Unlike `asList`, an empty
+ * slot keeps its place (`"1,,10"` is three slots) and values keep their type.
+ */
+export function parallelList(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim())
+  if (value === undefined || value === null || value === '') return []
+  return [value]
+}
+
+/**
+ * The per-entry values the `index`th granted entry takes: slot `index` of each
+ * parallel list, as the list's per-entry field stores it. An empty slot, or a
+ * number that is not one, is left out, so the field keeps its default.
+ */
+export function perEntryAt(
+  definition: PickField,
+  lists: Record<string, unknown[]>,
+  index: number
+): Values {
+  const declared = definition.per_entry_fields || {}
+  const values: Values = {}
+  for (const [key, list] of Object.entries(lists)) {
+    const raw = list[index]
+    if (raw === undefined || raw === null || raw === '') continue
+    const type = declared[key]?.type
+    if (type === 'number') {
+      const number = Number(raw)
+      if (Number.isFinite(number)) values[key] = number
+    } else if (type === 'checkbox') {
+      values[key] = raw === true || raw === 'true' || raw === 1 || raw === '1'
+    } else {
+      values[key] = raw
+    }
+  }
+  return values
 }
 
 function optionValues(definition: PickField | undefined): string[] {
@@ -95,18 +167,99 @@ function optionValues(definition: PickField | undefined): string[] {
   )
 }
 
-// Whether a content-list item is the one a grant recorded under `key`: a
-// reference by its id, a freeform entry by its name.
-function matchesKey(value: unknown, key: string): boolean {
-  if (!value || typeof value !== 'object') return false
+// The one comparison every key a list row is matched by goes through:
+// trimmed, and in any case.
+export function sameKey(a: unknown, b: unknown): boolean {
+  const norm = (value: unknown) =>
+    String(value ?? '')
+      .trim()
+      .toLowerCase()
+  return norm(a) === norm(b)
+}
+
+// The key a content-list row is recorded under: a reference's id, a freeform
+// entry's name; null for anything else.
+export function rowKey(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null
   const item = value as Values
-  if (item._ref !== undefined && item._ref !== null) return String(item._ref) === key
-  return !!item._inline && String(item.name ?? '') === key
+  if (item._ref !== undefined && item._ref !== null) return String(item._ref)
+  return item._inline ? String(item.name ?? '') : null
+}
+
+// Whether a content-list item is the one a grant recorded under `key`.
+export function matchesKey(value: unknown, key: string): boolean {
+  const own = rowKey(value)
+  return own !== null && sameKey(own, key)
 }
 
 function currentList(data: Values | null | undefined, patch: Values, target: string): unknown[] {
   const value = target in patch ? patch[target] : data?.[target]
   return Array.isArray(value) ? [...value] : []
+}
+
+/**
+ * Add granted values to a multiselect or granted entries to a content list,
+ * skipping any it already holds; `record` hears each one added. Shared by a
+ * pick's `grant` rules and a prompt's `grant` step.
+ *
+ * `pairs` are `[id, name]`: a multiselect takes the ids among its options; a
+ * content list takes a reference when the catalog really has the id as its
+ * content type, otherwise a freeform entry named `name` (or the id) with the
+ * `carried` values. `perEntry`, in the same order as `pairs`, sets a content
+ * list's per-entry fields on each entry it adds - the quantity of each item
+ * in a pack. Returns the new list, or null for any other field.
+ */
+export function grantInto({
+  definition,
+  list,
+  pairs,
+  carried = {},
+  perEntry = [],
+  resolved = {},
+  record,
+}: {
+  definition: PickField
+  list: unknown[]
+  pairs: [string, string][]
+  carried?: Values
+  perEntry?: Values[]
+  resolved?: ResolvedRefs
+  record: (key: string) => void
+}): unknown[] | null {
+  if (definition.type === 'multiselect') {
+    const allowed = new Set(optionValues(definition))
+    for (const [value] of pairs) {
+      if (!allowed.has(value) || list.includes(value)) continue
+      list.push(value)
+      record(value)
+    }
+    return list
+  }
+  if (definition.type !== 'content_list') return null
+  for (const [index, [id, name]] of pairs.entries()) {
+    // Per-entry values ride in `_per`, as a row picked by hand keeps them: the
+    // server keeps nothing else on a reference.
+    const values = perEntry[index] || {}
+    const own = Object.keys(values).length ? { _per: values } : {}
+    const found = id ? resolved[id] : null
+    // A reference only when the catalog really has this id *as this type* -
+    // resolve does not filter by type, and a feat and a spell may share an
+    // id. Otherwise the name, so the player still sees what they were given
+    // even without the content installed.
+    if (found && !found.missing && found.content_type === definition.content_type) {
+      if (!list.some((item) => matchesKey(item, id))) {
+        list.push(found.source ? { _ref: id, _source: found.source, ...own } : { _ref: id, ...own })
+        record(id)
+      }
+    } else if (name || id) {
+      const label = name || id
+      if (!list.some((item) => matchesKey(item, label))) {
+        list.push({ _inline: true, ...carried, ...own, name: label })
+        record(label)
+      }
+    }
+  }
+  return list
 }
 
 /**
@@ -128,22 +281,25 @@ export async function planPick({
   document,
   data,
   field,
+  source = field,
   entry,
   lookup,
-}: PlanPickArgs): Promise<{ patch: Values; choices: PickChoice[] }> {
+}: PlanPickArgs): Promise<{ patch: Values; choices: PickChoice[]; prompts: string[] }> {
   const fields = document?.fields || {}
   const rules: PickRule[] = Array.isArray(fields[field]?.on_pick)
     ? (fields[field]!.on_pick as PickRule[])
     : []
   const patch: Values = {}
   const choices: PickChoice[] = []
+  // The sheet's prompts this pick opens, reading the picked entry as `row`.
+  const prompts: string[] = []
 
   const granted: Record<string, Grants> = {
     ...((data?.[GRANTED_KEY] || {}) as Record<string, Grants>),
   }
-  const previous: Grants = granted[field] || {}
+  const previous: Grants = granted[source] || {}
   const hadGrants = Object.keys(previous).length > 0
-  delete granted[field]
+  delete granted[source]
 
   // Take back whatever the previous pick added.
   for (const [target, keys] of Object.entries(previous)) {
@@ -183,62 +339,49 @@ export async function planPick({
     }
 
     for (const rule of rules) {
+      if (rule.prompt) {
+        prompts.push(rule.prompt)
+        continue
+      }
       if (rule.grant) {
         const target = rule.grant
         const definition = fields[target]
         if (!definition) continue
 
-        if (definition.type === 'multiselect') {
-          const allowed = new Set(optionValues(definition))
-          const list = currentList(data, patch, target)
-          for (const value of asList(entry[rule.from!])) {
-            if (!allowed.has(value) || list.includes(value)) continue
-            list.push(value)
-            record(target, value)
-          }
-          patch[target] = list
-          continue
+        const carried: Values = {}
+        for (const [toKey, fromKey] of Object.entries(rule.carry || {})) {
+          if (entry[fromKey] !== undefined) carried[toKey] = entry[fromKey]
         }
-
-        if (definition.type === 'content_list') {
-          const list = currentList(data, patch, target)
-          // Values carried from the pick onto a freeform entry - the species'
-          // name as each of its traits' source.
-          const carried: Values = {}
-          for (const [toKey, fromKey] of Object.entries(rule.carry || {})) {
-            if (entry[fromKey] !== undefined) carried[toKey] = entry[fromKey]
-          }
-          // One entry (`ref`/`name`) or several (`from`, with `names` in the
-          // same order to fall back to).
-          const pairs: [string, string][] = rule.from
-            ? asList(entry[rule.from]).map((id, i) => [id, asList(entry[rule.names!])[i] || ''])
+        // One entry (`ref`/`name`) or several (`from`, with `names` in the
+        // same order to fall back to).
+        const pairs: [string, string][] =
+          rule.from || definition.type === 'multiselect'
+            ? asList(entry[rule.from!]).map((id, i) => [
+                id,
+                asList(entry[rule.names!], 'name')[i] || '',
+              ])
             : [
                 [
                   rule.ref ? String(entry[rule.ref] ?? '') : '',
                   rule.name ? String(entry[rule.name] ?? '') : '',
                 ],
               ]
-          for (const [id, name] of pairs) {
-            const found = id ? resolved[id] : null
-            // A reference only when the catalog really has this id *as this
-            // type* - resolve does not filter by type, and a feat and a spell
-            // may share an id. Otherwise the name, so the player still sees
-            // what they were given even without the content installed.
-            if (found && !found.missing && found.content_type === definition.content_type) {
-              if (!list.some((item) => matchesKey(item, id))) {
-                list.push(found.source ? { _ref: id, _source: found.source } : { _ref: id })
-                record(target, id)
-              }
-            } else if (name || id) {
-              const label = name || id
-              if (!list.some((item) => matchesKey(item, label))) {
-                list.push({ _inline: true, ...carried, name: label })
-                record(target, label)
-              }
-            }
-          }
-          patch[target] = list
+        // Per-entry values, each a list parallel to `from`: a pack's quantities.
+        const lists: Record<string, unknown[]> = {}
+        for (const [toKey, fromKey] of Object.entries(rule.values || {})) {
+          lists[toKey] = parallelList(entry[fromKey])
         }
+        const perEntry = pairs.map((_, i) => perEntryAt(definition, lists, i))
+        const list = grantInto({
+          definition,
+          list: currentList(data, patch, target),
+          pairs,
+          carried,
+          perEntry,
+          resolved,
+          record: (key) => record(target, key),
+        })
+        if (list) patch[target] = list
         continue
       }
 
@@ -251,15 +394,109 @@ export async function planPick({
         const count =
           typeof rule.count === 'string' ? Number(entry[rule.count]) || 0 : Number(rule.count ?? 1)
         if (count > 0 && options.length) {
-          choices.push({ source: field, target, count, options, label: rule.label || '' })
+          choices.push({ source, target, count, options, label: rule.label || '' })
         }
       }
     }
   }
 
-  if (Object.keys(recorded).length) granted[field] = recorded
+  if (Object.keys(recorded).length) granted[source] = recorded
   if (hadGrants || Object.keys(recorded).length) patch[GRANTED_KEY] = granted
-  return { patch, choices }
+  return { patch, choices, prompts }
+}
+
+/** A content-list row as far as picks care: its reference, if it has one. */
+function rowRef(row: unknown): string | null {
+  if (!row || typeof row !== 'object') return null
+  const ref = (row as Values)._ref
+  return ref === undefined || ref === null || ref === '' ? null : String(ref)
+}
+
+interface PlanListArgs {
+  document?: PickDocument | null
+  // The character's data *before* the list changed.
+  data?: Values | null
+  field: string
+  // The list's new value.
+  value: unknown
+  // Entries already in hand, keyed by id - the one the browser just picked.
+  known?: Record<string, Values | null | undefined>
+  lookup?: (ids: string[]) => Promise<ResolvedRefs | null | undefined>
+  // Fetches an entry's own properties when it is not already known.
+  fetchEntry?: (id: string) => Promise<Values | null>
+}
+
+/**
+ * Work out what changing a content list's rows does, row by row.
+ *
+ * A content_list may carry the same `on_pick` rules as a content_ref: each
+ * catalog row it gains is followed up as a pick, recorded under its own key
+ * (`rowSource`), and each row it loses takes its grants back off. A freeform
+ * row is the player's own writing and triggers nothing, as does a change to a
+ * row that stays - ticking "equipped" is not picking the item again.
+ *
+ * @returns the data to write and the choices the new rows ask for
+ */
+export async function planListChange({
+  document,
+  data,
+  field,
+  value,
+  known = {},
+  lookup,
+  fetchEntry,
+}: PlanListArgs): Promise<{
+  patch: Values
+  choices: PickChoice[]
+  prompts: ListPrompt[]
+  removed: string[]
+}> {
+  const rules = document?.fields?.[field]?.on_pick
+  if (!Array.isArray(rules) || !rules.length) {
+    return { patch: {}, choices: [], prompts: [], removed: [] }
+  }
+
+  const before = new Set(
+    (Array.isArray(data?.[field]) ? (data![field] as unknown[]) : []).map(rowRef).filter(Boolean)
+  )
+  const after = new Set((Array.isArray(value) ? value : []).map(rowRef).filter(Boolean) as string[])
+  const removed = [...before].filter((ref) => !after.has(ref!)) as string[]
+  const added = [...after].filter((ref) => !before.has(ref))
+
+  // Each row is planned against the data the previous one left, so two rows
+  // granting into the same target do not overwrite each other's additions.
+  let current: Values = { ...(data || {}), [field]: value }
+  const patch: Values = {}
+  const choices: PickChoice[] = []
+  const prompts: ListPrompt[] = []
+  const follow = async (ref: string, entry: Values | null) => {
+    const plan = await planPick({
+      document,
+      data: current,
+      field,
+      source: rowSource(field, ref),
+      entry,
+      lookup,
+    })
+    Object.assign(patch, plan.patch)
+    current = { ...current, ...plan.patch }
+    choices.push(...plan.choices)
+    if (entry) prompts.push(...plan.prompts.map((prompt) => ({ prompt, ref, entry })))
+  }
+
+  for (const ref of removed) await follow(ref, null)
+  for (const ref of added) {
+    let entry = known[ref] ?? null
+    if (!entry && fetchEntry) {
+      try {
+        entry = await fetchEntry(ref)
+      } catch {
+        entry = null
+      }
+    }
+    if (entry) await follow(ref, entry)
+  }
+  return { patch, choices, prompts, removed }
 }
 
 /**

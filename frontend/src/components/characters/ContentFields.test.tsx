@@ -178,8 +178,36 @@ describe('ContentRefField', () => {
 
   it('shows a freeform entry read-only without its controls', () => {
     renderRef({ value: { _inline: true, name: 'Homebrew' }, readOnly: true })
-    expect(screen.getByDisplayValue('Homebrew')).toBeDisabled()
+    expect(screen.getByText('Homebrew')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('Homebrew')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+  })
+
+  it("opens a read-only pick's detail from the box, in a window", async () => {
+    renderRef({ value: { _ref: 'fireball' }, readOnly: true })
+    await userEvent.click(screen.getByRole('button', { name: 'Show Fireball' }))
+    const dialog = screen.getByRole('dialog', { name: 'Fireball' })
+    expect(dialog).toHaveTextContent('evocation')
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it("opens a read-only custom entry's own values", async () => {
+    renderRef({ value: { _inline: true, name: 'Homebrew', school: 'chaos' }, readOnly: true })
+    await userEvent.click(screen.getByRole('button', { name: 'Show Homebrew' }))
+    expect(screen.getByRole('dialog', { name: 'Homebrew' })).toHaveTextContent('chaos')
+  })
+
+  it('opens nothing for a read-only pick whose entry is not installed', () => {
+    renderRef({ value: { _ref: 'gone' }, readOnly: true })
+    expect(screen.getByRole('button', { name: 'gone' })).toBeDisabled()
+  })
+
+  it('opens the detail from its own button while the box still picks', async () => {
+    renderRef({ value: { _ref: 'fireball' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Show Fireball' }))
+    expect(screen.getByRole('dialog', { name: 'Fireball' })).toHaveTextContent('evocation')
+    expect(mockBrowse).not.toHaveBeenCalled()
   })
 
   it('reads text saved before the field was a pick as a custom entry', async () => {
@@ -244,12 +272,83 @@ describe('ContentListField', () => {
     expect(onChange).toHaveBeenCalledWith([{ _ref: 'fireball', _per: { prepared: true } }])
   })
 
+  it("offers a per-entry select only the options its row's filter keeps, and the one held", () => {
+    const definition = {
+      ...DEFINITION,
+      per_entry_fields: {
+        choice: {
+          type: 'select',
+          label: 'Choice',
+          width: 170,
+          options: ['Arid', 'Polar', 'Owl', 'Panther'],
+          options_filter: "contains(row.school, option == 'Owl' ? 'evo' : 'none')",
+        },
+      },
+    }
+    renderList({ definition, value: [{ _ref: 'fireball', _per: { choice: 'Polar' } }] })
+    const select = screen.getByLabelText('Choice') as HTMLSelectElement
+    expect([...select.options].map((option) => option.value)).toEqual(['', 'Polar', 'Owl'])
+    expect(select.closest('td')).toHaveStyle({ width: '170px' })
+  })
+
+  it('adds an in_title value to the name and opens the detail_entry beneath the row', async () => {
+    const definition = {
+      ...DEFINITION,
+      per_entry_fields: {
+        chosen: { type: 'text', label: 'Chosen', in_title: true, visible_if: 'false' },
+        chosen_ref: {
+          type: 'text',
+          label: 'Chosen entry',
+          detail_entry: 'spell',
+          visible_if: 'false',
+        },
+      },
+    }
+    renderList({
+      definition,
+      contentTypes: { spell: TYPE },
+      value: [{ _ref: 'fireball', _per: { chosen: 'Shield', chosen_ref: 'shield' } }],
+    })
+    expect(screen.getByText('Fireball: Shield')).toBeInTheDocument()
+    expect(screen.queryByText('Chosen')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByText('Fireball: Shield'))
+    expect(screen.getByText('evocation')).toBeInTheDocument()
+    expect(screen.getByText('abjuration')).toBeInTheDocument()
+  })
+
   it('adds a reference from the browser', async () => {
     const onChange = vi.fn()
     renderList({ value: [], onChange })
     await userEvent.click(screen.getByText(/Browse catalog/i))
     await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
-    expect(onChange).toHaveBeenCalledWith([{ _ref: 'fireball', _source: 'srd' }])
+    expect(onChange).toHaveBeenCalledWith([{ _ref: 'fireball', _source: 'srd' }], expect.anything())
+  })
+
+  it('hands over the picked entry, for on_pick rules', async () => {
+    const onChange = vi.fn()
+    renderList({ value: [], onChange })
+    await userEvent.click(screen.getByText(/Browse catalog/i))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    const meta = onChange.mock.calls[0][1]
+    expect(meta.entry).toMatchObject({ name: expect.any(String) })
+  })
+
+  it("starts a new row from each per-entry field's default", async () => {
+    const onChange = vi.fn()
+    renderList({
+      value: [],
+      onChange,
+      definition: {
+        ...DEFINITION,
+        per_entry_fields: { qty: { type: 'number', label: 'Qty', default: 1 } },
+      },
+    })
+    await userEvent.click(screen.getByText(/Browse catalog/i))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    expect(onChange).toHaveBeenCalledWith(
+      [{ _ref: 'fireball', _source: 'srd', _per: { qty: 1 } }],
+      expect.anything()
+    )
   })
 
   it('does not add the same entry twice', async () => {
@@ -296,6 +395,92 @@ describe('ContentListField', () => {
   it('shows an empty state', () => {
     renderList({ value: [] })
     expect(screen.getByText(/Nothing here yet/i)).toBeInTheDocument()
+  })
+})
+
+describe('ContentListField — a pick inside a row', () => {
+  // A generic "+1 Weapon": the base weapon is picked on the row, from the
+  // weapons only, and an item whose entry names its base starts with it.
+  const MAGIC = {
+    type: 'content_list',
+    label: 'Magic items',
+    content_type: 'spell',
+    per_entry_fields: {
+      base: {
+        type: 'content_ref',
+        label: 'Base',
+        content_type: 'spell',
+        filter: { school: ['evocation', 'abjuration'] },
+        default_from: 'row.base_id',
+      },
+    },
+  }
+
+  const renderMagic = (props = {}) =>
+    render(
+      <ContentListField
+        name="magic"
+        definition={MAGIC}
+        entries={ENTRIES}
+        schemaId="demo"
+        typeDefinition={TYPE}
+        contentTypes={{ spell: TYPE }}
+        value={[]}
+        {...props}
+      />
+    )
+
+  it('shows the picked base by its resolved name', () => {
+    renderMagic({ value: [{ _ref: 'shield', _per: { base: { _ref: 'fireball' } } }] })
+    expect(screen.getByRole('button', { name: /Choose Base/ })).toHaveTextContent('Fireball')
+  })
+
+  it('opens the catalog on the fixed filter, and hands the picked entry back', async () => {
+    const onChange = vi.fn()
+    renderMagic({ value: [{ _ref: 'shield' }], onChange })
+    await userEvent.click(screen.getByRole('button', { name: /Choose Base/ }))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    expect(mockBrowse).toHaveBeenCalledWith(
+      'demo',
+      'spell',
+      expect.objectContaining({ filters: { school: ['evocation', 'abjuration'] } })
+    )
+    expect(onChange).toHaveBeenCalledWith(
+      [{ _ref: 'shield', _per: { base: { _ref: 'fireball', _source: 'srd' } } }],
+      { picked: { fireball: expect.objectContaining({ name: 'Fireball' }) } }
+    )
+  })
+
+  it('starts a new row from default_from, read against the added entry', async () => {
+    const onChange = vi.fn()
+    mockBrowse.mockResolvedValue({
+      entries: [
+        {
+          entry_id: 'shield',
+          source: 'srd',
+          name: 'Shield',
+          data: { ...ENTRIES.shield, base_id: 'fireball' },
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+      filters_available: {},
+    })
+    renderMagic({ value: [], onChange })
+    await userEvent.click(screen.getByText(/Browse catalog/i))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    expect(onChange.mock.calls[0][0]).toEqual([
+      { _ref: 'shield', _source: 'srd', _per: { base: { _ref: 'fireball' } } },
+    ])
+  })
+
+  it('leaves the pick empty when the entry names no base', async () => {
+    const onChange = vi.fn()
+    renderMagic({ value: [], onChange })
+    await userEvent.click(screen.getByText(/Browse catalog/i))
+    await userEvent.click(await screen.findByLabelText(/Add to sheet/i))
+    expect(onChange.mock.calls[0][0]).toEqual([{ _ref: 'fireball', _source: 'srd' }])
   })
 })
 
@@ -424,5 +609,81 @@ describe('ContentListField — freeform entries read like catalog ones', () => {
     renderTraits({ readOnly: true })
     await userEvent.click(screen.getByRole('button', { name: 'Show Darkvision' }))
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+})
+
+describe('ContentListField — conditions on per-entry fields', () => {
+  const ITEMS = {
+    cloak: { name: 'Cloak', attunement: true },
+    rope: { name: 'Rope' },
+    ring: { name: 'Ring', attunement: true },
+  }
+  const DEFINITION = {
+    label: 'Magic Items',
+    content_type: 'magic_item',
+    per_entry_fields: {
+      attuned: {
+        type: 'checkbox',
+        label: 'Attuned',
+        visible_if: 'row.attunement',
+        disabled_if: "not row.attuned && count_refs(magic_items, 'attuned') >= limit",
+      },
+    },
+  }
+  const renderItems = (props = {}) =>
+    render(
+      <ContentListField
+        name="magic_items"
+        definition={DEFINITION}
+        entries={ITEMS}
+        value={[{ _ref: 'cloak' }, { _ref: 'rope' }, { _ref: 'ring' }]}
+        onChange={vi.fn()}
+        context={{ limit: 3 }}
+        {...props}
+      />
+    )
+
+  it('draws the field only where its visible_if holds for the row', () => {
+    renderItems()
+    // Cloak and Ring need attunement; Rope does not.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+  })
+
+  it('reads the character through context in disabled_if', () => {
+    renderItems({
+      value: [{ _ref: 'cloak', _per: { attuned: true } }, { _ref: 'ring' }],
+      context: { limit: 1 },
+    })
+    // The ticked one can still be cleared; the other is past the limit and is
+    // shown read-only, as a value rather than a box.
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes).toHaveLength(1)
+    expect(boxes[0]).toBeChecked()
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
+  it('drops the column when the field is hidden on every row', () => {
+    const withColumns = { ...DEFINITION, display_columns: ['rarity'] }
+    const { rerender } = renderItems({ definition: withColumns, value: [{ _ref: 'rope' }] })
+    expect(screen.queryByRole('columnheader', { name: 'Attuned' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('cell')).toHaveLength(3) // name, rarity, remove
+    rerender(
+      <ContentListField
+        name="magic_items"
+        definition={withColumns}
+        entries={ITEMS}
+        value={[{ _ref: 'rope' }, { _ref: 'ring' }]}
+        onChange={vi.fn()}
+        context={{ limit: 3 }}
+      />
+    )
+    expect(screen.getByRole('columnheader', { name: 'Attuned' })).toBeInTheDocument()
+  })
+
+  it('leaves the field editable while under the limit', async () => {
+    const onChange = vi.fn()
+    renderItems({ value: [{ _ref: 'ring' }], onChange })
+    await userEvent.click(screen.getByRole('checkbox'))
+    expect(onChange).toHaveBeenCalledWith([{ _ref: 'ring', _per: { attuned: true } }])
   })
 })

@@ -145,19 +145,52 @@ export const content = {
           path: { schema_id: schemaId, content_type: contentType },
           query: presentParams(params),
         }),
-        Object.entries(filters)
-          .filter(([, wanted]) => wanted !== '' && wanted !== undefined)
-          .map(([field, wanted]): [string, string] => [`filter[${field}]`, String(wanted)])
+        // A list of values repeats the key, and the catalog matches any of them.
+        Object.entries(filters).flatMap(([field, wanted]) =>
+          (Array.isArray(wanted) ? wanted : [wanted])
+            .filter((value) => value !== '' && value !== undefined && value !== null)
+            .map((value): [string, string] => [`filter[${field}]`, String(value)])
+        )
       )
     ) as Promise<ResponseOf<'/content/{schema_id}/{content_type}', 'get'>>,
   entry: (schemaId: string, contentType: string, entryId: string) =>
     client.get('/content/{schema_id}/{content_type}/{entry_id}', {
       path: { schema_id: schemaId, content_type: contentType, entry_id: entryId },
     }),
-  resolve: (schemaId: string, ids: string[]) =>
+  // With a character, ids resolve as its sheet reads them: its campaign's
+  // rulesets, and a house-rule rewrite in place of the original.
+  resolve: (schemaId: string, ids: string[], characterId?: string | null) =>
     client.get('/content/{schema_id}/resolve', {
       path: { schema_id: schemaId },
-      query: { ids: ids.join(',') },
+      query: { ids: ids.join(','), character_id: characterId || undefined },
+    }),
+}
+
+type CompendiumQuery = QueryOf<'/content/compendium', 'get'>
+
+/**
+ * The compendium: every catalog entry the caller can read, across content
+ * types, without needing a character sheet installed.
+ */
+export const compendium = {
+  browse: ({
+    filters = {},
+    ...params
+  }: CompendiumQuery & { filters?: Record<string, unknown> } = {}) =>
+    api.get(
+      withQuery(
+        getUrl('/content/compendium', { query: presentParams(params) }),
+        Object.entries(filters)
+          .filter(([, wanted]) => wanted !== '' && wanted !== undefined)
+          .map(([field, wanted]): [string, string] => [`filter[${field}]`, String(wanted)])
+      )
+    ) as Promise<ResponseOf<'/content/compendium', 'get'>>,
+  /** The schemas with compendium content, each with its linked library systems. */
+  schemas: () => client.get('/content/compendium/schemas'),
+  entry: (schemaId: string, contentType: string, entryId: string) =>
+    client.get('/content/compendium/{content_type}/{entry_id}', {
+      path: { content_type: contentType, entry_id: entryId },
+      query: { schema_id: schemaId },
     }),
 }
 

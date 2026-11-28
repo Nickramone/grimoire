@@ -16,6 +16,7 @@ export const AudioView = lazyWithPreload(() => import('../views/AudioView'))
 export const AudioDetailView = lazyWithPreload(() => import('./audio/AudioDetailView'))
 export const ModelsView = lazyWithPreload(() => import('../views/ModelsView'))
 export const ModelDetailView = lazyWithPreload(() => import('./models/ModelDetailView'))
+export const CompendiumView = lazyWithPreload(() => import('../views/CompendiumView'))
 export const SearchView = lazyWithPreload(() => import('../views/SearchView'))
 export const SettingsView = lazyWithPreload(() => import('../views/SettingsView'))
 export const FavoritesView = lazyWithPreload(() => import('../views/FavoritesView'))
@@ -38,6 +39,8 @@ export const LeagueDetailView = lazyWithPreload(() => import('../views/LeagueDet
 const LANDING_VIEWS: Record<string, { preload: () => Promise<unknown> }> = {
   library: LibraryView,
   armory: LibraryView,
+  compendium: CompendiumView,
+  bestiary: CompendiumView,
   maps: MapsView,
   tokens: TokensView,
   audio: AudioView,

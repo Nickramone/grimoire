@@ -56,6 +56,12 @@ export const campaigns = {
     }),
   setArchived: (id: Id, archived: boolean) =>
     client.put('/campaigns/{campaign_id}/archive', { path: campaign(id), body: { archived } }),
+  // Whether the table plays its house rules (Nickramone fork): read by anyone
+  // at it, switched by the GM.
+  houseRules: (id: Id) =>
+    client.get('/campaigns/{campaign_id}/house-rules', { path: campaign(id) }),
+  setHouseRules: (id: Id, on: boolean) =>
+    client.put('/campaigns/{campaign_id}/house-rules', { path: campaign(id), body: { on } }),
 
   // Members
   invite: (id: Id, userId: string) =>
@@ -345,6 +351,34 @@ export const campaigns = {
   unhideWikiPage: (id: Id, pageId: Id) =>
     client.delete('/campaigns/{campaign_id}/wiki/{page_id}/hide', {
       path: { campaign_id: id, page_id: pageId },
+    }),
+  // Notes members leave on a page, beside it rather than in its body.
+  listWikiAnnotations: (id: Id, pageId: Id) =>
+    client.get('/campaigns/{campaign_id}/wiki/{page_id}/annotations', {
+      path: { campaign_id: id, page_id: pageId },
+    }),
+  createWikiAnnotation: (
+    id: Id,
+    pageId: Id,
+    data: BodyOf<'/campaigns/{campaign_id}/wiki/{page_id}/annotations', 'post'>
+  ) =>
+    client.post('/campaigns/{campaign_id}/wiki/{page_id}/annotations', {
+      path: { campaign_id: id, page_id: pageId },
+      body: data,
+    }),
+  updateWikiAnnotation: (
+    id: Id,
+    pageId: Id,
+    annotationId: Id,
+    data: BodyOf<'/campaigns/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}', 'patch'>
+  ) =>
+    client.patch('/campaigns/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}', {
+      path: { campaign_id: id, page_id: pageId, annotation_id: annotationId },
+      body: data,
+    }),
+  deleteWikiAnnotation: (id: Id, pageId: Id, annotationId: Id) =>
+    client.delete('/campaigns/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}', {
+      path: { campaign_id: id, page_id: pageId, annotation_id: annotationId },
     }),
   // Pins on a map page (issue #578).
   createWikiPin: (

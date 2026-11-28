@@ -71,6 +71,13 @@ vi.mock('../components/characters/CharacterSheet', () => ({
       <button onClick={() => onChange('klass', { _ref: 'wizard' }, { entry: WIZARD })}>
         pick wizard
       </button>
+      <button onClick={() => onChange('backgrounds', [{ _ref: 'acolyte' }], { entry: ACOLYTE })}>
+        add acolyte row
+      </button>
+      <button onClick={() => onChange('backgrounds', [{ _ref: 'acolyte' }])}>
+        add row without entry
+      </button>
+      <button onClick={() => onChange('backgrounds', [])}>remove rows</button>
       <button onClick={() => onChange('speed', 40)}>type speed</button>
       <button onClick={() => onReset('speed')}>reset speed</button>
     </div>
@@ -93,6 +100,11 @@ const DOCUMENT = {
         { grant: 'skills', from: 'skill_proficiencies' },
         { grant: 'feats', ref: 'feat_id', name: 'feat' },
       ],
+    },
+    backgrounds: {
+      type: 'content_list',
+      content_type: 'background',
+      on_pick: [{ grant: 'skills', from: 'skill_proficiencies' }],
     },
     skills: { type: 'multiselect', options: ['Arcana', 'History', 'Insight'] },
     feats: { type: 'content_list', content_type: 'feat' },
@@ -166,7 +178,7 @@ describe('CharacterDetailView — picks', () => {
     await renderView()
     await userEvent.click(screen.getByText('pick without entry'))
     await waitFor(() => expect(lastSaved().data.skills).toEqual(['Insight']))
-    expect(mockResolve).toHaveBeenCalledWith('demo', ['acolyte'])
+    expect(mockResolve).toHaveBeenCalledWith('demo', ['acolyte'], 'c1')
   })
 
   it('asks for a choice the pick offers, and records the answer', async () => {
@@ -188,6 +200,32 @@ describe('CharacterDetailView — picks', () => {
     await userEvent.click(screen.getByText('pick wizard'))
     await userEvent.click(await screen.findByText('Choose later'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('CharacterDetailView — picks in a list', () => {
+  it('follows up a row added to a list with on_pick', async () => {
+    await renderView()
+    await userEvent.click(screen.getByText('add acolyte row'))
+    await waitFor(() => expect(lastSaved().data.skills).toEqual(['Insight']))
+    expect(lastSaved().data._granted).toEqual({ 'backgrounds:acolyte': { skills: ['Insight'] } })
+    expect(screen.getByTestId('entries')).toHaveTextContent('acolyte')
+  })
+
+  it('looks the row up when the picker did not hand it over', async () => {
+    await renderView()
+    await userEvent.click(screen.getByText('add row without entry'))
+    await waitFor(() => expect(lastSaved().data.skills).toEqual(['Insight']))
+    expect(mockResolve).toHaveBeenCalledWith('demo', ['acolyte'], 'c1')
+  })
+
+  it('takes the grants back when the row is removed', async () => {
+    await renderView()
+    await userEvent.click(screen.getByText('add acolyte row'))
+    await waitFor(() => expect(screen.getByTestId('skills')).toHaveTextContent('Insight'))
+    await userEvent.click(screen.getByText('remove rows'))
+    await waitFor(() => expect(lastSaved().data.skills).toEqual([]))
+    expect(lastSaved().data._granted).toEqual({})
   })
 })
 

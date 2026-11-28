@@ -47,6 +47,24 @@ describe('ListField', () => {
     expect(onChange).toHaveBeenCalledWith([{ name: '', qty: 1, equipped: false }])
   })
 
+  it('shows a readonly column without letting it be typed into', async () => {
+    const onChange = vi.fn()
+    const definition = {
+      ...DEFINITION,
+      columns: [{ ...DEFINITION.columns[0], readonly: true }, DEFINITION.columns[1]],
+    }
+    renderList({ definition, onChange })
+    expect(screen.getByText('Sword')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('Sword')).not.toBeInTheDocument()
+    // The rest of the row, and the rows themselves, stay the player's.
+    await userEvent.type(screen.getByDisplayValue('2'), '5')
+    expect(onChange).toHaveBeenLastCalledWith([
+      { name: 'Sword', qty: 1, equipped: true },
+      { name: 'Rope', qty: 25, equipped: false },
+    ])
+    expect(screen.getByText(/Add row/i)).toBeInTheDocument()
+  })
+
   it('edits a cell without disturbing the others', async () => {
     const onChange = vi.fn()
     renderList({ onChange })
@@ -79,6 +97,13 @@ describe('ListField', () => {
     expect(screen.getAllByLabelText(/Move row up/i)[0]).toBeDisabled()
     const downs = screen.getAllByLabelText(/Move row down/i)
     expect(downs[downs.length - 1]).toBeDisabled()
+  })
+
+  it('drops the move buttons when the schema says the order is fixed', () => {
+    renderList({ definition: { ...DEFINITION, reorderable: false } })
+    expect(screen.queryByLabelText(/Move row up/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Move row down/i)).not.toBeInTheDocument()
+    expect(screen.getAllByLabelText(/Remove row/i).length).toBeGreaterThan(0)
   })
 
   it('offers no editing affordances when read-only', () => {

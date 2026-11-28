@@ -18,9 +18,11 @@ from sqlalchemy.orm import Session
 from ...auth import CurrentUser, get_current_user, require_admin
 from ...config import get_db
 from ...models import ContentEntry, ContentPack, Ruleset, RulesetEntry
+from ...services.characters import house_rules
 from ...services.characters import packs as pack_service
 from ...services.characters import rulesets as rs
 from ...services.characters.user_schemas import user_schema_document
+from .._character_access import readable_character_or_404
 from . import _helpers as helpers
 
 logger = logging.getLogger("grimoire.content")
@@ -36,11 +38,12 @@ class _CatalogRow:
     """
 
     __slots__ = ("id", "entry_id", "source", "name", "data", "content_type",
-                 "ruleset", "owner_name", "row_id", "ruleset_id", "ruleset_name")
+                 "ruleset", "owner_name", "row_id", "ruleset_id", "ruleset_name",
+                 "ruleset_campaign_id")
 
     def __init__(self, *, id, entry_id, source, name, data, content_type,
                  ruleset=False, owner_name="", row_id=None,
-                 ruleset_id=None, ruleset_name=""):
+                 ruleset_id=None, ruleset_name="", ruleset_campaign_id=None):
         self.id = id
         self.entry_id = entry_id
         self.source = source
@@ -52,12 +55,24 @@ class _CatalogRow:
         self.row_id = row_id
         self.ruleset_id = ruleset_id
         self.ruleset_name = ruleset_name
+        self.ruleset_campaign_id = ruleset_campaign_id
 
 
 def _catalog_rows(
-    db: Session, user_id: str, schema_id: str, content_type: str, *, include_rulesets: bool
+    db: Session,
+    user_id: str,
+    schema_id: str,
+    content_type: str,
+    *,
+    include_rulesets: bool,
+    scope: Optional[house_rules.CharacterScope] = None,
 ) -> list:
-    """Every entry of one type this user can see, packs and rulesets together."""
+    """Every entry of one type this user can see, packs and rulesets together.
+
+    With ``scope`` (picking for one character), only that character's campaign
+    rulesets, and a rewrite in it replaces its original while the house rules
+    are on.
+    """
     rows = [
         _CatalogRow(
             id=row.id,
@@ -80,6 +95,7 @@ def _catalog_rows(
         .filter(RulesetEntry.schema_id == schema_id)
         .filter(RulesetEntry.content_type == content_type)
         .filter(rs.readable_filter(db, user_id))
+        .filter(house_rules.ruleset_scope(scope))
         .all()
     )
 
@@ -96,10 +112,21 @@ def _catalog_rows(
             row_id=entry.id,
             ruleset_id=ruleset.id,
             ruleset_name=ruleset.name,
+            ruleset_campaign_id=ruleset.campaign_id,
         )
         for entry, ruleset in ruleset_rows
     )
-    return rows
+    return house_rules.pick_catalog_rows(rows, scope)
+
+
+def _character_scope(
+    db: Session, user_id: str, character_id: Optional[str]
+) -> Optional[house_rules.CharacterScope]:
+    """The scope of a character the caller may read; none without an id."""
+    if not character_id:
+        return None
+    character = readable_character_or_404(db, character_id, user_id)
+    return house_rules.scope_for(db, character)
 
 
 def list_packs(
@@ -180,10 +207,14 @@ def browse_content(
     page: int = 1,
     page_size: int = helpers.DEFAULT_PAGE_SIZE,
     include_rulesets: bool = True,
+    character_id: Optional[str] = None,
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Browse one content type: search, filter, sort, paginate.
+
+    ``character_id`` browses as that character picks: its campaign's rulesets
+    and house rules (Nickramone fork).
 
     Filters arrive as `filter[field]=value` query parameters, which is why this
     handler takes the raw request — FastAPI cannot express that bracketed shape
@@ -201,7 +232,12 @@ def browse_content(
         )
 
     entries = _catalog_rows(
-        db, current_user.id, schema_id, content_type, include_rulesets=include_rulesets
+        db,
+        current_user.id,
+        schema_id,
+        content_type,
+        include_rulesets=include_rulesets,
+        scope=_character_scope(db, current_user.id, character_id),
     )
 
     # Facets describe the whole catalog, not the current page, so they are built
@@ -209,11 +245,12 @@ def browse_content(
     # facet and leave no way back.
     facets = helpers.build_facets(entries, definition.get("filter_fields", []))
 
-    filters = {
-        key[7:-1]: value
-        for key, value in request.query_params.items()
-        if key.startswith("filter[") and key.endswith("]") and value
-    }
+    # A field may be filtered on several values at once, `filter[f]=a&filter[f]=b`,
+    # and then matches any of them.
+    filters: dict[str, list[str]] = {}
+    for key, value in request.query_params.multi_items():
+        if key.startswith("filter[") and key.endswith("]") and value:
+            filters.setdefault(key[7:-1], []).append(value)
     if filters:
         entries = [
             entry
@@ -287,6 +324,9 @@ def get_entry(
 def resolve_entries(
     schema_id: str,
     ids: str = Query("", description="Comma-separated entry ids"),
+    character_id: Optional[str] = Query(
+        None, description="Resolve as this character's sheet reads them (its campaign's house rules)"
+    ),
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -322,25 +362,29 @@ def resolve_entries(
 
     # Ruleset entries resolve too, or a sheet built on a table's own spell
     # would show it as missing. Readable rulesets only, by the shared filter.
-    for row in (
-        db.query(RulesetEntry)
+    scope = _character_scope(db, current_user.id, character_id)
+    ruleset_rows = (
+        db.query(RulesetEntry, Ruleset)
         .join(Ruleset, Ruleset.id == RulesetEntry.ruleset_id)
         .filter(RulesetEntry.schema_id == schema_id)
         .filter(RulesetEntry.entry_id.in_(capped))
         .filter(rs.readable_filter(db, current_user.id))
+        .filter(house_rules.ruleset_scope(scope))
         .all()
-    ):
-        found.setdefault(
-            row.entry_id,
-            {
-                "entry_id": row.entry_id,
-                "source": "ruleset",
-                "name": row.name,
-                "content_type": row.content_type,
-                "data": row.data if isinstance(row.data, dict) else {},
-                "missing": False,
-            },
-        )
+    )
+    house_rules.merge_resolved(
+        found,
+        ruleset_rows,
+        lambda row: {
+            "entry_id": row.entry_id,
+            "source": "ruleset",
+            "name": row.name,
+            "content_type": row.content_type,
+            "data": row.data if isinstance(row.data, dict) else {},
+            "missing": False,
+        },
+        scope,
+    )
     for entry_id in wanted:
         found.setdefault(
             entry_id,

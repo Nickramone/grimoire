@@ -106,6 +106,13 @@ from .guests import (
 )
 from .wiki_io import export_wiki, import_wiki
 from .wiki_pins import create_pin, delete_pin, update_pin
+from .house_rules import HouseRulesOut, get_house_rules, set_house_rules
+from .wiki_annotations import (
+    create_annotation,
+    delete_annotation,
+    list_annotations,
+    update_annotation,
+)
 from .gm_screen import (
     apply_gm_screen_preset,
     browse_gm_screen_presets,
@@ -183,6 +190,7 @@ from ._response_schemas import (
     SuggestedResourceOut,
     WikiImportOut,
     WikiMapPinOut,
+    WikiAnnotationOut,
     WikiPageDetailOut,
     WikiPageHiddenOut,
     WikiPageListItem,
@@ -889,6 +897,49 @@ router.add_api_route(
     delete_page,
     methods=["DELETE"],
     summary="Delete a wiki page",
+    status_code=204,
+)
+router.add_api_route(
+    "/{campaign_id}/house-rules",
+    get_house_rules,
+    methods=["GET"],
+    summary="Whether the campaign plays its house rules",
+    response_model=HouseRulesOut,
+)
+router.add_api_route(
+    "/{campaign_id}/house-rules",
+    set_house_rules,
+    methods=["PUT"],
+    summary="GM: switch the campaign's house rules on or off",
+    response_model=HouseRulesOut,
+)
+router.add_api_route(
+    "/{campaign_id}/wiki/{page_id}/annotations",
+    list_annotations,
+    methods=["GET"],
+    summary="List the notes on a wiki page this user can see",
+    response_model=list[WikiAnnotationOut],
+)
+router.add_api_route(
+    "/{campaign_id}/wiki/{page_id}/annotations",
+    create_annotation,
+    methods=["POST"],
+    summary="Leave a note on a wiki page",
+    status_code=201,
+    response_model=WikiAnnotationOut,
+)
+router.add_api_route(
+    "/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}",
+    update_annotation,
+    methods=["PATCH"],
+    summary="Edit, or (GM) hide, a note on a wiki page",
+    response_model=WikiAnnotationOut,
+)
+router.add_api_route(
+    "/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}",
+    delete_annotation,
+    methods=["DELETE"],
+    summary="Delete your note on a wiki page",
     status_code=204,
 )
 router.add_api_route(

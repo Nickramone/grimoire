@@ -2591,6 +2591,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/campaigns/{campaign_id}/house-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the campaign plays its house rules */
+        get: operations["get_house_rules_api_campaigns__campaign_id__house_rules_get"];
+        /** GM: switch the campaign's house rules on or off */
+        put: operations["set_house_rules_api_campaigns__campaign_id__house_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/campaigns/{campaign_id}/images": {
         parameters: {
             query?: never;
@@ -3311,6 +3329,42 @@ export interface paths {
         head?: never;
         /** Update a wiki page */
         patch: operations["update_page_api_campaigns__campaign_id__wiki__page_id__patch"];
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/wiki/{page_id}/annotations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the notes on a wiki page this user can see */
+        get: operations["list_annotations_api_campaigns__campaign_id__wiki__page_id__annotations_get"];
+        put?: never;
+        /** Leave a note on a wiki page */
+        post: operations["create_annotation_api_campaigns__campaign_id__wiki__page_id__annotations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/campaigns/{campaign_id}/wiki/{page_id}/annotations/{annotation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete your note on a wiki page */
+        delete: operations["delete_annotation_api_campaigns__campaign_id__wiki__page_id__annotations__annotation_id__delete"];
+        options?: never;
+        head?: never;
+        /** Edit, or (GM) hide, a note on a wiki page */
+        patch: operations["update_annotation_api_campaigns__campaign_id__wiki__page_id__annotations__annotation_id__patch"];
         trace?: never;
     };
     "/api/campaigns/{campaign_id}/wiki/{page_id}/hide": {
@@ -4057,6 +4111,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/content/assets/{asset_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A compendium image, for ruleset entry descriptions
+         * @description One compendium image, for any signed-in user.
+         */
+        get: operations["get_asset_api_content_assets__asset_path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/content/compendium": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse every readable entry of a schema, across content types
+         * @description Browse the compendium: one schema, all or one content type, searchable.
+         *
+         *     The compendium page lists the rules schemas, the bestiary page (``bestiary``)
+         *     the bestiaries. A rules ``schema_id`` asked of the bestiary opens the
+         *     bestiary of that edition, so both pages follow one edition choice.
+         *     Without ``schema_id`` the schema with the most readable entries is used.
+         *     Filters arrive as ``filter[field]=value`` and apply only with a content type.
+         *     A search ranks entries whose name matches above those matching elsewhere.
+         */
+        get: operations["browse_compendium_api_content_compendium_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/content/compendium/schemas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The schemas with compendium content, with their linked library systems
+         * @description The rules schemas with compendium content, for choosing a system's edition.
+         *
+         *     Bestiaries are left out: one follows its rules schema, see BESTIARY_SUFFIX.
+         */
+        get: operations["list_compendium_schemas_api_content_compendium_schemas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/content/compendium/{content_type}/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One compendium entry, readable without a character sheet
+         * @description One compendium entry with its type, for a link that opens it directly.
+         *
+         *     Unlike ``/content/{schema_id}/{content_type}/{entry_id}`` this needs no
+         *     character sheet installed, the same as the compendium list. When a pack and
+         *     a ruleset both carry the id, the ruleset's copy wins: it is the one the
+         *     server or the table chose to publish.
+         */
+        get: operations["get_compendium_entry_api_content_compendium__content_type___entry_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/content/packs": {
         parameters: {
             query?: never;
@@ -4157,6 +4305,9 @@ export interface paths {
         /**
          * Browse a content type
          * @description Browse one content type: search, filter, sort, paginate.
+         *
+         *     ``character_id`` browses as that character picks: its campaign's rulesets
+         *     and house rules (Nickramone fork).
          *
          *     Filters arrive as `filter[field]=value` query parameters, which is why this
          *     handler takes the raw request — FastAPI cannot express that bracketed shape
@@ -6317,7 +6468,7 @@ export interface paths {
         put?: never;
         /**
          * Create a ruleset for a campaign, or for the server
-         * @description Add a ruleset to a campaign, or to the server if you are an admin.
+         * @description Add a ruleset to a campaign, to the server if you are an admin, or for yourself.
          */
         post: operations["create_ruleset_api_rulesets_post"];
         delete?: never;
@@ -10819,6 +10970,11 @@ export interface components {
              * @default false
              */
             gm_can_edit?: boolean;
+            /**
+             * House Rules
+             * @default false
+             */
+            house_rules?: boolean;
             /** Id */
             id: string;
             /** Name */
@@ -11429,6 +11585,90 @@ export interface components {
             resource_type: "book" | "map" | "token" | "audio" | "model";
             /** Suggested Parent Id */
             suggested_parent_id?: string | null;
+        };
+        /**
+         * CompendiumEntryResponse
+         * @description One compendium entry and the type that describes its fields.
+         */
+        CompendiumEntryResponse: {
+            content_type: components["schemas"]["ContentTypeSummary"];
+            entry: components["schemas"]["CatalogEntry"];
+        };
+        /**
+         * CompendiumResponse
+         * @description The compendium: every readable catalog entry of one schema, across types.
+         *
+         *     ``content_types`` carries each type's chrome with the number of entries the
+         *     caller can see, so one request builds the category chips and the list.
+         *     ``filters_available`` is filled only when the request names a content type,
+         *     because facets are declared per type.
+         */
+        CompendiumResponse: {
+            /** Content Types */
+            content_types?: components["schemas"]["ContentTypeSummary"][];
+            /** Entries */
+            entries?: components["schemas"]["CatalogEntry"][];
+            /** Filters Available */
+            filters_available?: {
+                [key: string]: components["schemas"]["FilterOption"][];
+            };
+            /**
+             * Page
+             * @default 1
+             */
+            page?: number;
+            /**
+             * Page Size
+             * @default 0
+             */
+            page_size?: number;
+            /** Schema Id */
+            schema_id?: string | null;
+            /** Schemas */
+            schemas: components["schemas"]["CompendiumSchema"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total?: number;
+        };
+        /**
+         * CompendiumSchema
+         * @description A game system with compendium content the caller can read.
+         */
+        CompendiumSchema: {
+            /**
+             * Bestiary
+             * @default false
+             */
+            bestiary?: boolean;
+            /**
+             * Entry Count
+             * @default 0
+             */
+            entry_count?: number;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Schema Id */
+            schema_id: string;
+            /** Systems */
+            systems?: components["schemas"]["CompendiumSystem"][];
+        };
+        /**
+         * CompendiumSystem
+         * @description A library system linked to a compendium schema.
+         */
+        CompendiumSystem: {
+            /** Id */
+            id: string;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
         };
         /** ContentTypeListResponse */
         ContentTypeListResponse: {
@@ -12451,8 +12691,11 @@ export interface components {
             /** Items */
             items: components["schemas"]["GameSystemBulkItem"][];
         };
-        /** GameSystemUpdate */
-        GameSystemUpdate: {
+        /**
+         * GameSystemPatch
+         * @description One system's update: also its compendium schema, which a batch does not set.
+         */
+        GameSystemPatch: {
             /** Access Level */
             access_level?: string | null;
             /** Character Builder Url */
@@ -12461,6 +12704,8 @@ export interface components {
             character_builder_urls?: components["schemas"]["LinkEntry"][] | null;
             /** Codex Id */
             codex_id?: string | null;
+            /** Compendium Schema Id */
+            compendium_schema_id?: string | null;
             /** Cover Book Id */
             cover_book_id?: string | null;
             /** Description */
@@ -12997,6 +13242,18 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** HouseRulesOut */
+        HouseRulesOut: {
+            /** Editable */
+            editable: boolean;
+            /** On */
+            on: boolean;
+        };
+        /** HouseRulesUpdate */
+        HouseRulesUpdate: {
+            /** On */
+            on: boolean;
+        };
         /** ImageFieldResponse */
         ImageFieldResponse: {
             /** Field */
@@ -13094,6 +13351,11 @@ export interface components {
              * @default false
              */
             gm_can_edit?: boolean;
+            /**
+             * House Rules
+             * @default false
+             */
+            house_rules?: boolean;
             /** Id */
             id: string;
             /**
@@ -15892,6 +16154,11 @@ export interface components {
             license_url?: string;
             /** Name */
             name: string;
+            /**
+             * Personal
+             * @default false
+             */
+            personal?: boolean;
             /** Schema Id */
             schema_id: string;
         };
@@ -16604,6 +16871,55 @@ export interface components {
             year?: number | null;
         };
         /**
+         * SearchCompendiumHit
+         * @description A compendium entry (spell, item, feat...) matching the search.
+         */
+        SearchCompendiumHit: {
+            /**
+             * Bestiary
+             * @default false
+             */
+            bestiary?: boolean;
+            /** Content Type */
+            content_type: string;
+            /**
+             * Display
+             * @default
+             */
+            display?: string;
+            /** Entry Id */
+            entry_id: string;
+            /**
+             * Game Systems
+             * @default []
+             */
+            game_systems?: components["schemas"]["SearchCompendiumSystem"][];
+            /** Name */
+            name: string;
+            /** Schema Id */
+            schema_id: string;
+            /**
+             * Schema Name
+             * @default
+             */
+            schema_name?: string;
+            /**
+             * Type Label
+             * @default
+             */
+            type_label?: string;
+        };
+        /** SearchCompendiumSystem */
+        SearchCompendiumSystem: {
+            /** Id */
+            id: string;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+        };
+        /**
          * SearchField
          * @description One documented `field:` prefix, for the in-app help popover.
          */
@@ -16685,6 +17001,11 @@ export interface components {
              * @default []
              */
             book_matches?: components["schemas"]["SearchBookMatch"][];
+            /**
+             * Compendium
+             * @default []
+             */
+            compendium?: components["schemas"]["SearchCompendiumHit"][];
             /**
              * Fields
              * @default []
@@ -16876,6 +17197,8 @@ export interface components {
             hide_audio?: boolean | null;
             /** Hide Campaigns */
             hide_campaigns?: boolean | null;
+            /** Hide Compendium */
+            hide_compendium?: boolean | null;
             /** Hide Leagues */
             hide_leagues?: boolean | null;
             /** Hide Library */
@@ -17013,6 +17336,8 @@ export interface components {
             hide_audio: boolean;
             /** Hide Campaigns */
             hide_campaigns: boolean;
+            /** Hide Compendium */
+            hide_compendium: boolean;
             /** Hide Leagues */
             hide_leagues: boolean;
             /**
@@ -17646,6 +17971,11 @@ export interface components {
             children: components["schemas"]["SystemSummary"][];
             /** Codex Id */
             codex_id?: string | null;
+            /**
+             * Compendium Schema Id
+             * @default
+             */
+            compendium_schema_id?: string;
             /** Container Kind */
             container_kind: string;
             /** Cover Book Id */
@@ -18380,6 +18710,8 @@ export interface components {
             hide_audio: boolean;
             /** Hide Campaigns */
             hide_campaigns: boolean;
+            /** Hide Compendium */
+            hide_compendium: boolean;
             /** Hide Leagues */
             hide_leagues: boolean;
             /**
@@ -18989,6 +19321,67 @@ export interface components {
              * @default false
              */
             freestanding?: boolean;
+        };
+        /** WikiAnnotationCreate */
+        WikiAnnotationCreate: {
+            /** Body */
+            body: string;
+            /**
+             * Visibility
+             * @default party
+             */
+            visibility?: string;
+        };
+        /**
+         * WikiAnnotationOut
+         * @description One note on a wiki page as this viewer may see it (``wiki_annotations.annotation_out``).
+         */
+        WikiAnnotationOut: {
+            /** Author Id */
+            author_id?: string | null;
+            /** Author Name */
+            author_name?: string | null;
+            /** Body */
+            body: string;
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit?: boolean;
+            /**
+             * Can Hide
+             * @default false
+             */
+            can_hide?: boolean;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Hidden By Gm
+             * @default false
+             */
+            hidden_by_gm?: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Is Mine
+             * @default false
+             */
+            is_mine?: boolean;
+            /** Page Id */
+            page_id: string;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Visibility */
+            visibility: string;
+        };
+        /** WikiAnnotationUpdate */
+        WikiAnnotationUpdate: {
+            /** Body */
+            body?: string | null;
+            /** Hidden By Gm */
+            hidden_by_gm?: boolean | null;
+            /** Visibility */
+            visibility?: string | null;
         };
         /**
          * WikiBacklinkOut
@@ -25663,6 +26056,82 @@ export interface operations {
             };
         };
     };
+    get_house_rules_api_campaigns__campaign_id__house_rules_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseRulesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_house_rules_api_campaigns__campaign_id__house_rules_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseRulesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseRulesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_campaign_image_api_campaigns__campaign_id__images_post: {
         parameters: {
             query?: never;
@@ -27692,6 +28161,162 @@ export interface operations {
             };
         };
     };
+    list_annotations_api_campaigns__campaign_id__wiki__page_id__annotations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+                page_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiAnnotationOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_annotation_api_campaigns__campaign_id__wiki__page_id__annotations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+                page_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WikiAnnotationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiAnnotationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_annotation_api_campaigns__campaign_id__wiki__page_id__annotations__annotation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+                page_id: string;
+                annotation_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_annotation_api_campaigns__campaign_id__wiki__page_id__annotations__annotation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                campaign_id: string;
+                page_id: string;
+                annotation_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WikiAnnotationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WikiAnnotationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     hide_page_api_campaigns__campaign_id__wiki__page_id__hide_post: {
         parameters: {
             query?: never;
@@ -29271,6 +29896,154 @@ export interface operations {
             };
         };
     };
+    get_asset_api_content_assets__asset_path__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                asset_path: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_compendium_api_content_compendium_get: {
+        parameters: {
+            query?: {
+                schema_id?: string | null;
+                content_type?: string | null;
+                search?: string;
+                page?: number;
+                page_size?: number;
+                bestiary?: boolean;
+            };
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompendiumResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_compendium_schemas_api_content_compendium_schemas_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompendiumSchema"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_compendium_entry_api_content_compendium__content_type___entry_id__get: {
+        parameters: {
+            query: {
+                schema_id: string;
+            };
+            header?: {
+                /** @description An API key, for external integrations (instead of a session). */
+                "X-API-Key"?: string | null;
+            };
+            path: {
+                content_type: string;
+                entry_id: string;
+            };
+            cookie?: {
+                grimoire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompendiumEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_packs_api_content_packs_get: {
         parameters: {
             query?: {
@@ -29346,6 +30119,8 @@ export interface operations {
             query?: {
                 /** @description Comma-separated entry ids */
                 ids?: string;
+                /** @description Resolve as this character's sheet reads them (its campaign's house rules) */
+                character_id?: string | null;
             };
             header?: {
                 /** @description An API key, for external integrations (instead of a session). */
@@ -29424,6 +30199,7 @@ export interface operations {
                 page?: number;
                 page_size?: number;
                 include_rulesets?: boolean;
+                character_id?: string | null;
             };
             header?: {
                 /** @description An API key, for external integrations (instead of a session). */
@@ -36058,7 +36834,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["GameSystemUpdate"];
+                "application/json": components["schemas"]["GameSystemPatch"];
             };
         };
         responses: {

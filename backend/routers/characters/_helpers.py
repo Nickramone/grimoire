@@ -3,7 +3,6 @@ import os
 from typing import Any, Iterable, NamedTuple, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ...config import CHARACTER_PORTRAIT_DIR
@@ -18,7 +17,10 @@ from ...models import (
 )
 from ...services import characters as svc
 from ...services.characters import images as char_images
+from ...services.characters import house_rules
 from ...services.characters import rulesets as rs
+from ...services.characters.sheet_values import reference_ids
+from .._character_access import readable_character_or_404, readable_filter  # noqa: F401
 
 #: The file format a character exports as.
 EXPORT_SCHEMA = "grimoire://character/v1"
@@ -33,33 +35,6 @@ CHARACTER_STATUSES = ("active", "retired", "dead")
 def character_status(value: Any) -> str:
     """A status from the closed set; anything else reads as "active"."""
     return value if value in CHARACTER_STATUSES else "active"
-
-
-def readable_filter(db: Session, user_id: str):
-    """Characters this user may read: their own, plus their parties' sheets.
-
-    Reading a party member's sheet is the point of scoping a character to a
-    campaign — a GM should be able to see what their players are playing.
-    Writing stays with the owner, checked separately, because the sheet belongs
-    to the person who wrote it.
-    """
-    campaigns = rs.campaign_ids_for(db, user_id)
-    arms = [Character.user_id == user_id]
-    if campaigns:
-        arms.append(Character.campaign_id.in_(campaigns))
-    return or_(*arms)
-
-
-def readable_character_or_404(db: Session, character_id: str, user_id: str) -> Character:
-    row = (
-        db.query(Character)
-        .filter(Character.id == character_id)
-        .filter(readable_filter(db, user_id))
-        .first()
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Character not found")
-    return row
 
 
 def gm_may_edit(character: Character, campaign_owner_id: Optional[str], user_id: str) -> bool:
@@ -242,43 +217,35 @@ def embedded_entries(db: Session, character: Character, document: dict) -> dict[
             "name": row.name,
             "data": row.data if isinstance(row.data, dict) else {},
         }
-    for entry in (
-        db.query(RulesetEntry)
+    # The rulesets the sheet reads: its own campaign's, and a rewrite in it
+    # stands for the original while the house rules are on.
+    scope = house_rules.scope_for(db, character)
+    rows = (
+        db.query(RulesetEntry, Ruleset)
         .join(Ruleset, Ruleset.id == RulesetEntry.ruleset_id)
         .filter(RulesetEntry.schema_id == character.schema_ref)
         .filter(RulesetEntry.entry_id.in_(entry_ids))
         .filter(rs.readable_filter(db, character.user_id))
+        .filter(house_rules.ruleset_scope(scope))
         .all()
-    ):
-        embedded.setdefault(
-            entry.entry_id,
-            {
-                "content_type": entry.content_type,
-                "source": "ruleset",
-                "name": entry.name,
-                "data": entry.data if isinstance(entry.data, dict) else {},
-            },
-        )
-    return embedded
+    )
+    return house_rules.merge_resolved(
+        embedded,
+        rows,
+        lambda entry: {
+            "content_type": entry.content_type,
+            "source": "ruleset",
+            "name": entry.name,
+            "data": entry.data if isinstance(entry.data, dict) else {},
+        },
+        scope,
+    )
 
 
 def referenced_ids(document: dict, data: dict) -> set:
-    """Every catalog entry id a character's references point at."""
-    fields = (document or {}).get("fields") or {}
-    wanted: set = set()
-    for name, definition in fields.items():
-        if not isinstance(definition, dict):
-            continue
-        if definition.get("type") not in ("content_ref", "content_list"):
-            continue
-        value = data.get(name)
-        items = value if isinstance(value, list) else [value]
-        for item in items:
-            if isinstance(item, dict) and not item.get("_inline"):
-                entry_id = item.get("_ref")
-                if isinstance(entry_id, str) and entry_id:
-                    wanted.add(entry_id)
-    return wanted
+    """Every catalog entry id a character's references point at, per-entry
+    references included, so an export carries a magic item's chosen base."""
+    return reference_ids(document, data)
 
 
 def import_embedded_entries(

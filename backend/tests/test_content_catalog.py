@@ -39,13 +39,24 @@ SCHEMA = {
             "label": "Spells",
             "content_type": "spell",
             "allow_freeform": True,
-            "per_entry_fields": {"prepared": {"type": "checkbox"}},
+            "per_entry_fields": {
+                "prepared": {"type": "checkbox"},
+                # A pick inside the row, from part of the catalog only, that a
+                # new row may start from: a magic weapon's base, in miniature.
+                "focus": {
+                    "type": "content_ref",
+                    "content_type": "spell",
+                    "filter": {"school": ["evocation", "conjuration"]},
+                    "default_from": "row.focus_id",
+                },
+            },
         },
         "signature": {"type": "content_ref", "label": "Signature", "content_type": "spell"},
     },
     "computed": {
         "spell_levels": {"formula": "sum_refs(spells, 'level')"},
         "prepared_count": {"formula": "count_refs(spells, 'prepared')"},
+        "focus_levels": {"formula": "sum_each(spells, ref(row.focus, 'level'))"},
     },
 }
 
@@ -287,6 +298,23 @@ class TestCatalogApi:
             "Magic Missile", "Shield",
         ]
 
+    def test_a_repeated_filter_matches_any_of_its_values(self, client, admin_headers, catalog):
+        result = client.get(
+            "/api/content/catalog-demo/spell?filter[school]=abjuration&filter[school]=Conjuration",
+            headers=admin_headers,
+        ).json()
+        assert sorted(entry["name"] for entry in result["entries"]) == ["Shield", "Wish"]
+
+    def test_repeated_filters_still_combine_across_fields(self, client, admin_headers, catalog):
+        result = client.get(
+            "/api/content/catalog-demo/spell"
+            "?filter[school]=evocation&filter[school]=abjuration&filter[level]=1",
+            headers=admin_headers,
+        ).json()
+        assert sorted(entry["name"] for entry in result["entries"]) == [
+            "Magic Missile", "Shield",
+        ]
+
     def test_paginates(self, client, admin_headers, catalog):
         page = client.get(
             "/api/content/catalog-demo/spell?page=2&page_size=2", headers=admin_headers
@@ -336,6 +364,126 @@ class TestCatalogApi:
 
     def test_requires_authentication(self, client, catalog):
         assert client.get("/api/content/catalog-demo/spell").status_code in (401, 403)
+
+
+class TestPicksInsideARow:
+    """`filter` and per-entry picks are checked when the sheet is saved."""
+
+    @staticmethod
+    def _schema(focus=None, **extra):
+        document = json.loads(json.dumps(SCHEMA))
+        spells = document["fields"]["spells"]
+        if focus is not None:
+            spells["per_entry_fields"]["focus"] = focus
+        spells.update(extra)
+        return document
+
+    def test_the_demo_schema_validates(self):
+        from backend.services.characters.schema import validate_schema
+
+        assert validate_schema(self._schema())["fields"]["spells"]["per_entry_fields"]["focus"]
+
+    @pytest.mark.parametrize(
+        "bad",
+        [{}, [], {"school": []}, {"school": [""]}, {"school": {"x": 1}}, {"bad key": "x"}],
+    )
+    def test_a_malformed_filter_is_rejected(self, bad):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match="filter"):
+            validate_schema(self._schema(filter=bad))
+
+    def test_a_filter_from_formula_reads_the_character(self):
+        from backend.services.characters.schema import validate_schema
+
+        document = self._schema(filter_from={"school": "concat(signature, ',', 'evocation')"})
+        assert validate_schema(document)["fields"]["spells"]["filter_from"]
+
+    @pytest.mark.parametrize(
+        "bad",
+        [{}, [], {"school": ""}, {"school": 3}, {"bad key": "signature"}, {"school": "ghost_field"}],
+    )
+    def test_a_malformed_filter_from_is_rejected(self, bad):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match="filter_from"):
+            validate_schema(self._schema(filter_from=bad))
+
+    def test_a_filter_default_from_presets_the_browser(self):
+        from backend.services.characters.schema import validate_schema
+
+        document = self._schema(filter_default_from={"school": "signature"})
+        assert validate_schema(document)["fields"]["spells"]["filter_default_from"]
+
+    @pytest.mark.parametrize("bad", [{}, {"school": ""}, {"school": "ghost_field"}])
+    def test_a_malformed_filter_default_from_is_rejected(self, bad):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match="filter_default_from"):
+            validate_schema(self._schema(filter_default_from=bad))
+
+    def test_an_entry_note_reads_the_candidate(self):
+        from backend.services.characters.schema import validate_schema
+
+        document = self._schema(entry_note="concat(entry.school, ' ', signature)")
+        assert validate_schema(document)["fields"]["spells"]["entry_note"]
+
+    @pytest.mark.parametrize("bad", ["", 3, "ghost_field", "entry.("])
+    def test_a_malformed_entry_note_is_rejected(self, bad):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match="entry_note"):
+            validate_schema(self._schema(entry_note=bad))
+
+    def test_row_computed_values_validate(self):
+        from backend.services.characters.schema import validate_schema
+
+        document = self._schema(
+            row_computed={"ready": "row.level > 0", "shown": {"formula": "row.ready and true"}}
+        )
+        assert validate_schema(document)["fields"]["spells"]["row_computed"]["ready"]
+
+    @pytest.mark.parametrize(
+        "bad, message",
+        [
+            ({}, "non-empty object"),
+            (["row.level"], "non-empty object"),
+            ({"bad name": "1"}, "not a valid identifier"),
+            ({"focus": "1"}, "name of a per-entry field"),
+            ({"ready": ""}, "non-empty expression"),
+            ({"ready": {"formula": 3}}, "non-empty expression"),
+            ({"ready": "row.("}, "not a valid expression"),
+        ],
+    )
+    def test_a_malformed_row_computed_is_rejected(self, bad, message):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match=message):
+            validate_schema(self._schema(focus={"type": "text"}, row_computed=bad))
+
+    def test_row_computed_is_only_for_a_content_list(self):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        document = self._schema()
+        document["fields"]["notes"] = {"type": "text", "row_computed": {"x": "1"}}
+        with pytest.raises(SchemaError, match="only a content_list"):
+            validate_schema(document)
+
+    def test_a_per_entry_pick_must_name_a_declared_content_type(self):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match="per-entry field 'focus' picks from"):
+            validate_schema(self._schema(focus={"type": "content_ref", "content_type": "ghost"}))
+
+    def test_a_broken_per_entry_default_from_is_rejected(self):
+        from backend.services.characters.schema import SchemaError, validate_schema
+
+        with pytest.raises(SchemaError, match="default_from"):
+            validate_schema(
+                self._schema(
+                    focus={"type": "content_ref", "content_type": "spell", "default_from": "row.("}
+                )
+            )
 
 
 class TestCharacterReferences:
@@ -416,6 +564,30 @@ class TestCharacterReferences:
             headers=admin_headers,
         ).json()
         assert created["entries"]["fireball"]["name"] == "Fireball"
+
+    def test_a_pick_inside_a_row_is_resolved_too(self, client, admin_headers, catalog):
+        """A per-entry reference - a magic weapon's chosen base - comes back
+        resolved, and a formula reads the base's own properties through it."""
+        created = client.post(
+            "/api/characters",
+            json={
+                "schema_ref": "catalog-demo",
+                "name": "Nested",
+                "data": {
+                    "spells": [
+                        {"_ref": "shield", "_per": {"focus": {"_ref": "wish", "_source": "srd"}}},
+                        {"_inline": True, "name": "Mine", "_per": {"focus": "fireball"}},
+                    ]
+                },
+            },
+            headers=admin_headers,
+        ).json()
+        spells = created["data"]["spells"]
+        assert spells[0]["_per"]["focus"] == {"_ref": "wish", "_source": "srd"}
+        # A bare id is read as a reference, as at the top level.
+        assert spells[1]["_per"]["focus"] == {"_ref": "fireball"}
+        assert set(created["entries"]) >= {"shield", "wish", "fireball"}
+        assert created["computed"]["focus_levels"] == 9 + 3
 
     def test_a_reference_to_a_missing_entry_is_kept(self, client, admin_headers, catalog):
         """A pack may be uninstalled; the player's choice is not erased."""

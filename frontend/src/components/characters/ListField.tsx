@@ -11,12 +11,17 @@ interface ListColumn extends FieldDefinition {
   flex?: number
   default?: unknown
   default_from?: unknown
+  // Shown, never typed into: written only by the sheet's own prompts and actions.
+  readonly?: boolean
 }
 
 interface ListFieldDefinition extends FieldDefinition {
   columns?: ListColumn[]
   empty_text?: string
   add_label?: string
+  // False drops the move buttons: rows whose order means something (one per
+  // level gained) are not the player's to shuffle.
+  reorderable?: boolean
 }
 
 type Row = Record<string, unknown>
@@ -62,6 +67,9 @@ export default function ListField({
   const { t } = useTranslation()
   const columns = definition.columns || []
   const rows: Row[] = Array.isArray(value) ? value : []
+  const reorderable = definition.reorderable !== false
+  // Up, down and remove are 28px each; without the first two only remove is left.
+  const controlsWidth = reorderable ? 84 : 28
   const derived: unknown[] = Array.isArray(derivedRows) ? derivedRows : []
 
   const setRow = (index: number, key: string, cellValue: unknown) => {
@@ -118,7 +126,7 @@ export default function ListField({
                 {column.label || column.key}
               </div>
             ))}
-            {readOnly ? null : <div style={{ width: 84, flexShrink: 0 }} />}
+            {readOnly ? null : <div style={{ width: controlsWidth, flexShrink: 0 }} />}
           </div>
 
           {rows.map((row, index) => (
@@ -134,35 +142,43 @@ export default function ListField({
                     definition={{ ...column, label: column.label || column.key }}
                     stored={row?.[column.key]}
                     worked={cellOf(derived[index], column.key)}
-                    onChange={readOnly ? undefined : (v) => setRow(index, column.key, v)}
-                    readOnly={readOnly}
+                    onChange={
+                      readOnly || column.readonly === true
+                        ? undefined
+                        : (v) => setRow(index, column.key, v)
+                    }
+                    readOnly={readOnly || column.readonly === true}
                     hideLabel
                   />
                 </div>
               ))}
 
               {readOnly ? null : (
-                <div style={{ display: 'flex', gap: 2, width: 84, flexShrink: 0 }}>
-                  <button
-                    type="button"
-                    onClick={() => moveRow(index, -1)}
-                    disabled={index === 0}
-                    aria-label={t('characters.moveRowUp')}
-                    title={t('characters.moveRowUp')}
-                    style={{ ...iconBtn, opacity: index === 0 ? 0.3 : 1 }}
-                  >
-                    <LuChevronUp size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveRow(index, 1)}
-                    disabled={index === rows.length - 1}
-                    aria-label={t('characters.moveRowDown')}
-                    title={t('characters.moveRowDown')}
-                    style={{ ...iconBtn, opacity: index === rows.length - 1 ? 0.3 : 1 }}
-                  >
-                    <LuChevronDown size={14} />
-                  </button>
+                <div style={{ display: 'flex', gap: 2, width: controlsWidth, flexShrink: 0 }}>
+                  {reorderable ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => moveRow(index, -1)}
+                        disabled={index === 0}
+                        aria-label={t('characters.moveRowUp')}
+                        title={t('characters.moveRowUp')}
+                        style={{ ...iconBtn, opacity: index === 0 ? 0.3 : 1 }}
+                      >
+                        <LuChevronUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveRow(index, 1)}
+                        disabled={index === rows.length - 1}
+                        aria-label={t('characters.moveRowDown')}
+                        title={t('characters.moveRowDown')}
+                        style={{ ...iconBtn, opacity: index === rows.length - 1 ? 0.3 : 1 }}
+                      >
+                        <LuChevronDown size={14} />
+                      </button>
+                    </>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => removeRow(index)}

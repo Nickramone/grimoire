@@ -1,0 +1,1126 @@
+import { createContext } from 'react'
+import { buildContext, computeValues, evaluate, parse, toNumber } from './expressions'
+import type { ExprContext, ExprNode, ExpressionDocument } from './expressions'
+import {
+  GRANTED_KEY,
+  asList as listOf,
+  grantInto,
+  parallelList,
+  perEntryAt,
+  rowKey,
+  sameKey,
+} from './onPick'
+import type { ResolvedRefs } from './onPick'
+import { planAction } from './sheetActions'
+import type { ActionStep } from './sheetActions'
+import { PENDING_PROMPTS_KEY, withRecord } from './sheetRecords'
+import type { FieldDefinition } from './FieldRenderer'
+
+/**
+ * A sheet's `prompts`: windows that ask the player a few questions and write
+ * the answers - a level gained is hit points, then an ability increase or a
+ * feat, the feat picked from the catalog. Each is data, checked by the server
+ * when the sheet is installed (`_validate_prompts`): a list of `steps`, one
+ * question each, and an `apply` list of writes made once the player confirms.
+ *
+ * A prompt opens from an `on_pick` rule (`{prompt}`, reading the picked entry
+ * as `row`), from an action's `{prompt}` step, or from a `<g-action prompt>`
+ * button. Skipping is always allowed: the prompt is then kept under
+ * `_pending_prompts`, and the sheet offers to open it again.
+ */
+
+type Values = Record<string, unknown>
+
+export { PENDING_PROMPTS_KEY }
+
+// The most catalog entries an `entry` step reads, in pages of the catalog's
+// largest size. A feat list is a few hundred; a filter narrows the rest.
+const ENTRY_PAGE_SIZE = 200
+const ENTRY_MAX_PAGES = 10
+
+export type PromptStepType =
+  'campaign' | 'choose' | 'distribute' | 'entry' | 'entries' | 'number' | 'scores' | 'select'
+
+export interface PromptStep {
+  // The page of a paged prompt it is shown on; alone on its own without one.
+  page?: string
+  key: string
+  type: PromptStepType
+  label?: string
+  // Text worked out from the sheet and the answers before it, shown in place
+  // of `label` when it is not empty.
+  label_formula?: string
+  visible_if?: string
+  // A formula reading the answers, this step's own included: the step counts
+  // as answered only while it holds - points spent within a budget.
+  valid_if?: string
+  // choose
+  target?: string
+  // choose, entries
+  count?: number | string
+  // choose, distribute, select
+  options?: string | (string | number | { value: string | number; label?: string })[]
+  // distribute
+  patterns?: string[]
+  // entry, entries
+  content_type?: string
+  filters?: Record<string, string | number>
+  filter?: string
+  // Text worked out for each candidate, read as `entry`, shown beside its
+  // name - a spell's level.
+  entry_note?: string
+  // scores: the scores set, each from its `start` up or down within
+  // `min`-`max`; with `costs` (score -> points) and `budget`, the points they
+  // cost may not go past the budget. Each shows its `bonus` and the total.
+  abilities?: ScoreAbility[]
+  costs?: Record<string, number>
+  budget?: number
+  // number: the starting value; entry: the id of the entry chosen at the
+  // start, which the player may keep or change
+  default?: string
+  average?: string
+  min?: number
+  max?: number
+}
+
+/** One score of a `scores` step: its formulas read the sheet and the answers. */
+export interface ScoreAbility {
+  key: string
+  label?: string
+  start?: string
+  bonus?: string
+}
+
+export interface PromptApplyStep extends Omit<ActionStep, 'values'> {
+  add?: string
+  pick?: string
+  // unpick: the content_list a row is taken out of, the row of `entry`.
+  unpick?: string
+  entry?: string
+  // grant: formulas for the ids, the names they fall back to, and the values
+  // carried onto a freeform entry; `source` is the pick it is recorded under.
+  // Its `values` are per-entry formulas, each a list parallel to `from`.
+  grant?: string
+  from?: string
+  names?: string
+  carry?: Record<string, string>
+  source?: string
+  // An `append`'s, a `pick`'s or a `grant`'s per-entry formulas; an `add`'s
+  // one formula.
+  values?: string | Record<string, string>
+}
+
+export interface SheetPrompt {
+  label: string
+  steps: PromptStep[]
+  apply: PromptApplyStep[]
+  // Writes made when the prompt is put aside, in place of keeping it for later.
+  on_skip?: ActionStep[]
+  // Asked a page at a time: the steps grouped by their `page`.
+  paged?: boolean
+  // The pages by name: a label, and the prompt kept for later when skipped.
+  pages?: Record<string, PromptPage>
+  // A formula, worked out when the prompt opens, naming the record what it
+  // adds is kept under - `level:3` - so an action's `revert` can take it back.
+  // The prompts its `apply` opens record under the same key.
+  record?: string
+}
+
+/** One page of a paged prompt, as the sheet describes it. */
+export interface PromptPage {
+  label?: string
+  // The prompt kept among the choices to make when the player skips the page.
+  later?: string
+}
+
+/** A page as shown: its name and the steps showing on it, in order. */
+export interface ShownPage {
+  id: string
+  steps: PromptStep[]
+}
+
+/** A prompt waiting to be shown: which one, and the pick that opened it. */
+export type PromptRequest = {
+  prompt: string
+  // The field whose pick opened it, and the entry picked: what `row` reads,
+  // and where what the prompt grants is recorded so a new pick takes it back.
+  source?: string
+  ref?: string
+  row?: Values | null
+  // The record a prompt before it in the chain was keeping: this one adds to it.
+  record?: string
+  // Opened again by Back: the answers it was confirmed with and the pages skipped.
+  resume?: { answers: Answers; skipped: string[] }
+}
+
+/** An `entry` step's answer: the catalog entry, its id and its properties. */
+export type EntryAnswer = Values & { _ref: string; _source?: string; name?: string }
+
+export type Answers = Record<string, unknown>
+
+export interface PromptOption {
+  value: string
+  label: string
+}
+
+export interface PromptDocument extends ExpressionDocument {
+  fields?: Record<string, FieldDefinition>
+  prompts?: unknown
+  [key: string]: unknown
+}
+
+/** Opens one of the sheet's prompts; provided by the character view. */
+export const PromptLauncher = createContext<((request: PromptRequest) => void) | null>(null)
+
+/**
+ * The choices put off, for the field or row whose pick opened each to mark
+ * it there and open it again; provided by the character view when the sheet
+ * can be edited.
+ */
+export interface PendingChoicesValue {
+  pending: PromptRequest[]
+  label: (request: PromptRequest) => string
+  reopen: (request: PromptRequest) => void
+}
+export const PendingChoices = createContext<PendingChoicesValue | null>(null)
+
+/** The choices put off that a field's pick - or one row of it, by `ref` - opened. */
+export function pendingFrom(
+  pending: PromptRequest[],
+  source: string,
+  ref?: string
+): PromptRequest[] {
+  return pending.filter(
+    (item) => item.source === source && (ref === undefined || (item.ref || '') === ref)
+  )
+}
+
+const FAILED = Symbol('failed')
+
+// The longest record key, as the server keeps it.
+const MAX_RECORD_KEY = 100
+
+function isObject(value: unknown): value is Values {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function findPrompt(
+  document: PromptDocument | null | undefined,
+  name: string | undefined
+): SheetPrompt | undefined {
+  const prompts = document?.prompts
+  if (!name || !isObject(prompts) || !Object.prototype.hasOwnProperty.call(prompts, name)) {
+    return undefined
+  }
+  const prompt = prompts[name]
+  return isObject(prompt) && Array.isArray(prompt.steps)
+    ? (prompt as unknown as SheetPrompt)
+    : undefined
+}
+
+/**
+ * The sheet as its formulas read it - field values with their defaults,
+ * computed values, the resolved entries - as the sheet itself builds it.
+ */
+export function sheetContext(
+  document: PromptDocument | null | undefined,
+  data: Values | null | undefined,
+  entries: Record<string, unknown> = {}
+): Values {
+  const withEntries = Object.keys(entries).length
+    ? { ...(data || {}), _entries: entries }
+    : data || {}
+  return { ...buildContext(document, withEntries), ...computeValues(document, withEntries) }
+}
+
+/** What a prompt's formulas read: the sheet, the answers, the picked entry. */
+export function promptContext(context: Values, answers: Answers, row?: Values | null): ExprContext {
+  return { ...context, answer: answers, row: row || {} }
+}
+
+function visible(step: PromptStep, context: ExprContext): boolean {
+  if (!step.visible_if) return true
+  const value = evaluate<symbol>(step.visible_if, context, FAILED)
+  return value !== FAILED && Boolean(value)
+}
+
+/**
+ * The steps showing for these answers, in order. A step's `visible_if` reads
+ * only the answers of the visible steps before it, so a hidden branch's
+ * leftovers never show a step they no longer call for.
+ */
+export function visibleSteps(
+  prompt: SheetPrompt,
+  context: Values,
+  answers: Answers,
+  row?: Values | null
+): PromptStep[] {
+  const shown: PromptStep[] = []
+  const seen: Answers = {}
+  for (const step of prompt.steps) {
+    if (!step || typeof step !== 'object') continue
+    if (visible(step, promptContext(context, seen, row))) {
+      shown.push(step)
+      if (step.key in answers) seen[step.key] = answers[step.key]
+    }
+  }
+  return shown
+}
+
+/** The answers of the visible steps only: what `apply` reads. */
+export function visibleAnswers(
+  prompt: SheetPrompt,
+  context: Values,
+  answers: Answers,
+  row?: Values | null
+): Answers {
+  const kept: Answers = {}
+  for (const step of visibleSteps(prompt, context, answers, row)) {
+    if (step.key in answers) kept[step.key] = answers[step.key]
+  }
+  return kept
+}
+
+function asList(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+function toOption(option: unknown): PromptOption | null {
+  if (isObject(option)) {
+    if (option.value === undefined || option.value === null) return null
+    const value = String(option.value)
+    return { value, label: typeof option.label === 'string' && option.label ? option.label : value }
+  }
+  if (option === undefined || option === null || option === '') return null
+  return { value: String(option), label: String(option) }
+}
+
+/**
+ * A step's options: listed by hand, worked out by a formula, or - for a
+ * `choose` without either - the target multiselect's own. A value the target
+ * does not offer is left out, as a grant leaves it out.
+ */
+export function stepOptions(
+  step: PromptStep,
+  context: ExprContext,
+  document: PromptDocument | null | undefined
+): PromptOption[] {
+  const target = step.target ? document?.fields?.[step.target] : undefined
+  const targetOptions = (Array.isArray(target?.options) ? target.options : [])
+    .map(toOption)
+    .filter((option): option is PromptOption => !!option)
+  let raw: unknown[]
+  if (typeof step.options === 'string')
+    raw = asList(evaluate<symbol>(step.options, context, FAILED))
+  else if (Array.isArray(step.options)) raw = step.options
+  else raw = targetOptions
+  const labels = new Map(targetOptions.map((option) => [option.value, option.label]))
+  const seen = new Set<string>()
+  const options: PromptOption[] = []
+  for (const item of raw) {
+    const option = toOption(item)
+    if (!option || seen.has(option.value)) continue
+    if (target && labels.size && !labels.has(option.value)) continue
+    seen.add(option.value)
+    options.push(
+      option.label === option.value && labels.has(option.value)
+        ? { ...option, label: labels.get(option.value)! }
+        : option
+    )
+  }
+  return options
+}
+
+/** How many a `choose` or an `entries` step asks for. */
+export function stepCount(step: PromptStep, context: ExprContext): number {
+  const count =
+    typeof step.count === 'string' ? toNumber(evaluate(step.count, context)) : (step.count ?? 1)
+  return Math.max(0, Math.floor(Number(count) || 0))
+}
+
+/** A `distribute` step's patterns as amounts, largest first: "1,2" → [2, 1]. */
+export function stepPatterns(step: PromptStep): number[][] {
+  return (step.patterns || [])
+    .map((pattern) =>
+      String(pattern)
+        .split(',')
+        .map((amount) => Number(amount))
+        .filter((amount) => amount > 0)
+        .sort((a, b) => b - a)
+    )
+    .filter((amounts) => amounts.length)
+}
+
+/** Whether points spread as `spread` follow one of the patterns allowed. */
+export function matchesPattern(spread: unknown, patterns: number[][]): boolean {
+  if (!isObject(spread)) return false
+  const amounts = Object.values(spread)
+    .map((amount) => Number(amount) || 0)
+    .filter((amount) => amount > 0)
+    .sort((a, b) => b - a)
+  return patterns.some(
+    (pattern) =>
+      pattern.length === amounts.length && pattern.every((amount, i) => amount === amounts[i])
+  )
+}
+
+/** The values a `choose` step's target already holds, which it leaves out. */
+export function ownedValues(step: PromptStep, data: Values | null | undefined): Set<string> {
+  const held = step.target ? data?.[step.target] : undefined
+  return new Set(Array.isArray(held) ? held.map(String) : [])
+}
+
+/** How many a `choose` really asks for: no more than there are left to take. */
+export function chooseTarget(
+  step: PromptStep,
+  context: ExprContext,
+  document: PromptDocument | null | undefined,
+  data: Values | null | undefined
+): number {
+  const owned = ownedValues(step, data)
+  const free = stepOptions(step, context, document).filter((option) => !owned.has(option.value))
+  return Math.min(stepCount(step, context), free.length)
+}
+
+function isAnswerEntry(value: unknown): value is EntryAnswer {
+  return isObject(value) && typeof value._ref === 'string' && !!value._ref
+}
+
+/** Whether a step has an answer the prompt can be confirmed with. */
+export function isAnswered(
+  step: PromptStep,
+  answer: unknown,
+  context: ExprContext,
+  document: PromptDocument | null | undefined,
+  data: Values | null | undefined,
+  // How many entries an `entries` step has to choose from, once it has read them.
+  available?: number
+): boolean {
+  if (!answeredByType(step, answer, context, document, data, available)) return false
+  if (!step.valid_if) return true
+  const answers = isObject(context.answer) ? context.answer : {}
+  const value = evaluate<symbol>(
+    step.valid_if,
+    { ...context, answer: { ...answers, [step.key]: answer } },
+    FAILED
+  )
+  return value !== FAILED && Boolean(value)
+}
+
+function answeredByType(
+  step: PromptStep,
+  answer: unknown,
+  context: ExprContext,
+  document: PromptDocument | null | undefined,
+  data: Values | null | undefined,
+  available?: number
+): boolean {
+  switch (step.type) {
+    case 'choose': {
+      const wanted = chooseTarget(step, context, document, data)
+      return wanted === 0 || (Array.isArray(answer) && answer.length === wanted)
+    }
+    case 'distribute':
+      return matchesPattern(answer, stepPatterns(step))
+    case 'entry':
+      return isAnswerEntry(answer)
+    case 'entries': {
+      // No more than the catalog offers, once the step has read it.
+      const count = stepCount(step, context)
+      const wanted = available === undefined ? count : Math.min(count, available)
+      return (
+        wanted === 0 ||
+        (Array.isArray(answer) && answer.length === wanted && answer.every(isAnswerEntry))
+      )
+    }
+    case 'number':
+      return typeof answer === 'number' && Number.isFinite(answer)
+    case 'scores':
+      return scoresValid(step, answer)
+    // The campaign the character is played in, or none: '' is an answer.
+    case 'campaign':
+      return typeof answer === 'string'
+    case 'select':
+      return (
+        typeof answer === 'string' &&
+        stepOptions(step, context, document).some((option) => option.value === answer)
+      )
+    default:
+      return false
+  }
+}
+
+/**
+ * Whether every step showing has its answer - but those on the pages the
+ * player skipped, left for later.
+ */
+export function isComplete(
+  prompt: SheetPrompt,
+  context: Values,
+  answers: Answers,
+  document: PromptDocument | null | undefined,
+  data: Values | null | undefined,
+  row?: Values | null,
+  // By step key: how many entries each `entries` step found to choose from.
+  available: Record<string, number> = {},
+  skipped: readonly string[] = []
+): boolean {
+  const steps = visibleSteps(prompt, context, answers, row)
+  const seen: Answers = {}
+  for (const step of steps) {
+    const ctx = promptContext(context, seen, row)
+    if (
+      !skipped.includes(stepPage(prompt, step)) &&
+      !isAnswered(step, answers[step.key], ctx, document, data, available[step.key])
+    ) {
+      return false
+    }
+    seen[step.key] = answers[step.key]
+  }
+  return steps.length > 0
+}
+
+/** The page a step is on: its `page`, or one of its own; one page when not paged. */
+export function stepPage(prompt: SheetPrompt, step: PromptStep): string {
+  if (!prompt.paged) return ''
+  return typeof step.page === 'string' && step.page ? step.page : `step:${step.key}`
+}
+
+/**
+ * The pages showing for these answers, in the order their first step comes:
+ * a page none of whose steps shows is passed over.
+ */
+export function shownPages(prompt: SheetPrompt, steps: PromptStep[]): ShownPage[] {
+  const pages: ShownPage[] = []
+  for (const step of steps) {
+    const id = stepPage(prompt, step)
+    const page = pages.find((item) => item.id === id)
+    if (page) page.steps.push(step)
+    else pages.push({ id, steps: [step] })
+  }
+  return pages
+}
+
+/** The prompts kept for later by the pages skipped, once each. */
+export function laterPrompts(prompt: SheetPrompt, skipped: readonly string[]): string[] {
+  const later: string[] = []
+  for (const id of skipped) {
+    const name = prompt.pages?.[id]?.later
+    if (name && !later.includes(name)) later.push(name)
+  }
+  return later
+}
+
+/** What a `scores` step's score costs: by its `costs`, 0 without them. */
+export function scoreCost(step: PromptStep, score: number): number {
+  if (!step.costs) return 0
+  const cost = step.costs[String(score)]
+  return typeof cost === 'number' ? cost : Number.POSITIVE_INFINITY
+}
+
+/** The points a `scores` step has left: its budget less what the scores cost. */
+export function scoresLeft(step: PromptStep, answer: unknown): number | undefined {
+  if (!step.costs || typeof step.budget !== 'number') return undefined
+  const values = isObject(answer) ? answer : {}
+  let spent = 0
+  for (const ability of step.abilities || []) spent += scoreCost(step, Number(values[ability.key]))
+  return step.budget - spent
+}
+
+/** Each score of a `scores` step at its start, within its bounds. */
+export function scoresStart(step: PromptStep, context: ExprContext): Values {
+  const start: Values = {}
+  for (const ability of step.abilities || []) {
+    const value = ability.start ? toNumber(evaluate(ability.start, context)) : (step.min ?? 0)
+    start[ability.key] = clampNumber(step, Math.round(Number(value) || 0))
+  }
+  return start
+}
+
+function scoresValid(step: PromptStep, answer: unknown): boolean {
+  if (!isObject(answer)) return false
+  for (const ability of step.abilities || []) {
+    const value = answer[ability.key]
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false
+    if (clampNumber(step, value) !== value) return false
+  }
+  const left = scoresLeft(step, answer)
+  return left === undefined || left >= 0
+}
+
+/** An `entry` step's starting choice: the entry id its `default` works out. */
+export function entryDefault(step: PromptStep, context: ExprContext): string | undefined {
+  if (step.type !== 'entry' || !step.default) return undefined
+  const value = evaluate<symbol>(step.default, context, FAILED)
+  if (value === FAILED || value === null || value === undefined || value === '') return undefined
+  return String(value)
+}
+
+/** A `number` step's starting value, from its `default` formula. */
+export function numberDefault(step: PromptStep, context: ExprContext): number | undefined {
+  if (!step.default) return undefined
+  const value = evaluate<symbol>(step.default, context, FAILED)
+  if (value === FAILED || value === '' || value === null) return undefined
+  const number = toNumber(value)
+  return Number.isFinite(number) ? clampNumber(step, number) : undefined
+}
+
+/** A `number` step's average, for its «Use average» button. */
+export function numberAverage(step: PromptStep, context: ExprContext): number | undefined {
+  if (!step.average) return undefined
+  const value = evaluate<symbol>(step.average, context, FAILED)
+  if (value === FAILED) return undefined
+  const number = toNumber(value)
+  return Number.isFinite(number) ? clampNumber(step, number) : undefined
+}
+
+export function clampNumber(step: PromptStep, value: number): number {
+  let result = value
+  if (typeof step.min === 'number') result = Math.max(step.min, result)
+  if (typeof step.max === 'number') result = Math.min(step.max, result)
+  return result
+}
+
+/** A catalog entry as an `entry` step's answer, and as its `filter` reads it. */
+export function entryAnswer(entry: {
+  entry_id: string
+  source?: string
+  name?: string
+  data?: unknown
+}): EntryAnswer {
+  return {
+    ...(isObject(entry.data) ? entry.data : {}),
+    name: entry.name,
+    _ref: entry.entry_id,
+    _source: entry.source,
+  }
+}
+
+/**
+ * Whether an entry passes an `entry` or `entries` step's `filter`. One that
+ * fails to work out is left out.
+ */
+export function passesFilter(step: PromptStep, entry: EntryAnswer, context: ExprContext): boolean {
+  if (!step.filter) return true
+  const value = evaluate<symbol>(step.filter, { ...context, entry }, FAILED)
+  return value !== FAILED && Boolean(value)
+}
+
+/**
+ * An `entry` step's `filter`, parsed once: a step's list is filtered again at
+ * each answer, so the formula is not read anew for every entry each time.
+ */
+export function entryFilter(
+  step: PromptStep
+): (entry: EntryAnswer, context: ExprContext) => boolean {
+  if (!step.filter) return () => true
+  let node: ExprNode
+  try {
+    node = parse(step.filter)
+  } catch {
+    return () => false
+  }
+  return (entry, context) => {
+    const value = evaluate<symbol>(node, { ...context, entry }, FAILED)
+    return value !== FAILED && Boolean(value)
+  }
+}
+
+/** Reads one page of one content type, with a step's fixed `filters`. */
+export type BrowsePage = (
+  page: number,
+  pageSize: number
+) => Promise<{
+  entries?: { entry_id: string; source?: string; name?: string; data?: unknown }[]
+  total?: number
+}>
+
+/**
+ * Every catalog entry of a content type the server lets through a step's fixed
+ * `filters`, read in pages - before its `filter` formula, which reads the
+ * answers and is worked out again as they change.
+ */
+export async function loadCatalog(browse: BrowsePage): Promise<EntryAnswer[]> {
+  const found: EntryAnswer[] = []
+  for (let page = 1; page <= ENTRY_MAX_PAGES; page += 1) {
+    const result = await browse(page, ENTRY_PAGE_SIZE)
+    const rows = result.entries || []
+    for (const row of rows) found.push(entryAnswer(row))
+    if (rows.length < ENTRY_PAGE_SIZE || page * ENTRY_PAGE_SIZE >= (result.total ?? 0)) break
+  }
+  return found
+}
+
+/**
+ * Every entry an `entry` step offers: the catalog read in pages, with the
+ * step's fixed `filters` asked of the server and its `filter` formula worked
+ * out here, where the character is known.
+ */
+export async function loadEntryOptions(
+  step: PromptStep,
+  context: ExprContext,
+  browse: BrowsePage
+): Promise<EntryAnswer[]> {
+  const passes = entryFilter(step)
+  return (await loadCatalog(browse)).filter((entry) => passes(entry, context))
+}
+
+/**
+ * The entries a `pick` or an `unpick` names: an `entry` step's answer, or each
+ * of an `entries` step's.
+ */
+function entriesOf(value: unknown): EntryAnswer[] {
+  return (Array.isArray(value) ? value : [value]).filter(isAnswerEntry)
+}
+
+/** A pick a prompt makes, followed up as a pick by hand: its `on_pick` runs. */
+// `entry` is the entry picked; a row taken out (`unpick`) has none.
+export type PromptPick = { field: string; value: unknown; entry?: Values }
+
+/**
+ * A `grant` a prompt makes, its formulas worked out: what `planGrants` adds
+ * once the catalog has said which ids it really has.
+ */
+export type PromptGrant = {
+  target: string
+  pairs: [string, string][]
+  carried: Values
+  // Slot by slot beside `pairs`: the per-entry values each entry takes.
+  lists?: Record<string, unknown[]>
+  source?: string
+  // The record it is kept under, in place of a pick's `source`.
+  record?: string
+}
+
+/**
+ * What confirming a prompt does: the patch of plain writes, the picks to make
+ * through the sheet's own pick path, and the prompts its `apply` opens next.
+ *
+ * Every formula reads the sheet as it stood when the prompt opened, plus the
+ * answers. `set`, `each` and `append` are worked out as an action's steps;
+ * `add` and `pick` after them, in order.
+ */
+export function planPrompt(
+  prompt: SheetPrompt,
+  {
+    document,
+    data,
+    context,
+    answers,
+    row,
+    source,
+    record,
+  }: {
+    document: PromptDocument | null | undefined
+    data: Values | null | undefined
+    context: Values
+    answers: Answers
+    row?: Values | null
+    source?: string
+    // The record key what it adds is kept under, in place of `source`.
+    record?: string
+  }
+): { patch: Values; picks: PromptPick[]; prompts: string[]; grants: PromptGrant[] } {
+  const fields = document?.fields || {}
+  const ctx = promptContext(context, visibleAnswers(prompt, context, answers, row), row)
+  const steps = Array.isArray(prompt.apply) ? prompt.apply : []
+  const writes = steps.filter(
+    (step) =>
+      step &&
+      (typeof step.each === 'string' ||
+        typeof step.append === 'string' ||
+        typeof step.set === 'string') &&
+      typeof step.add !== 'string' &&
+      typeof step.pick !== 'string' &&
+      typeof step.unpick !== 'string' &&
+      typeof step.grant !== 'string' &&
+      typeof step.prompt !== 'string'
+  )
+  const patch: Values = writes.length
+    ? planAction(
+        { name: '', label: '', steps: writes as ActionStep[] },
+        { document, data: data || {}, context: ctx }
+      )
+    : {}
+  const picks: PromptPick[] = []
+  const prompts: string[] = []
+  const grants: PromptGrant[] = []
+  const granted: Record<string, string[]> = {}
+  // Rows `unpick` took out that were there before the prompt: kept in the
+  // record, to be put back.
+  const dropped: Record<string, Values[]> = {}
+  // The records under `_granted`, cleaned of the rows an `unpick` takes out.
+  const recorded = {
+    ...((data?.[GRANTED_KEY] || {}) as Record<string, Record<string, string[]>>),
+  }
+  let cleaned = false
+  const current = (name: string): unknown => (name in patch ? patch[name] : data?.[name])
+
+  for (const step of steps) {
+    if (!step || typeof step !== 'object') continue
+    if (typeof step.prompt === 'string') {
+      prompts.push(step.prompt)
+      continue
+    }
+    if (typeof step.grant === 'string') {
+      // Worked out now, against the sheet as the prompt read it; made by
+      // `planGrants`, which asks the catalog first.
+      const ids = listOf(evaluate<symbol>(step.from, ctx, FAILED))
+      const names = step.names ? listOf(evaluate<symbol>(step.names, ctx, FAILED), 'name') : []
+      const carried: Values = {}
+      for (const [key, formula] of Object.entries(isObject(step.carry) ? step.carry : {})) {
+        const value = evaluate<symbol>(formula, ctx, FAILED)
+        if (value !== FAILED && value !== '' && value !== null && value !== undefined) {
+          carried[key] = value
+        }
+      }
+      const lists: Record<string, unknown[]> = {}
+      for (const [key, formula] of Object.entries(isObject(step.values) ? step.values : {})) {
+        const value = evaluate<symbol>(formula as string, ctx, FAILED)
+        if (value !== FAILED) lists[key] = parallelList(value)
+      }
+      const pairs = ids.map((id, i): [string, string] => [id, names[i] || ''])
+      if (pairs.length) {
+        // A grant naming its own `source` is that pick's, as ever.
+        const recordedUnder = step.source || (record ? undefined : source)
+        grants.push({
+          target: step.grant,
+          pairs,
+          carried,
+          ...(Object.keys(lists).length ? { lists } : {}),
+          ...(recordedUnder ? { source: recordedUnder } : {}),
+          ...(!step.source && record ? { record } : {}),
+        })
+      }
+      continue
+    }
+    if (typeof step.add === 'string') {
+      const target = step.add
+      const definition = fields[target]
+      if (definition?.type !== 'multiselect') continue
+      const allowed = new Set(
+        (Array.isArray(definition.options) ? definition.options : [])
+          .map(toOption)
+          .filter((option): option is PromptOption => !!option)
+          .map((option) => option.value)
+      )
+      const list = Array.isArray(current(target)) ? [...(current(target) as unknown[])] : []
+      const held = new Set(list.map(String))
+      for (const item of asList(evaluate<symbol>(step.values, ctx, FAILED))) {
+        const value = String(item)
+        if ((allowed.size && !allowed.has(value)) || held.has(value)) continue
+        list.push(value)
+        held.add(value)
+        granted[target] = [...(granted[target] || []), value]
+      }
+      patch[target] = list
+      continue
+    }
+    if (typeof step.unpick === 'string') {
+      // The list less the entry's row, made as a change by hand; the picks
+      // after it see the list without it. A reference is found by its id, a
+      // freeform row by its name (or the id it fell back from). An `entries`
+      // step's answer takes out each of its entries in turn; a text names the
+      // row by its id or name - a grant the sheet made from an entry's id.
+      const field = step.unpick
+      if (fields[field]?.type !== 'content_list') continue
+      const named = evaluate<symbol>(step.entry, ctx, FAILED)
+      const taken =
+        typeof named === 'string'
+          ? named.trim()
+            ? [{ _ref: named.trim(), name: named.trim() }]
+            : []
+          : entriesOf(named)
+      for (const entry of taken) {
+        const keys = [entry._ref, entry.name].filter(
+          (key): key is string => typeof key === 'string' && !!key.trim()
+        )
+        const before = picks.filter((pick) => pick.field === field).pop()
+        const rows = before
+          ? (before.value as unknown[])
+          : Array.isArray(current(field))
+            ? (current(field) as unknown[])
+            : []
+        const index = rows.findIndex((item) => {
+          const own = rowKey(item)
+          if (own === null) return false
+          return isObject(item) && item._ref !== undefined && item._ref !== null
+            ? sameKey(own, entry._ref)
+            : keys.some((key) => sameKey(own, key))
+        })
+        if (index < 0) continue
+        const removed = rowKey(rows[index])!
+        picks.push({ field, value: rows.filter((_, i) => i !== index) })
+        // A row this prompt picked and took out again is not recorded either.
+        const held = granted[field] || []
+        const at = held.findIndex((key) => sameKey(key, removed))
+        if (at >= 0) granted[field] = held.filter((_, i) => i !== at)
+        else if (record && isObject(rows[index])) {
+          dropped[field] = [...(dropped[field] || []), rows[index] as Values]
+        }
+        // No record keeps it, an earlier pick's either: a row added again by
+        // hand is not taken back by a later change of that pick.
+        for (const [from, targets] of Object.entries(recorded)) {
+          const list = targets?.[field]
+          if (!Array.isArray(list) || !list.some((key) => sameKey(key, removed))) continue
+          recorded[from] = { ...targets, [field]: list.filter((key) => !sameKey(key, removed)) }
+          cleaned = true
+        }
+      }
+      continue
+    }
+    if (typeof step.pick === 'string') {
+      // An `entries` step's answer picks each of its entries in turn, the
+      // per-entry formulas reading the one being picked as `entry`. A
+      // content_ref holds one: a list picks its first there.
+      const field = step.pick
+      const definition = fields[field]
+      if (!definition) continue
+      let entries = entriesOf(evaluate<symbol>(step.entry, ctx, FAILED))
+      if (definition.type === 'content_ref') entries = entries.slice(0, 1)
+      for (const entry of entries) {
+        const per: Values = {}
+        for (const [key, formula] of Object.entries(isObject(step.values) ? step.values : {})) {
+          const value = evaluate<symbol>(formula, { ...ctx, entry }, FAILED)
+          if (value !== FAILED) per[key] = value
+        }
+        const picked: Values = { _ref: entry._ref }
+        if (typeof entry._source === 'string' && entry._source) picked._source = entry._source
+        if (Object.keys(per).length) picked._per = per
+        if (definition.type === 'content_ref') {
+          picks.push({ field, value: picked, entry })
+          // Kept only in a record: taking it back clears the field, which
+          // takes back what the pick granted. A pick's own record of what it
+          // granted lists entries in lists, not a single pick's value.
+          if (record) granted[field] = [entry._ref]
+        } else if (definition.type === 'content_list') {
+          // Each pick into the same list sees the ones before it.
+          const before = picks.filter((pick) => pick.field === field).pop()
+          const rows = before
+            ? (before.value as unknown[])
+            : Array.isArray(current(field))
+              ? (current(field) as unknown[])
+              : []
+          picks.push({ field, value: [...rows, picked], entry })
+          granted[field] = [...(granted[field] || []), entry._ref]
+        }
+      }
+    }
+  }
+
+  if (cleaned) patch[GRANTED_KEY] = recorded
+  // Kept in the record, when the prompt keeps one.
+  if (record) {
+    Object.assign(patch, withRecord(data, record, { granted, dropped }))
+    return { patch, picks, prompts, grants }
+  }
+  // Recorded under the pick that opened the prompt, so picking something
+  // else there takes back what the prompt added along with the pick's own.
+  if (source && Object.keys(granted).length) {
+    const fromSource = { ...(recorded[source] || {}) }
+    for (const [target, values] of Object.entries(granted)) {
+      fromSource[target] = [...(fromSource[target] || []), ...values]
+    }
+    recorded[source] = fromSource
+    patch[GRANTED_KEY] = recorded
+  }
+  return { patch, picks, prompts, grants }
+}
+
+/**
+ * Make a prompt's grants, as a pick's `grant` rules make theirs: each id the
+ * catalog has as the target's content type becomes a reference, any other a
+ * freeform entry by its name. What is added is recorded under the grant's
+ * source, so picking something else there takes it back.
+ *
+ * @param data  the character's data with the prompt's own writes and picks
+ *   made, or a function reading it: read once the catalog has answered, so
+ *   what changed while it was asked is kept
+ */
+export async function planGrants(
+  grants: PromptGrant[],
+  {
+    document,
+    data: readData,
+    lookup,
+  }: {
+    document: PromptDocument | null | undefined
+    data: Values | null | undefined | (() => Values | null | undefined)
+    lookup?: (ids: string[]) => Promise<ResolvedRefs | null | undefined>
+  }
+): Promise<Values> {
+  const fields = document?.fields || {}
+  const wanted = grants
+    .filter((grant) => fields[grant.target]?.type === 'content_list')
+    .flatMap((grant) => grant.pairs.map(([id]) => id))
+    .filter(Boolean)
+  let resolved: ResolvedRefs = {}
+  if (wanted.length && lookup) {
+    try {
+      resolved = (await lookup([...new Set(wanted)])) || {}
+    } catch {
+      // No catalog to ask is the catalog not having it: named entries instead.
+      resolved = {}
+    }
+  }
+  const data = typeof readData === 'function' ? readData() : readData
+  const patch: Values = {}
+  const all = { ...((data?.[GRANTED_KEY] || {}) as Record<string, Record<string, string[]>>) }
+  let recordedAny = false
+  // What grants kept in a record added, by record key and target.
+  const kept: Record<string, Record<string, string[]>> = {}
+  for (const grant of grants) {
+    const definition = fields[grant.target]
+    if (!definition) continue
+    const held = grant.target in patch ? patch[grant.target] : data?.[grant.target]
+    const added: string[] = []
+    const list = grantInto({
+      definition,
+      list: Array.isArray(held) ? [...held] : [],
+      pairs: grant.pairs,
+      carried: grant.carried,
+      perEntry: grant.pairs.map((_, i) => perEntryAt(definition, grant.lists || {}, i)),
+      resolved,
+      record: (key) => added.push(key),
+    })
+    if (!list) continue
+    patch[grant.target] = list
+    if (grant.record && added.length) {
+      const own = (kept[grant.record] ||= {})
+      own[grant.target] = [...(own[grant.target] || []), ...added]
+    }
+    if (grant.source && added.length) {
+      const fromSource = { ...(all[grant.source] || {}) }
+      fromSource[grant.target] = [...(fromSource[grant.target] || []), ...added]
+      all[grant.source] = fromSource
+      recordedAny = true
+    }
+  }
+  if (recordedAny) patch[GRANTED_KEY] = all
+  let records: Values | null | undefined = data
+  for (const [key, granted] of Object.entries(kept)) {
+    Object.assign(patch, withRecord(records, key, { granted }))
+    records = { ...(records || {}), ...patch }
+  }
+  return patch
+}
+
+/**
+ * The record key a prompt keeps what it adds under: the one the prompt
+ * before it in the chain was keeping, or else its own `record` worked out
+ * against the sheet as it opened. None is ''.
+ */
+export function promptRecord(
+  prompt: SheetPrompt | undefined,
+  request: PromptRequest | undefined,
+  context: Values
+): string {
+  if (request?.record) return request.record
+  if (!prompt || typeof prompt.record !== 'string' || !prompt.record.trim()) return ''
+  const value = evaluate<symbol>(prompt.record, context, FAILED)
+  if (value === FAILED || value === null || value === undefined) return ''
+  return String(value).trim().slice(0, MAX_RECORD_KEY)
+}
+
+function samePrompt(a: PromptRequest, b: PromptRequest): boolean {
+  return (
+    a.prompt === b.prompt &&
+    (a.source || '') === (b.source || '') &&
+    (a.ref || '') === (b.ref || '')
+  )
+}
+
+/** An `entry` or `entries` step's note beside a candidate: its `entry_note` worked out, or ''. */
+export function entryNote(step: PromptStep, entry: EntryAnswer, context: ExprContext): string {
+  if (!step.entry_note) return ''
+  const value = evaluate<symbol>(step.entry_note, { ...context, entry }, FAILED)
+  if (value === FAILED || value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
+/**
+ * A step's heading: its `label_formula` worked out, when that gives text that
+ * is not blank, or else its `label` - so `false` or `0` from a formula such
+ * as `kind != '' && concat(...)` falls back rather than showing.
+ */
+export function stepLabel(step: PromptStep, context: ExprContext): string {
+  if (step.label_formula) {
+    const value = evaluate<symbol>(step.label_formula, context, FAILED)
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return step.label || ''
+}
+
+/**
+ * The prompt a sheet opens by itself when a character is opened: its
+ * `start_prompt`, when its `when` holds. Put off, it is not kept (it has no
+ * pick as its source), so it opens again the next time while `when` holds.
+ */
+export function startPrompt(
+  document: PromptDocument | null | undefined,
+  context: Values
+): string | undefined {
+  const start = document?.start_prompt
+  if (!isObject(start) || typeof start.prompt !== 'string') return undefined
+  const prompt = findPrompt(document, start.prompt)
+  if (!prompt) return undefined
+  if (typeof start.when === 'string' && start.when.trim()) {
+    const value = evaluate<symbol>(start.when, context, FAILED)
+    if (value === FAILED || !value) return undefined
+  }
+  return start.prompt
+}
+
+/** The prompts the player put off, as stored. */
+export function pendingPrompts(data: Values | null | undefined): PromptRequest[] {
+  const list = data?.[PENDING_PROMPTS_KEY]
+  if (!Array.isArray(list)) return []
+  return list.filter(
+    (item): item is PromptRequest => isObject(item) && typeof item.prompt === 'string'
+  )
+}
+
+function stored(request: PromptRequest): PromptRequest {
+  const kept: PromptRequest = { prompt: request.prompt }
+  if (request.source) kept.source = request.source
+  if (request.source && request.ref) kept.ref = request.ref
+  // The record it adds to - a level's - is kept with it, so it is taken back
+  // with that level even when chosen later.
+  if (request.record) kept.record = request.record
+  return kept
+}
+
+/** The patch that keeps a prompt to open later. */
+export function withPending(data: Values | null | undefined, request: PromptRequest): Values {
+  const list = pendingPrompts(data)
+  if (list.some((item) => samePrompt(item, request))) return {}
+  return { [PENDING_PROMPTS_KEY]: [...list, stored(request)] }
+}
+
+/** The patch that forgets a prompt put off - answered, or dismissed. */
+export function withoutPending(
+  data: Values | null | undefined,
+  request: PromptRequest,
+  // Every prompt that pick opened, whichever: the row it read is gone.
+  anyPrompt = false
+): Values {
+  const list = pendingPrompts(data)
+  const next = list.filter((item) =>
+    anyPrompt ? !samePrompt(item, { ...request, prompt: item.prompt }) : !samePrompt(item, request)
+  )
+  return next.length === list.length ? {} : { [PENDING_PROMPTS_KEY]: next }
+}
+
+/** The patch that forgets every prompt a field's pick opened: it was picked again. */
+export function withoutPendingFrom(data: Values | null | undefined, source: string): Values {
+  const list = pendingPrompts(data)
+  const next = list.filter((item) => item.source !== source)
+  return next.length === list.length ? {} : { [PENDING_PROMPTS_KEY]: next }
+}

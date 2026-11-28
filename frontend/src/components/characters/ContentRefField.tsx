@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LuSearch, LuX, LuPencil } from 'react-icons/lu'
+import { LuSearch, LuX, LuPencil, LuInfo } from 'react-icons/lu'
 import ContentBrowser from './ContentBrowser'
+import ContentEntryDetail from './ContentEntryDetail'
+import { catalogDefaults, catalogFilters, catalogNote } from './catalogFilters'
+import PendingMarks from './PendingMarks'
+import ContentEntryDialog from './ContentEntryDialog'
 import type { ContentRefValue } from './ContentBrowser'
 import FieldRenderer from './FieldRenderer'
 import type { FieldDefinition } from './FieldRenderer'
@@ -24,6 +28,8 @@ export interface ContentRefFieldProps {
   ) => void
   readOnly?: boolean
   hideLabel?: boolean
+  // The character as formulas read it, for the field's `filter_from`.
+  context?: Record<string, unknown>
 }
 
 /**
@@ -47,10 +53,12 @@ export default function ContentRefField({
   onChange,
   readOnly = false,
   hideLabel = false,
+  context,
 }: ContentRefFieldProps) {
   const { t } = useTranslation()
   const [browsing, setBrowsing] = useState(false)
   const [editingInline, setEditingInline] = useState(false)
+  const [viewing, setViewing] = useState(false)
 
   // A sheet can turn a text field into a pick (a subclass, say), and the
   // characters saved before that still hold the text. It reads as a custom
@@ -70,6 +78,10 @@ export default function ContentRefField({
   // id is what the player picked, and hiding it would look like data loss.
   const display = inline ? ref!.name || t('characters.customEntry') : entry?.name || ref?._ref || ''
   const missing = !inline && !!ref?._ref && !entry
+  // What the detail window shows: the catalog entry, or the values a custom
+  // entry was given. A reference to an entry that is not installed has none.
+  const detail = (inline ? ref : entry) as Record<string, unknown> | null | undefined
+  const openDetail = detail ? () => setViewing(true) : undefined
 
   // The fields a freeform entry can be given - the content type's own, so a
   // custom class keeps a hit die just as a catalog one does.
@@ -92,7 +104,9 @@ export default function ContentRefField({
     <div className="gc-field">
       {hideLabel ? null : <div style={fieldLabel}>{definition.label || name}</div>}
 
-      {inline ? (
+      {/* A read-only custom entry reads like a catalog one: a box that opens
+          its detail, not a disabled text input. */}
+      {inline && !readOnly ? (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <input
@@ -177,11 +191,15 @@ export default function ContentRefField({
                 the full name is in the tooltip if it has to be cut short. */}
             <button
               type="button"
-              onClick={readOnly ? undefined : () => setBrowsing(true)}
-              disabled={readOnly}
+              // Read-only, the box opens the chosen entry's detail instead: the
+              // choice is made elsewhere (a level-up), the sheet only shows it.
+              onClick={readOnly ? openDetail : () => setBrowsing(true)}
+              disabled={readOnly && !openDetail}
               aria-label={
                 readOnly
-                  ? display || definition.label || name
+                  ? openDetail
+                    ? t('characters.showEntry', { name: display })
+                    : display || definition.label || name
                   : t('characters.chooseEntry', { label: definition.label || name })
               }
               title={display || undefined}
@@ -199,7 +217,7 @@ export default function ContentRefField({
                 fontSize: 13,
                 minHeight: 32,
                 textAlign: 'left',
-                cursor: readOnly ? 'default' : 'pointer',
+                cursor: readOnly && !openDetail ? 'default' : 'pointer',
                 font: 'inherit',
               }}
             >
@@ -222,6 +240,17 @@ export default function ContentRefField({
               {readOnly ? null : <LuSearch size={13} style={{ flexShrink: 0, opacity: 0.6 }} />}
             </button>
 
+            {readOnly || !openDetail ? null : (
+              <button
+                type="button"
+                onClick={openDetail}
+                aria-label={t('characters.showEntry', { name: display })}
+                title={t('characters.showEntry', { name: display })}
+                style={{ ...iconBtn, padding: 3 }}
+              >
+                <LuInfo size={14} />
+              </button>
+            )}
             {readOnly || !definition.allow_freeform ? null : (
               <button
                 type="button"
@@ -247,6 +276,10 @@ export default function ContentRefField({
             )}
           </div>
 
+          {/* A choice the pick put off - a background's ability increases -
+              opens from beside it, even where the pick itself is read-only. */}
+          <PendingMarks source={name} />
+
           {/* When freeform is on and nothing is chosen yet, also offer an explicit
               "Add custom" control — the pencil icon alone is easy to miss in a
               dense header row of species / class / background. */}
@@ -263,12 +296,24 @@ export default function ContentRefField({
         </div>
       )}
 
+      {viewing && detail ? (
+        <ContentEntryDialog
+          title={display}
+          subtitle={typeDefinition.label || definition.label}
+          onClose={() => setViewing(false)}
+        >
+          <ContentEntryDetail entry={{ data: detail }} typeDefinition={typeDefinition} />
+        </ContentEntryDialog>
+      ) : null}
       {browsing ? (
         <ContentBrowser
           schemaId={schemaId!}
           contentType={definition.content_type!}
           typeDefinition={typeDefinition}
           chosen={ref && !inline ? [ref] : []}
+          fixedFilters={catalogFilters(definition, context)}
+          defaultFilters={catalogDefaults(definition, context)}
+          entryNote={catalogNote(definition, context)}
           onChoose={(picked, chosenEntry) => {
             setEditingInline(false)
             onChange?.(picked, { entry: chosenEntry })

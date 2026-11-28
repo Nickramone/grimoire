@@ -23,6 +23,7 @@ from ...config import CHARACTER_PORTRAIT_DIR, get_db
 from ...models import Character, CharacterSchema
 from ...services import characters as svc
 from ...services.characters import catalogue
+from ...services.characters import house_rules
 from ...services.characters import images as char_images
 from ...services.characters import importing
 from ...services.characters.sheet_values import (
@@ -320,16 +321,21 @@ def _serialize_character(
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
     if detail:
-        data = row.data if isinstance(row.data, dict) else {}
-        payload["data"] = data
         # Computed values are derived on read, never stored: a corrected formula
         # must fix every character built on it rather than leaving stale numbers.
         # The document is validated once and reused — it is the expensive part.
         document = _validated_document(schema) if schema else None
+        # A field taken from the campaign (its house rules) reads the
+        # campaign's switch, whatever the stored value says.
+        data = house_rules.with_derived(db, document, row.data, row.campaign_id)
+        payload["data"] = data
+        payload["house_rules"] = db is not None and house_rules.house_rules_on(db, row.campaign_id)
         # References resolve to their catalog entries so a formula reading an
         # entry's own properties has something to read.
         entries = (
-            _resolved_entries(db, document, data, row.user_id)
+            _resolved_entries(
+                db, document, data, row.user_id, house_rules.scope_for(db, row)
+            )
             if document is not None and db
             else {}
         )
@@ -516,10 +522,13 @@ def update_character(
         # An image's value goes with its file, through the image routes; a
         # reset here would strand the file.
         pictures = char_images.image_fields(document)
+        # The campaign decides a ``from_campaign`` field: a write to it is
+        # dropped, not stored to be ignored later.
+        derived = house_rules.derived_fields(document)
         for name in data.unset:
-            if name not in pictures:
+            if name not in pictures and name not in derived:
                 merged.pop(name, None)
-        merged.update(_coerce_all(document, data.data or {}))
+        merged.update(_coerce_all(document, house_rules.without_derived(document, data.data or {})))
 
     # The character's name and its sheet's name field are one value: editing
     # either updates the other, so the list and the sheet never disagree.
@@ -588,6 +597,12 @@ def _coerce_all(document: dict, submitted: dict) -> dict:
         cleaned[GRANTED_KEY] = _coerce_granted(fields, submitted[GRANTED_KEY])
     if svc.OVERRIDES_KEY in submitted:
         cleaned[svc.OVERRIDES_KEY] = _coerce_overrides(document, submitted[svc.OVERRIDES_KEY])
+    if PENDING_PROMPTS_KEY in submitted:
+        cleaned[PENDING_PROMPTS_KEY] = _coerce_pending_prompts(
+            document, submitted[PENDING_PROMPTS_KEY]
+        )
+    if RECORDS_KEY in submitted:
+        cleaned[RECORDS_KEY] = _coerce_records(fields, submitted[RECORDS_KEY], content_types)
     return cleaned
 
 
@@ -617,6 +632,108 @@ def _coerce_overrides(document: dict, value: Any) -> dict:
 #: The one reserved key character data may carry beside its fields.
 GRANTED_KEY = "_granted"
 _MAX_GRANTED_VALUES = 200
+#: A source key: a field name, or `field:ref` for a content-list row.
+_MAX_GRANTED_SOURCE = 300
+PENDING_PROMPTS_KEY = "_pending_prompts"
+_MAX_PENDING_PROMPTS = 20
+RECORDS_KEY = "_records"
+#: Twenty levels and then some: a record per level gained is the case.
+_MAX_RECORDS = 40
+_MAX_RECORD_KEY = 100
+_MAX_RECORD_ROWS = 50
+_RECORD_TARGETS = ("content_list", "content_ref", "multiselect")
+
+
+def _coerce_records(fields: dict, value: Any, content_types: dict) -> dict:
+    """Clean what prompts kept in their records, so an action can take it back.
+
+    Shaped `{key: {"granted": {target: [value, ...]}, "dropped": {target:
+    [row, ...]}}}` - "level 3 added the Fey Touched feat and Arcana, and took
+    Light out of spells". `granted` is a list of strings per field, as
+    `_granted` holds them: entry ids or freeform names in a content_list or a
+    content_ref, values of a multiselect. `dropped` holds content_list rows,
+    cleaned as the field's own rows are. Anything else is dropped.
+    """
+    if not isinstance(value, dict):
+        return {}
+    cleaned: dict = {}
+    for key, record in list(value.items())[:_MAX_RECORDS]:
+        if not isinstance(key, str) or not key or len(key) > _MAX_RECORD_KEY:
+            continue
+        if not isinstance(record, dict):
+            continue
+        kept: dict = {}
+        granted: dict = {}
+        granted_by_target = record.get("granted")
+        for target, values in (
+            granted_by_target if isinstance(granted_by_target, dict) else {}
+        ).items():
+            definition = fields.get(target)
+            if (
+                not isinstance(definition, dict)
+                or definition.get("type", "text") not in _RECORD_TARGETS
+                or not isinstance(values, list)
+            ):
+                continue
+            strings = [str(item)[:200] for item in values if isinstance(item, (str, int))]
+            if strings:
+                granted[target] = strings[:_MAX_GRANTED_VALUES]
+        dropped: dict = {}
+        rows_by_target = record.get("dropped")
+        for target, rows in (rows_by_target if isinstance(rows_by_target, dict) else {}).items():
+            definition = fields.get(target)
+            if (
+                not isinstance(definition, dict)
+                or definition.get("type") != "content_list"
+                or not isinstance(rows, list)
+            ):
+                continue
+            rows = svc.coerce_value(definition, rows[:_MAX_RECORD_ROWS], content_types)
+            if rows:
+                dropped[target] = rows
+        if granted:
+            kept["granted"] = granted
+        if dropped:
+            kept["dropped"] = dropped
+        if kept:
+            cleaned[key] = kept
+    return cleaned
+
+
+def _coerce_pending_prompts(document: dict, value: Any) -> list:
+    """Clean the list of prompts the player put off.
+
+    Each is `{"prompt": name, "source": field, "ref": entry id, "record": key}`:
+    the sheet's prompt, and - when a pick opened it - the field picked and the
+    entry, so reopening it reads the same entry; and the record it adds to. A prompt the sheet no longer declares
+    is dropped, as is a source that is not a field.
+    """
+    prompts = document.get("prompts")
+    fields = document.get("fields") or {}
+    if not isinstance(value, list) or not isinstance(prompts, dict):
+        return []
+    cleaned: list = []
+    for item in value[:_MAX_PENDING_PROMPTS]:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("prompt")
+        if not isinstance(name, str) or name not in prompts:
+            continue
+        kept: dict = {"prompt": item["prompt"]}
+        source = item.get("source")
+        if isinstance(source, str) and source in fields:
+            kept["source"] = source
+            ref = item.get("ref")
+            if isinstance(ref, (str, int)) and not isinstance(ref, bool) and str(ref):
+                kept["ref"] = str(ref)[:200]
+        # The record it adds to - a level's, for a page of a Level up skipped -
+        # so choosing it later still keeps what it adds with that level.
+        record = item.get("record")
+        if isinstance(record, str) and record.strip():
+            kept["record"] = record.strip()[:_MAX_RECORD_KEY]
+        if kept not in cleaned:
+            cleaned.append(kept)
+    return cleaned
 
 
 def _coerce_granted(fields: dict, value: Any) -> dict:
@@ -627,6 +744,10 @@ def _coerce_granted(fields: dict, value: Any) -> dict:
     background take the old one's grants back off, rather than the sheet
     silently accumulating every background ever tried.
 
+    A content_list's rows are picks of their own, each recorded under
+    `"field:ref"` - "the Wizard row of classes" - so removing one row takes back
+    only what that row granted.
+
     Allowed through only because it is this narrow: source fields must carry
     `on_pick`, targets must be declared fields, and values are short strings.
     Anything else is dropped, so it is not a way to write arbitrary JSON.
@@ -635,8 +756,14 @@ def _coerce_granted(fields: dict, value: Any) -> dict:
         return {}
     cleaned: dict = {}
     for source, targets in value.items():
-        definition = fields.get(source)
+        if not isinstance(source, str) or len(source) > _MAX_GRANTED_SOURCE:
+            continue
+        field_name, row, ref = source.partition(":")
+        definition = fields.get(field_name)
         if not isinstance(definition, dict) or not definition.get("on_pick"):
+            continue
+        if (definition.get("type") == "content_list") != bool(row and ref):
+            # A list's grants belong to a row, a single pick's to the field.
             continue
         if not isinstance(targets, dict):
             continue

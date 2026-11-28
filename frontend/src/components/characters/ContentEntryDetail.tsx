@@ -1,3 +1,4 @@
+import EntryMarkdown from './EntryMarkdown'
 import FieldRenderer from './FieldRenderer'
 import type { FieldDefinition } from './FieldRenderer'
 
@@ -15,7 +16,17 @@ export interface ContentTypeDefinition {
 export interface ContentFieldDefinition extends FieldDefinition {
   allow_freeform?: boolean
   per_entry_fields?: Record<string, FieldDefinition>
+  // Values worked out for each row, read as `row.<name>`: name -> formula.
+  row_computed?: Record<string, string | { formula: string }>
   display_columns?: (string | { key: string; label?: string })[]
+  // Fixed browser filters: a value, or a list of values any of which matches.
+  filter?: Record<string, unknown>
+  // Browser filters worked out from the character: field -> formula.
+  filter_from?: Record<string, string>
+  // Browser filters it opens on, worked out from the character; the player may clear them.
+  filter_default_from?: Record<string, string>
+  // A note beside each entry's name in the browser, reading it as `entry`.
+  entry_note?: string
 }
 
 export interface ContentEntryDetailProps {
@@ -31,6 +42,18 @@ export interface ContentEntryDetailProps {
  * to catalog entries, so the component that draws a character's fields draws an
  * entry's too.
  */
+function isBlank(value: unknown, type?: string): boolean {
+  return (
+    // An unticked checkbox says the entry lacks the property (a shield is not
+    // Finesse): the detail lists what an entry has, as a dash would add nothing.
+    (type === 'checkbox' && value !== true) ||
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  )
+}
+
 export default function ContentEntryDetail({ entry, typeDefinition }: ContentEntryDetailProps) {
   const fields = typeDefinition.fields || {}
   const identity = typeDefinition.identity_field || 'name'
@@ -50,18 +73,32 @@ export default function ContentEntryDetail({ entry, typeDefinition }: ContentEnt
     >
       {Object.entries(fields)
         // The name is already the row's heading; repeating it wastes a cell.
-        .filter(([name]) => name !== identity)
+        // A field a schema marks `visible_if: "false"` is bookkeeping for the
+        // sheet's formulas, and an empty value or an unticked
+        // checkbox only adds a dash.
+        .filter(
+          ([name, definition]) =>
+            name !== identity &&
+            (definition as { visible_if?: unknown }).visible_if !== 'false' &&
+            !isBlank(entry.data?.[name], definition.type)
+        )
         .map(([name, definition]) => (
           <div
             key={name}
             style={definition.type === 'textarea' ? { gridColumn: '1 / -1' } : undefined}
           >
-            <FieldRenderer
-              name={name}
-              definition={definition}
-              value={entry.data?.[name]}
-              readOnly
-            />
+            {definition.type === 'textarea' && typeof entry.data?.[name] === 'string' ? (
+              // Long text reads as Markdown (tables, lists, images) rather than
+              // a read-only textarea showing the raw markup.
+              <EntryMarkdown label={definition.label || name} body={entry.data[name] as string} />
+            ) : (
+              <FieldRenderer
+                name={name}
+                definition={definition}
+                value={entry.data?.[name]}
+                readOnly
+              />
+            )}
           </div>
         ))}
     </div>

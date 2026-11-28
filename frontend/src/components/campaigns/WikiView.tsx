@@ -35,6 +35,7 @@ import useCollapsedSet from '../../hooks/useCollapsedSet'
 import Spinner from '../Spinner'
 import LoadError from '../LoadError'
 import WikiMarkdown from './WikiMarkdown'
+import WikiAnnotations from './WikiAnnotations'
 import WikiImportModal from './WikiImportModal'
 import WikiExportMenu from './WikiExportMenu'
 import WikiTemplateModal from './WikiTemplateModal'
@@ -1558,6 +1559,8 @@ export default function WikiView({ campaign, isOwner, onViewingNoteChange }: Wik
                 </ul>
               </div>
             )}
+
+            <WikiAnnotations campaignId={campaign.id} pageId={page.id} shared={isSharedCampaign} />
           </div>
         )}
       </div>

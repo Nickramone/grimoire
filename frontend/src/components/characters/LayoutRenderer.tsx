@@ -1,15 +1,23 @@
-import { createElement, Fragment, useEffect, useMemo } from 'react'
+import { createElement, Fragment, useContext, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import FieldRenderer from './FieldRenderer'
 import DerivedCell from './DerivedCell'
+import EntryMarkdown from './EntryMarkdown'
 import type { FieldDefinition } from './FieldRenderer'
-import { evaluate, isVisible, computedOverrides } from './expressions'
+import { evaluate, isVisible, computedOverrides, withRowComputed } from './expressions'
 import OverridableValue from './OverridableValue'
 import LayoutTabs from './LayoutTabs'
 import TierSelect from './TierSelect'
 import Pips from './Pips'
 import { fieldState } from './onPick'
 import SheetPortrait from './SheetPortrait'
+import { useCharacterMedia } from './characterMedia'
+import { actionPrompts, findAction, planAction } from './sheetActions'
+import { findPrompt, PromptLauncher } from './sheetPrompts'
+import type { PromptRequest } from './sheetPrompts'
+import { disabledBtn, ghostBtn } from './characterStyles'
+import SheetOrder from './SheetOrder'
+import type { OrderItem } from './SheetOrder'
 
 /**
  * Renders a schema's `layout_ast` — the parsed, allowlisted form of its
@@ -84,6 +92,10 @@ interface RenderContext {
   entries: Record<string, unknown>
   schemaId?: string
   rowScope?: RowScope
+  // Opens one of the sheet's prompts, when the page showing the sheet can.
+  openPrompt?: (request: PromptRequest) => void
+  // The character's campaign, named beside a field the campaign sets.
+  campaignName?: string | null
 }
 
 interface Props {
@@ -167,7 +179,11 @@ const DIRECTIVES = new Set([
   'g-option',
   'g-tier',
   'g-pips',
+  'g-check',
   'g-portrait',
+  'g-action',
+  'g-order',
+  'g-order-item',
 ])
 
 // HTML attribute → React prop, for the few that differ.
@@ -264,6 +280,8 @@ export default function LayoutRenderer({
     () => sheetContext || { ...(data || {}), ...(computed || {}) },
     [sheetContext, data, computed]
   )
+  const openPrompt = useContext(PromptLauncher) || undefined
+  const campaignName = useCharacterMedia()?.character.campaign_name
 
   if (!Array.isArray(ast)) return null
 
@@ -282,6 +300,8 @@ export default function LayoutRenderer({
           readOnly,
           entries,
           schemaId,
+          openPrompt,
+          campaignName,
         })
       )}
     </div>
@@ -353,8 +373,12 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
             definition={{ ...scoped, ...(attrs.label ? { label: attrs.label } : {}) }}
             stored={rowScope.row?.[name]}
             worked={rowScope.derivedRow?.[name]}
-            onChange={readOnly ? undefined : (value) => rowScope.edit(name, value)}
-            readOnly={readOnly || attrs.readonly !== undefined}
+            onChange={
+              readOnly || scoped.readonly === true
+                ? undefined
+                : (value) => rowScope.edit(name, value)
+            }
+            readOnly={readOnly || attrs.readonly !== undefined || scoped.readonly === true}
             hideLabel={attrs.label === ''}
           />
         )
@@ -369,25 +393,38 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
       // a schema does not have to repeat the condition in every layout.
       if (!isVisible(definition.visible_if, context)) return null
       const state = fieldState(name, definition, data, context)
-      const editable = !readOnly && attrs.readonly === undefined
+      // The campaign sets a `from_campaign` field (its house rules): shown,
+      // never edited, with the campaign that decides it.
+      const fromCampaign = Boolean((definition as { from_campaign?: string }).from_campaign)
+      const editable = !readOnly && !fromCampaign && attrs.readonly === undefined
+      const label = attrs.label ?? definition.label
       return (
         <FieldRenderer
           key={key}
           name={name}
-          definition={{ ...definition, ...(attrs.label ? { label: attrs.label } : {}) }}
+          definition={{
+            ...definition,
+            ...(attrs.label ? { label: attrs.label } : {}),
+            ...(fromCampaign && label
+              ? { label: `${label} (${ctx.campaignName || 'no campaign'})` }
+              : {}),
+          }}
           value={state.value}
           derivedValue={context?.[name]}
           derived={editable && state.derived}
           onReset={editable && state.overridden && onReset ? () => onReset(name) : undefined}
           onChange={
-            readOnly ? undefined : (...args: [unknown, unknown?]) => onChange?.(name, ...args)
+            readOnly || fromCampaign
+              ? undefined
+              : (...args: [unknown, unknown?]) => onChange?.(name, ...args)
           }
-          readOnly={readOnly || attrs.readonly !== undefined}
+          readOnly={readOnly || fromCampaign || attrs.readonly !== undefined}
           hideLabel={attrs.label === ''}
           variant={attrs.variant}
           entries={entries}
           schemaId={schemaId || schemaDocument?.id}
           contentTypes={schemaDocument?.content_types || {}}
+          context={context}
         />
       )
     }
@@ -421,6 +458,21 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
     }
 
     case 'g-value': {
+      // `formula` shows a worked-out expression instead of a named value: a
+      // row's own attack bonus inside a <g-repeat>, where no computed value
+      // could name it. It is a display, never edited or overridden; one that
+      // does not parse shows nothing.
+      // `markdown` draws the value as rich text, as the catalog draws an
+      // entry's description: a spell's text inside a <details> of its row.
+      if (attrs.markdown !== undefined) {
+        const raw =
+          attrs.formula !== undefined ? evaluate(attrs.formula, context, null) : context?.[name]
+        // Only text is drawn: a property the entry lacks works out to 0.
+        return typeof raw === 'string' && raw.trim() ? <EntryMarkdown key={key} body={raw} /> : null
+      }
+      if (attrs.formula !== undefined) {
+        return <span key={key}>{formatValue(evaluate(attrs.formula, context, null))}</span>
+      }
       const value = context?.[name]
       const editable = !readOnly && attrs.readonly === undefined
       const computedField = computedDefinition(schemaDocument, name)
@@ -568,10 +620,34 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
     }
 
     case 'g-pips': {
-      // `count` is a number, or a field or computed value holding one.
-      const count = /^\d+$/.test(String(attrs.count || ''))
-        ? Number(attrs.count)
-        : Number(context?.[attrs.count]) || 0
+      // `count` is a number, or a field or computed value holding one;
+      // `formula` works the count out instead, so inside a <g-repeat> each row
+      // can draw as many boxes as its own `row.uses` says. A formula that does
+      // not parse draws no boxes.
+      const count = attrs.formula
+        ? Math.floor(Number(evaluate(attrs.formula, context, 0)) || 0)
+        : /^\d+$/.test(String(attrs.count || ''))
+          ? Number(attrs.count)
+          : Number(context?.[attrs.count]) || 0
+      // Inside a <g-repeat>, `per` names the row's own column holding how many
+      // are used - a feature's uses ticked off on its own line - and an edit is
+      // written back into that row. Outside one, or naming no column, `value`
+      // is the character's field as before.
+      const rowScope = ctx.rowScope
+      if (attrs.per && rowScope?.columns?.[attrs.per]) {
+        const per = attrs.per
+        const editable = Boolean(!readOnly && onChange && rowScope.columns[per].readonly !== true)
+        return (
+          <Pips
+            key={key}
+            count={count}
+            used={Number(rowScope.row?.[per]) || 0}
+            label={attrs.label || per}
+            disabled={!editable}
+            onChange={editable ? (next: number) => rowScope.edit(per, next) : undefined}
+          />
+        )
+      }
       const usedField = fields[attrs.value]
       const used = usedField
         ? Number(fieldState(attrs.value, usedField, data, context).value) || 0
@@ -589,6 +665,96 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
       )
     }
 
+    case 'g-check': {
+      // A checkbox column of a list, or a checkbox per-entry field of a
+      // content_list, ticked from wherever the sheet puts the box: a shield's
+      // "equipped" beside the armour class, though the shield is a row of the
+      // equipment. `where` picks the rows the box speaks for.
+      const field = fields[attrs.field]
+      const per = attrs.per
+      if (!field || !per || !checkboxProperty(field, per)) return null
+      const stored: unknown = data?.[attrs.field]
+      const rows: unknown[] = Array.isArray(stored) ? stored : []
+      const matching = matchingRows(field, rows, attrs.where, context, entries)
+      const value = (index: number) => {
+        const row = rows[index] as Values
+        return field.type === 'list' ? row[per] : (row._per as Values | undefined)?.[per]
+      }
+      const checked = matching.some((index) => Boolean(value(index)))
+      // Nothing to tick until a matching row exists: a box for a shield the
+      // character does not own would have nowhere to write.
+      const editable = Boolean(!readOnly && onChange && matching.length)
+      const toggle = () => {
+        // Ticking marks the first matching row - one shield in hand, not every
+        // shield in the pack; clearing it clears every matching row, so the box
+        // reads unticked afterwards.
+        const targets = new Set(checked ? matching : matching.slice(0, 1))
+        const next = rows.map((existing, index) => {
+          if (!targets.has(index)) return existing
+          const row = existing as Values
+          if (field.type === 'list') return { ...row, [per]: !checked }
+          return { ...row, _per: { ...((row._per as Values | undefined) || {}), [per]: !checked } }
+        })
+        onChange?.(attrs.field, next)
+      }
+      return (
+        <input
+          key={key}
+          type="checkbox"
+          className={['gc-check', attrs.class].filter(Boolean).join(' ')}
+          title={attrs.label || per}
+          style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--gold)' }}
+          checked={checked}
+          disabled={!editable}
+          onChange={editable ? toggle : undefined}
+          aria-label={attrs.label || per}
+        />
+      )
+    }
+
+    case 'g-action': {
+      // A button for one of the sheet's `actions`: a rest, a level gained.
+      // Pressing it works out every step against the sheet as it stands and
+      // writes the result through the same path as an edit by hand, so a
+      // content list's picks and losses are followed up as usual; the prompts
+      // the action names open after. With `prompt` instead of `name`, the
+      // button opens that prompt alone - to make a choice again.
+      const action = findAction(schemaDocument, name)
+      const prompt = attrs.prompt ? findPrompt(schemaDocument, attrs.prompt) : undefined
+      if (!action && !prompt) return null
+      const opens = action ? actionPrompts(action) : [attrs.prompt!]
+      const editable = Boolean(
+        !readOnly && (action ? onChange : true) && (!opens.length || ctx.openPrompt)
+      )
+      const run = async () => {
+        if (action) {
+          if (action.confirm && !window.confirm(action.confirm)) return
+          const patch = planAction(action, { document: schemaDocument, data, context, entries })
+          // The bookkeeping first - what each pick granted, the records - so a
+          // list's own follow-up reads it as the action left it; each change
+          // in turn, so one follow-up does not write over the next.
+          const order = Object.entries(patch).sort(
+            ([a], [b]) => Number(!a.startsWith('_')) - Number(!b.startsWith('_'))
+          )
+          // The view's onChange is async; the type here says only that it is called.
+          for (const [field, value] of order) await Promise.resolve(onChange?.(field, value))
+        }
+        for (const promptName of opens) ctx.openPrompt?.({ prompt: promptName })
+      }
+      return (
+        <button
+          key={key}
+          type="button"
+          className={['gc-action', attrs.class].filter(Boolean).join(' ')}
+          style={editable ? ghostBtn : { ...ghostBtn, ...disabledBtn }}
+          disabled={!editable}
+          onClick={editable ? run : undefined}
+        >
+          {attrs.label || action?.label || prompt?.label}
+        </button>
+      )
+    }
+
     case 'g-portrait':
       // The character's own art, not a field's: the sheet only says where.
       return <SheetPortrait key={key} className={attrs.class} />
@@ -601,53 +767,37 @@ function renderDirective(node: LayoutNode, ctx: RenderContext): ReactNode {
         </section>
       )
 
-    case 'g-repeat': {
-      // Iterates a `list` field's rows. A repeat over anything that is not a
-      // list renders nothing rather than erroring — the schema validator has
-      // already checked the field exists.
-      const listName = attrs.over
-      const rows: unknown = data?.[listName]
-      if (!Array.isArray(rows)) return null
-      // The context's copy of the rows has the `default_from` cells worked out.
-      // Conditions inside the repeat read that, so a <g-if test> on `age` sees
-      // the number the cell shows; edits go to the stored rows.
-      const derivedRows: unknown = context?.[listName]
-
-      const listDefinition = fields[listName] || {}
-      const columns = (listDefinition.columns || []) as FieldDefinition[]
-      // Inside a repeat, a <g-field name="qty"/> means *this row's* qty. The
-      // row's columns therefore shadow the character's own fields, and an edit
-      // is written back into the row rather than to a top-level field.
-      const columnsByKey: Record<string, FieldDefinition> = Object.fromEntries(
-        columns.map((column) => [column.key, column])
-      )
-
+    case 'g-repeat':
+      // Iterates a `list` field's rows, or the entries of a `content_list`. A
+      // repeat over anything else renders nothing rather than erroring — the
+      // schema validator has already checked the field exists.
       return (
         <Fragment key={key}>
-          {rows.map((row: Values | null, index: number) => {
-            const derivedRow = (
-              Array.isArray(derivedRows) &&
-              derivedRows[index] &&
-              typeof derivedRows[index] === 'object'
-                ? derivedRows[index]
-                : row || {}
-            ) as Values
-            const editRow = (columnKey: string, cellValue: unknown) => {
-              const next = rows.map((existing: Values, i: number) =>
-                i === index ? { ...existing, [columnKey]: cellValue } : existing
-              )
-              onChange?.(listName, next)
-            }
-            return renderChildren(node.children, {
-              ...ctx,
-              key: `${key}-${index}`,
-              context: { ...context, ...derivedRow, _index: index },
-              rowScope: { row: row || {}, derivedRow, columns: columnsByKey, edit: editRow },
-            })
-          })}
+          {repeatItems(node, ctx).map((item) => (
+            <Fragment key={item.key}>{item.content}</Fragment>
+          ))}
         </Fragment>
       )
+
+    case 'g-order': {
+      // The blocks inside, in the order the player dragged them into, stored
+      // as their keys, one per line, in the text field `field`.
+      const field = attrs.field
+      const editable = !readOnly && !!onChange && !!field && !!fields[field]
+      return (
+        <SheetOrder
+          key={key}
+          items={orderItems(node.children, ctx)}
+          stored={field ? data?.[field] : undefined}
+          readOnly={!editable}
+          onReorder={(keys) => onChange?.(field, keys.join('\n'))}
+        />
+      )
     }
+
+    case 'g-order-item':
+      // Outside a <g-order> it is only its contents.
+      return <Fragment key={key}>{renderChildren(node.children, ctx)}</Fragment>
 
     default:
       return null
@@ -670,6 +820,182 @@ function titleFrom(source: unknown, context: Values): string {
   return text.length > MAX_TAB_TITLE ? `${text.slice(0, MAX_TAB_TITLE - 1)}…` : text
 }
 
+// A <g-repeat> over a content_list: one pass per entry, the entry read as
+// `row` - the catalog entry with the character's per-entry values on top, or a
+// freeform entry as written, its `_inline` flag included so a sheet can leave
+// it out. Unlike a list row, the entry's properties are not laid over the
+// character's own names: an item's `name` would hide the hero's. A <g-field>
+// naming one of the per-entry fields edits that entry's value.
+function entryRepeatItems(
+  node: LayoutNode,
+  ctx: RenderContext,
+  listName: string,
+  rows: unknown[]
+): OrderItem[] {
+  const { key, schemaDocument, context, onChange, entries } = ctx
+  const attrs = node.attrs || {}
+  const definition = (schemaDocument?.fields?.[listName] || {}) as FieldDefinition
+  const declared = (definition.per_entry_fields || {}) as Record<string, FieldDefinition>
+  const columns: Record<string, FieldDefinition> = Object.fromEntries(
+    Object.entries(declared).map(([name, field]) => [name, { ...field, key: name }])
+  )
+  const table = (context?._entries || entries || {}) as Record<string, unknown>
+  const keys = rowKeys(listName, rows, undefined)
+
+  const items: OrderItem[] = []
+  rows.forEach((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+    const item = raw as Values
+    const per = (item._per || {}) as Values
+    const entry = item._inline ? item : table[String(item._ref)]
+    // A reference whose entry is gone has nothing to draw.
+    if (!entry || typeof entry !== 'object') return
+    // A picked entry keeps its id as `_ref`: `has_ref(masteries, row._ref)`.
+    const own: Values = item._inline ? { ...per } : { ...per, _ref: String(item._ref) }
+    const row: Values = withRowComputed(definition, { ...(entry as Values), ...own }, context)
+    if (attrs.where && !evaluate(attrs.where, { ...context, row }, false)) return
+    const edit = (name: string, value: unknown) => {
+      const next = rows.map((existing, i) =>
+        i === index
+          ? {
+              ...(existing as Values),
+              _per: {
+                ...(((existing as Values)._per as Values | undefined) || {}),
+                [name]: value,
+              },
+            }
+          : existing
+      )
+      onChange?.(listName, next)
+    }
+    items.push({
+      key: keys[index],
+      content: renderChildren(node.children, {
+        ...ctx,
+        key: `${key}-${index}`,
+        context: { ...context, row, _index: index },
+        rowScope: { row: per, derivedRow: per, columns, edit },
+      }),
+    })
+  })
+  return items
+}
+
+// The blocks a <g-order> moves, in the layout's order. Each row a <g-repeat>
+// draws is one block, keyed by its list and the row (see rowKeys); a
+// <g-order-item key> is one block; a <g-if> that holds lends its children, as
+// if they stood in the <g-order> itself; anything else is a block keyed by its
+// place. Whitespace between them is no block.
+function orderItems(children: LayoutNode[] | undefined, ctx: RenderContext): OrderItem[] {
+  if (!Array.isArray(children)) return []
+  const items: OrderItem[] = []
+  children.forEach((child, index) => {
+    if (!child || typeof child !== 'object') return
+    const childCtx = { ...ctx, key: `${ctx.key}-${index}` }
+    if (typeof child.text === 'string') {
+      if (child.text.trim()) items.push({ key: `@${childCtx.key}`, content: child.text })
+      return
+    }
+    const attrs = child.attrs || {}
+    if (!isVisible(attrs.visible_if, ctx.context)) return
+    if (child.tag === 'g-repeat') {
+      items.push(...repeatItems(child, childCtx))
+    } else if (child.tag === 'g-if') {
+      if (evaluate(attrs.test, ctx.context)) items.push(...orderItems(child.children, childCtx))
+    } else if (child.tag === 'g-order-item') {
+      items.push({
+        key: attrs.key || `@${childCtx.key}`,
+        content: renderChildren(child.children, childCtx),
+      })
+    } else {
+      items.push({ key: `@${childCtx.key}`, content: renderNode(child, childCtx) })
+    }
+  })
+  return items
+}
+
+// A stable key for each row of a list: the list's name, what the row is - a
+// catalog entry's reference, a freeform entry's name, or a list row's first
+// column - and `#2` on the second row that is the same thing. Keys stay put
+// when other rows come and go; renaming a list row makes it a new one.
+function rowKeys(listName: string, rows: unknown[], firstColumn: string | undefined): string[] {
+  const seen = new Map<string, number>()
+  return rows.map((raw, index) => {
+    let base = `#${index}`
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const item = raw as Values
+      if (item._ref !== undefined && item._ref !== null && item._ref !== '') {
+        base = `ref:${String(item._ref)}`
+      } else if (item._inline) {
+        base = `inline:${String(item.name ?? '')}`
+      } else if (firstColumn && item[firstColumn] !== undefined && item[firstColumn] !== null) {
+        base = `row:${String(item[firstColumn])}`
+      }
+    }
+    const count = (seen.get(base) || 0) + 1
+    seen.set(base, count)
+    return `${listName}:${base}${count > 1 ? `#${count}` : ''}`
+  })
+}
+
+// The rows a <g-repeat> draws, each with its key.
+function repeatItems(node: LayoutNode, ctx: RenderContext): OrderItem[] {
+  const { schemaDocument, data, context, onChange } = ctx
+  const attrs = node.attrs || {}
+  const fields: Record<string, FieldDefinition> = schemaDocument?.fields || {}
+  const listName = attrs.over
+  const rows: unknown = data?.[listName]
+  if (!Array.isArray(rows)) return []
+  if (fields[listName]?.type === 'content_list') {
+    return entryRepeatItems(node, ctx, listName, rows)
+  }
+  // The context's copy of the rows has the `default_from` cells worked out.
+  // Conditions inside the repeat read that, so a <g-if test> on `age` sees the
+  // number the cell shows; edits go to the stored rows.
+  const derivedRows: unknown = context?.[listName]
+
+  const listDefinition = fields[listName] || {}
+  const columns = (listDefinition.columns || []) as FieldDefinition[]
+  // Inside a repeat, a <g-field name="qty"/> means *this row's* qty. The row's
+  // columns therefore shadow the character's own fields, and an edit is
+  // written back into the row rather than to a top-level field.
+  const columnsByKey: Record<string, FieldDefinition> = Object.fromEntries(
+    columns.map((column) => [column.key, column])
+  )
+  const firstColumn = columns[0]?.key
+  const keys = rowKeys(listName, rows, typeof firstColumn === 'string' ? firstColumn : undefined)
+
+  const items: OrderItem[] = []
+  rows.forEach((row: Values | null, index: number) => {
+    const derivedRow = (
+      Array.isArray(derivedRows) && derivedRows[index] && typeof derivedRows[index] === 'object'
+        ? derivedRows[index]
+        : row || {}
+    ) as Values
+    // `where` picks the rows drawn, reading the row as `row`, as a per-row form
+    // does; one that does not parse draws no row.
+    if (attrs.where && !evaluate(attrs.where, { ...context, row: derivedRow }, false)) return
+    const editRow = (columnKey: string, cellValue: unknown) => {
+      const next = rows.map((existing: Values, i: number) =>
+        i === index ? { ...existing, [columnKey]: cellValue } : existing
+      )
+      onChange?.(listName, next)
+    }
+    items.push({
+      key: keys[index],
+      content: renderChildren(node.children, {
+        ...ctx,
+        key: `${ctx.key}-${index}`,
+        // The row's columns read by bare name, and the row itself as `row`, as
+        // a per-row form names it.
+        context: { ...context, ...derivedRow, row: derivedRow, _index: index },
+        rowScope: { row: row || {}, derivedRow, columns: columnsByKey, edit: editRow },
+      }),
+    })
+  })
+  return items
+}
+
 function computedDefinition(
   schemaDocument: SheetDocument | undefined,
   name: string
@@ -678,6 +1004,49 @@ function computedDefinition(
   if (definition === undefined) return undefined
   // A computed value may be written as its bare formula.
   return typeof definition === 'string' ? { formula: definition } : definition
+}
+
+// Whether `per` is a checkbox the rows of `field` carry: a column of a list, or
+// a per-entry field of a content_list. A <g-check> over anything else draws
+// nothing, as a <g-option> over a field that is not a multiselect does.
+function checkboxProperty(field: FieldDefinition, per: string): boolean {
+  if (field.type === 'list') {
+    const columns = (Array.isArray(field.columns) ? field.columns : []) as FieldDefinition[]
+    return columns.some((column) => column?.key === per && column.type === 'checkbox')
+  }
+  if (field.type === 'content_list') {
+    const declared = (field.per_entry_fields || {}) as Record<string, FieldDefinition | undefined>
+    return declared[per]?.type === 'checkbox'
+  }
+  return false
+}
+
+// The indexes of the rows a <g-check> speaks for. `where` is read once per row
+// with `row` naming it - a list row as it is stored, a picked entry with the
+// character's per-entry values on top - and no `where` means every row. A
+// condition that does not parse matches nothing, so a typo leaves the box
+// disabled rather than ticking rows nobody chose.
+function matchingRows(
+  field: FieldDefinition,
+  rows: unknown[],
+  where: string | undefined,
+  context: Values,
+  entries: Record<string, unknown>
+): number[] {
+  const table = (context?._entries || entries || {}) as Record<string, unknown>
+  const matching: number[] = []
+  rows.forEach((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+    const item = raw as Values
+    let row: Values = item
+    if (field.type === 'content_list') {
+      const per = (item._per || {}) as Values
+      const entry = item._inline ? item : table[String(item._ref)]
+      row = { ...(entry && typeof entry === 'object' ? (entry as Values) : {}), ...per }
+    }
+    if (!where || evaluate(where, { ...context, row }, false)) matching.push(index)
+  })
+  return matching
 }
 
 function optionValues(field: FieldDefinition) {

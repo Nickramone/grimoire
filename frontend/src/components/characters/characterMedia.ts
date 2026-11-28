@@ -9,6 +9,8 @@ export interface PortraitCharacter {
   portrait_path?: string | null
   portrait_version?: number | null
   portrait_crop?: PortraitCrop | null
+  /** The campaign it is played in: names who sets a `from_campaign` field. */
+  campaign_name?: string | null
 }
 
 export type PortraitPatch = Partial<

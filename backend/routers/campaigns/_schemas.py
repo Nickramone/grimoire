@@ -259,6 +259,25 @@ class WikiMapPinUpdate(BaseModel):
     _check_icon_color = field_validator("icon_color")(clean_icon_color)
 
 
+# Annotations: a member's note on a wiki page, kept beside the page (never in
+# its body), so anyone who can read the page may write one. Plain text.
+ANNOTATION_MAX_LENGTH = 4000
+
+
+class WikiAnnotationCreate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=ANNOTATION_MAX_LENGTH)
+    # self = the author only; gm = the author and the GM; party = everyone who
+    # can read the page.
+    visibility: str = "party"
+
+
+class WikiAnnotationUpdate(BaseModel):
+    body: Optional[str] = Field(None, min_length=1, max_length=ANNOTATION_MAX_LENGTH)
+    visibility: Optional[str] = None
+    # The GM's alone: hides a party note from the rest of the party.
+    hidden_by_gm: Optional[bool] = None
+
+
 # Note templates. `name` and `body` are the substance; system/category are free
 # text mirroring the community manifest, so a downloaded template and one
 # written by hand carry the same shape.
